@@ -1,5 +1,6 @@
+from lira.ir import *
+
 import re
-from ir import *
 
 def serialize_shape(shape: Shape) -> str:
     return f'{shape.lanes_base}{shape.lanes_mult if shape.lanes_mult else ""}'
@@ -15,7 +16,7 @@ def serialize_statement(stmt: Statement) -> str:
     return " ".join(parts)
 
 def deserialize_statement(s: str) -> Statement:
-    m = re.match(r'^(\w+)\s+(.*?)\s*=\s*(\w+)\s+(\w+)\s*(.*)$', s)
+    m = re.match(r'^(\w+)\s+(.*?)\s*=\s*(\w+)\s+(\S+)\s*(.*)$', s)
     shape_str, outputs_str, kind, specifier, inputs_str = m.groups()
     shape = deserialize_shape(shape_str)
     pairs = outputs_str.split()

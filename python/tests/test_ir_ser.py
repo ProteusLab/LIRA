@@ -1,6 +1,6 @@
 import unittest
-from ir import *
-from ir_ser_txt import *
+from lira.ir import *
+from lira.ir_ser_txt import *
 
 class TestStatementSeqSerialization(unittest.TestCase):
     def test_empty_sequence(self):
