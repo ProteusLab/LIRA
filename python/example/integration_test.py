@@ -43,7 +43,7 @@ add_snippet('op_extend_sign_inner_32', [
     '1 32 delta = sub_32 c32 width',
     '1 32 temp = lsl_32 input delta',
     '1 32 r = asr_32 temp delta',
-    '1 0 _o = output r',
+    '1 = output r',
 ])
 ops.append(Operation('extend_sign_inner_32', [], [32, 32], [32], None, 'op_extend_sign_inner_32'))
 
@@ -58,7 +58,7 @@ add_snippet('op_extract_inner_32', [
     '1 32 temp = lsl_32 input shift_l', # input << (32 - lsb - width)
     '1 32 shift_r = sub_32 c32 width',
     '1 32 temp2 = lsr_32 temp shift_r',     # (input >> lsb) & ((1 << width) - 1)
-    '1 0 _o = output r',
+    '1 = output r',
 ])
 # eii(input, lsb, width, new_lsb) extracts width bits from input at offset lsb
 ops.append(Operation('extract_inner_32', [], [32, 32, 32], [32], None, 'op_extract_inner_32'))
@@ -68,7 +68,7 @@ add_snippet('op_orr_shifted_32', [
     '1 32 value = input 2',
     '1 32 insert = lsl_32 value lsb',
     '1 32 r = orr_32 data insert',
-    '1 0 _o = output r',
+    '1 = output r',
 ])
 ops.append(Operation('orr_shifted_32', [], [32, 32, 32], [32], None, 'op_orr_shifted_32'))
 
@@ -79,7 +79,7 @@ def add_snippet_extract(name: str, input: int, lsb: int, output: int):
         f'1 {input} shift = const {lsb}',
         f'1 {input} shifted = op lsr_{input} enc shift',
         f'1 {output} r = op extract_low_{output}_{input} shifted',
-        '1 0 _o = output r',
+        '1 = output r',
     ])
 
 for i, lsb in [(1, 15), (2, 20)]:
@@ -109,7 +109,7 @@ add_snippet('decode_b_imm', [
     '1 32 t8 = op orr_shifted_32 t5 t1 c5',
     '1 32 t9 = op orr_shifted_32 t5 t1 c1',
     '1 32 imm_sext = op extend_sign_inner_32 t9 c13',
-    '1 0 _o = output imm_sext',
+    '1 = output imm_sext',
 ])
 add_snippet('encode_b', [
     '1 5 rs1 = input 0',
@@ -121,7 +121,7 @@ add_snippet('encode_b', [
     '1 32 t1 = op orr_shifted base rs1 c15',
     '1 32 t2 = op orr_shifted t1 rs2 c20',
     '1 32 r = todo todo t2 imm', # that's a pain to write by hand..
-    '1 0 _o = output r',
+    '1 = output r',
 ])
 
 def enc_b(funct3: int, opcode: int):
@@ -140,8 +140,7 @@ instrs.append(Instruction('blt', ['kind.branch.cond'],
         '1 1 cond = op slt_32 v1 v2',
         '1 32 base = env pc_read',
         '1 32 dest = op add_32 base offset',
-        '1 0 _dummy = const 0',
-        '1 0 _jump = cond_env pc_write cond _dummy dest',
+        '1 = cond_env pc_write cond dest',
     ])
 ))
 
