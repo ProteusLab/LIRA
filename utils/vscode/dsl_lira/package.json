@@ -1,0 +1,11 @@
+{
+    "name"       : "dsl_lira",
+    "version"    : "0.1.0",
+    "engines"    : {"vscode": "^1.80.0"},
+    "contributes": {
+        "languages": [ { "id": "dsl_lira", "extensions": [".lira"] } ],
+        "grammars" : [
+            {"language": "dsl_lira", "scopeName": "source.dsl_lira", "path": "./syntaxes/dsl_lira.tmLanguage.json"}
+        ]
+    }
+}
