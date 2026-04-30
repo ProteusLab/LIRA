@@ -15,6 +15,13 @@ class Statement:
     specifier: str
     inputs: list[str]
 
+    def input(self, id: int, ss: 'StatementSeq') -> 'Statement':
+        target = self.inputs[id]
+        for stmt in ss.stmts:
+            if target in stmt.outputs:
+                return stmt
+        raise ValueError(f'input {target} not found')
+
 @dataclass
 class StatementSeq:
     stmts: [Statement]
