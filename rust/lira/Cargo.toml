@@ -1,0 +1,12 @@
+[package]
+name = "lira"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+log = { workspace = true }
+anyhow = { workspace = true }
+ahash = { workspace = true, features = ["serde"] }
+regex = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }

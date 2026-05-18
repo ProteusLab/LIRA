@@ -12,7 +12,7 @@ from lira.arch import *
 assert len(sys.argv) == 2
 arch_dir = Path(sys.argv[1])
 
-rf = RegisterFile('X', [], Shape(32, False), [f'x{i}' for i in range(32)])
+rf = RegisterFile('X', [], Shape(32, None), [f'x{i}' for i in range(32)])
 ld32 = EnvironmentFunction('ld32', ['mem.read'], [32], [32])
 st32 = EnvironmentFunction('st32', ['mem.write'], [32, 32], [])
 pc_read = EnvironmentFunction('pc_read', ['pc.read'], [], [32])
