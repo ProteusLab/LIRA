@@ -1,169 +1,204 @@
-assert __name__ == '__main__'
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from lira.arch_ser_txt import *
-from lira.ir_ser_txt import *
-from lira.ir import *
-from lira.arch import *
+from lira.arch_ser_txt import write_arch, read_arch
+from lira.ir import Shape
+from lira.arch import RegisterFile, EnvironmentFunction, InstructionEncoding, Operation
+from lira.ir_builder import ArchBuilder, SnippetBuilder, InstructionBuilder
 
 
-assert len(sys.argv) == 2
-arch_dir = Path(sys.argv[1])
+def main():
+    arch_dir = Path(sys.argv[1])
 
-rf = RegisterFile('X', [], Shape(32, None), [f'x{i}' for i in range(32)])
-ld32 = EnvironmentFunction('ld32', ['mem.read'], [32], [32])
-st32 = EnvironmentFunction('st32', ['mem.write'], [32, 32], [])
-pc_read = EnvironmentFunction('pc_read', ['pc.read'], [], [32])
-pc_write = EnvironmentFunction('pc_write', ['pc.write'], [32], [])
+    rf = RegisterFile("X", [], Shape(32, None), [f"x{i}" for i in range(32)])
 
-ops = []
-for name, inputs, output, base in [
-    ('add_32', [32, 32], 32, 'add'),
-    ('lsl_32', [32, 32], 32, 'lsl'),
-    ('lsr_32', [32, 32], 32, 'lsr'),
-    ('asr_32', [32, 32], 32, 'asr'),
-    ('slt_32', [32, 32], 1, 'slt'),
-    ('extract_low_5_32', [32], 5, 'extract_low'),
-]:
-    ops.append(Operation(name, [], inputs, [output], base))
+    ld32 = EnvironmentFunction("ld32", ["mem.read"], [32], [32])
+    st32 = EnvironmentFunction("st32", ["mem.write"], [32, 32], [])
+    pc_read = EnvironmentFunction("pc_read", ["pc.read"], [], [32])
+    pc_write = EnvironmentFunction("pc_write", ["pc.write"], [32], [])
 
-def sem(code: list[str]):
-    return StatementSeq([deserialize_statement(stmt) for stmt in code])
+    # ------------------------------------------------------------------
+    # op_extend_sign_inner_32
+    # ------------------------------------------------------------------
+    snip = SnippetBuilder("op_extend_sign_inner_32")
+    input_val = snip.input(0, 32)
+    width_val = snip.input(1, 32)
+    c32 = snip.const(32)
+    delta = snip.sub(c32, width_val)
+    temp = snip.lsl(input_val, delta)
+    r = snip.asr(temp, delta)
+    snip.output(r, 0)
+    extend_sign_inner = snip.build()
 
-snippets = []
-def add_snippet(name: str, code: list[str]):
-    snippets.append(Snippet(name, sem(code)))
-
-add_snippet('op_extend_sign_inner_32', [
-    '1 32 input = input 0',
-    '1 32 width = input 1',
-    '1 32 c32 = const 32',
-    '1 32 delta = sub_32 c32 width',
-    '1 32 temp = lsl_32 input delta',
-    '1 32 r = asr_32 temp delta',
-    '1 = output r',
-])
-ops.append(Operation('extend_sign_inner_32', [], [32, 32], [32], None, 'op_extend_sign_inner_32'))
-
-add_snippet('op_extract_inner_32', [
-    '1 32 input = input 0',
-    '1 32 lsb = input 1',
-    '1 32 width = input 2',
-    '1 32 new_lsb = input 3',
-    '1 32 c32 = const 32',
-    '1 32 t1 = sub_32 c32 lsb',
-    '1 32 shift_l = sub_32 t1 width',
-    '1 32 temp = lsl_32 input shift_l', # input << (32 - lsb - width)
-    '1 32 shift_r = sub_32 c32 width',
-    '1 32 temp2 = lsr_32 temp shift_r',     # (input >> lsb) & ((1 << width) - 1)
-    '1 = output r',
-])
-# eii(input, lsb, width, new_lsb) extracts width bits from input at offset lsb
-ops.append(Operation('extract_inner_32', [], [32, 32, 32], [32], None, 'op_extract_inner_32'))
-add_snippet('op_orr_shifted_32', [
-    '1 32 data = input 0',
-    '1 32 lsb = input 1',
-    '1 32 value = input 2',
-    '1 32 insert = lsl_32 value lsb',
-    '1 32 r = orr_32 data insert',
-    '1 = output r',
-])
-ops.append(Operation('orr_shifted_32', [], [32, 32, 32], [32], None, 'op_orr_shifted_32'))
-
-
-def add_snippet_extract(name: str, input: int, lsb: int, output: int):
-    add_snippet(name, [
-        f'1 {input} enc = input 0',
-        f'1 {input} shift = const {lsb}',
-        f'1 {input} shifted = op lsr_{input} enc shift',
-        f'1 {output} r = op extract_low_{output}_{input} shifted',
-        '1 = output r',
-    ])
-
-for i, lsb in [(1, 15), (2, 20)]:
-    add_snippet_extract(f'decode_b_rs{i}', 32, lsb, 5)
-# Yes, IR designed for (vector) instruction analysis doesn't look great
-#   in the context of instruction encoding/decoding, that's true.
-add_snippet('decode_b_imm', [
-    '1 32 enc = input 0',
-    '1 32 c1 = const 1',
-    '1 32 c4 = const 4',
-    '1 32 c5 = const 5',
-    '1 32 c6 = const 6',
-    '1 32 c7 = const 7',
-    '1 32 c8 = const 8',
-    '1 32 c11 = const 11',
-    '1 32 c12 = const 12',
-    '1 32 c13 = const 13',
-    '1 32 c25 = const 25',
-    '1 32 c31 = const 31',
-    '1 32 t1 = op extract_inner_32 enc c31 c1',
-    '1 32 t2 = op extract_inner_32 enc c25 c6',
-    '1 32 t3 = op extract_inner_32 enc c8 c4',
-    '1 32 t4 = op extract_inner_32 enc c7 c1',
-    '1 32 t5 = const 0',
-    '1 32 t6 = op orr_shifted_32 t5 t1 c12',
-    '1 32 t7 = op orr_shifted_32 t5 t1 c11',
-    '1 32 t8 = op orr_shifted_32 t5 t1 c5',
-    '1 32 t9 = op orr_shifted_32 t5 t1 c1',
-    '1 32 imm_sext = op extend_sign_inner_32 t9 c13',
-    '1 = output imm_sext',
-])
-add_snippet('encode_b', [
-    '1 5 rs1 = input 0',
-    '1 5 rs2 = input 2',
-    '1 32 imm = input 2',
-    '1 32 base = dyn_const enc_base',
-    '1 32 c15 = const 15',
-    '1 32 c20 = const 20',
-    '1 32 t1 = op orr_shifted base rs1 c15',
-    '1 32 t2 = op orr_shifted t1 rs2 c20',
-    '1 32 r = todo todo t2 imm', # that's a pain to write by hand..
-    '1 = output r',
-])
-
-def enc_b(funct3: int, opcode: int):
-    return InstructionEncoding(32, (funct3 << 12) + opcode,
-        ['decode_b_rs1', 'decode_b_rs2', 'decode_b_imm'], 'encode_b', '', ''
+    op_extend_sign = Operation(
+        "extend_sign_inner_32",
+        [],
+        [32, 32],
+        [32],
+        semantic_base=None,
+        semantic_func="op_extend_sign_inner_32",
     )
 
-instrs = []
-instrs.append(Instruction('blt', ['kind.branch.cond'],
-    [5, 5, 32], ['x1', 'x2', 'offset'], enc_b(0b100, 0b1100011), sem([
-        '1 5 x1 = input 0',
-        '1 5 x2 = input 1',
-        '1 5 offset = input 2',
-        '1 32 v1 = read X x1',
-        '1 32 v2 = read X x2',
-        '1 1 cond = op slt_32 v1 v2',
-        '1 32 base = env pc_read',
-        '1 32 dest = op add_32 base offset',
-        '1 = cond_env pc_write cond dest',
-    ])
-))
+    # ------------------------------------------------------------------
+    # op_extract_inner_32
+    # ------------------------------------------------------------------
+    snip = SnippetBuilder("op_extract_inner_32")
+    inp = snip.input(0, 32)
+    lsb = snip.input(1, 32)
+    width = snip.input(2, 32)
+    c32 = snip.const(32)
+    t1 = snip.sub(c32, lsb)
+    shift_l = snip.sub(t1, width)
+    temp = snip.lsl(inp, shift_l)
+    shift_r = snip.sub(c32, width)
+    temp2 = snip.lsr(temp, shift_r)
+    snip.output(temp2, 0)
+    extract_inner_snip = snip.build()
+    op_extract_inner = Operation(
+        "extract_inner_32",
+        [],
+        [32, 32, 32],
+        [32],
+        semantic_base=None,
+        semantic_func="op_extract_inner_32",
+    )
 
-arch = Arch(
-    name='test_arch',
-    attributes=['attr.1', 'attr.2'],
-    register_files=[rf],
-    system_registers=[],
-    environment_functions=[ld32, st32],
-    tables_int=[],
-    operations=ops,
-    snippets=snippets,
-    instructions=instrs,
-)
+    # ------------------------------------------------------------------
+    # op_orr_shifted_32
+    # ------------------------------------------------------------------
+    snip = SnippetBuilder("op_orr_shifted_32")
+    data = snip.input(0, 32)
+    lsb = snip.input(1, 32)
+    value = snip.input(2, 32)
+    insert = snip.lsl(value, lsb)
+    r = snip.orr(data, insert)
+    snip.output(r, 0)
+    orr_shifted_snip = snip.build()
+    op_orr_shifted = Operation(
+        "orr_shifted_32",
+        [],
+        [32, 32, 32],
+        [32],
+        semantic_base=None,
+        semantic_func="op_orr_shifted_32",
+    )
 
-write_arch(arch, arch_dir)
-arch2 = read_arch(arch_dir)
+    # ------------------------------------------------------------------
+    # decode_b_rs1, decode_b_rs2
+    # ------------------------------------------------------------------
+    def make_decode_extract(name: str, shift: int):
+        snip = SnippetBuilder(name)
+        enc = snip.input(0, 32)
+        shift_const = snip.const(shift)
+        shifted = snip.lsr(enc, shift_const)
+        r = snip.extract_low(shifted, 5)
+        snip.output(r, 0)
+        return snip.build()
 
-assert arch.register_files == arch2.register_files
-assert arch.system_registers == arch2.system_registers
-assert arch.environment_functions == arch2.environment_functions
-assert arch.tables_int == arch2.tables_int
-assert arch.operations == arch2.operations
-assert arch.snippets == arch2.snippets
-assert arch.instructions == arch2.instructions
-assert arch == arch2
+    decode_rs1 = make_decode_extract("decode_b_rs1", 15)
+    decode_rs2 = make_decode_extract("decode_b_rs2", 20)
+
+    # ------------------------------------------------------------------
+    # decode_b_imm
+    # ------------------------------------------------------------------
+    snip = SnippetBuilder("decode_b_imm")
+    enc = snip.input(0, 32)
+    c1 = snip.const(1)
+    c4 = snip.const(4)
+    c5 = snip.const(5)
+    c6 = snip.const(6)
+    c7 = snip.const(7)
+    c8 = snip.const(8)
+    c11 = snip.const(11)
+    c12 = snip.const(12)
+    c13 = snip.const(13)
+    c25 = snip.const(25)
+    c31 = snip.const(31)
+
+    t1 = snip.op(op_extract_inner, [enc, c31, c1])
+    t2 = snip.op(op_extract_inner, [enc, c25, c6])
+    t3 = snip.op(op_extract_inner, [enc, c8, c4])
+    t4 = snip.op(op_extract_inner, [enc, c7, c1])
+    t5 = snip.const(0)
+    t6 = snip.op(op_orr_shifted, [t5, t1, c12])
+    t7 = snip.op(op_orr_shifted, [t5, t1, c11])
+    t8 = snip.op(op_orr_shifted, [t5, t1, c5])
+    t9 = snip.op(op_orr_shifted, [t5, t1, c1])
+    imm_sext = snip.op(op_extend_sign, [t9, c13])
+    snip.output(imm_sext, 0)
+    decode_imm = snip.build()
+
+    # ------------------------------------------------------------------
+    # encode_b
+    # ------------------------------------------------------------------
+    snip = SnippetBuilder("encode_b")
+    rs1 = snip.input(0, 5)
+    rs2 = snip.input(1, 5)
+    imm = snip.input(2, 32)
+    base = snip.dyn_const("enc_base", 32)
+    c15 = snip.const(15)
+    c20 = snip.const(20)
+    t1 = snip.op(op_orr_shifted, [base, rs1, c15])
+    t2 = snip.op(op_orr_shifted, [t1, rs2, c20])
+    r = snip.orr(t2, imm)
+    snip.output(r, 0)
+    encode_b_snip = snip.build()
+
+    # ------------------------------------------------------------------
+    # blt
+    # ------------------------------------------------------------------
+    enc_blt = InstructionEncoding(
+        32,
+        (0b100 << 12) + 0b1100011,
+        ["decode_b_rs1", "decode_b_rs2", "decode_b_imm"],
+        "encode_b",
+        "",
+        "",
+    )
+
+    instr_builder = InstructionBuilder(
+        "blt", [5, 5, 32], ["x1", "x2", "offset"], enc_blt
+    )
+    x1 = instr_builder.add_input_operand(0, 5)
+    x2 = instr_builder.add_input_operand(1, 5)
+    offset = instr_builder.add_input_operand(2, 32)
+    v1 = instr_builder.read(rf, x1)
+    v2 = instr_builder.read(rf, x2)
+    cond = instr_builder.slt(v1, v2)
+    base = instr_builder.env(pc_read, [])[0]
+    dest = instr_builder.add(base, offset)
+    instr_builder.cond_env(pc_write, cond, [dest], [])
+    blt_instr = instr_builder.build()
+
+    arch = (
+        ArchBuilder("test_arch", ["attr.1", "attr.2"])
+        .add_register_file(rf)
+        .add_env_func(ld32)
+        .add_env_func(st32)
+        .add_env_func(pc_read)
+        .add_env_func(pc_write)
+        .add_operation(op_extend_sign)
+        .add_operation(op_extract_inner)
+        .add_operation(op_orr_shifted)
+        .add_snippet(extend_sign_inner)
+        .add_snippet(extract_inner_snip)
+        .add_snippet(orr_shifted_snip)
+        .add_snippet(decode_rs1)
+        .add_snippet(decode_rs2)
+        .add_snippet(decode_imm)
+        .add_snippet(encode_b_snip)
+        .add_instruction(blt_instr)
+        .build()
+    )
+
+    write_arch(arch, arch_dir)
+    arch2 = read_arch(arch_dir)
+
+    assert arch == arch2, "Integration test failed"
+    print("Integration test passed")
+
+
+if __name__ == "__main__":
+    main()
