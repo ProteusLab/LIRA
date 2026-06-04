@@ -1,17 +1,26 @@
+#!/usr/bin/env python3
+
+import argparse
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from lira.arch_ser_txt import write_arch, read_arch
+def _setup_imports():
+    root_dir = Path(__file__).parent.parent
+    if str(root_dir) not in sys.path:
+        sys.path.insert(0, str(root_dir))
+
+_setup_imports()
+
 from lira.ir import Shape
 from lira.arch import RegisterFile, EnvironmentFunction, InstructionEncoding, Operation
 from lira.ir_builder import ArchBuilder, SnippetBuilder, InstructionBuilder
 
+from lira import arch_ser_txt
+from lira import arch_ser_yaml
+from lira.arch_ser import SerializationFormat
 
-def main():
-    arch_dir = Path(sys.argv[1])
-
+def build_test_arch() -> ArchBuilder:
     rf = RegisterFile("X", [], Shape(32, None), [f"x{i}" for i in range(32)])
 
     ld32 = EnvironmentFunction("ld32", ["mem.read"], [32], [32])
@@ -172,7 +181,7 @@ def main():
     instr_builder.cond_env(pc_write, cond, [dest], [])
     blt_instr = instr_builder.build()
 
-    arch = (
+    arch_builder = (
         ArchBuilder("test_arch", ["attr.1", "attr.2"])
         .add_register_file(rf)
         .add_env_func(ld32)
@@ -190,14 +199,42 @@ def main():
         .add_snippet(decode_imm)
         .add_snippet(encode_b_snip)
         .add_instruction(blt_instr)
-        .build()
     )
+    return arch_builder
 
-    write_arch(arch, arch_dir)
-    arch2 = read_arch(arch_dir)
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Test LIRA serialization (folder/JSON or single YAML file)"
+    )
+    parser.add_argument(
+        "output",
+        type=str,
+        help="Output location: for txt format it's a directory, for yaml it's a file path"
+    )
+    parser.add_argument(
+        "--format",
+        type=SerializationFormat,
+        choices=list(SerializationFormat),
+        default=SerializationFormat.YAML,
+        help="Serialization format"
+    )
+    args = parser.parse_args()
+
+    output_path = Path(args.output)
+    arch = build_test_arch().build()
+
+    if args.format == SerializationFormat.TXT:
+        arch_ser_txt.write_arch(arch, output_path)
+        arch2 = arch_ser_txt.read_arch(output_path)
+    elif args.format == SerializationFormat.YAML:
+        arch_ser_yaml.write_arch(arch, output_path)
+        arch2 = arch_ser_yaml.read_arch(output_path)
+    else:
+        assert False, "Unsupported format"
 
     assert arch == arch2, "Integration test failed"
-    print("Integration test passed")
+    print("Integration test passed successfully")
 
 
 if __name__ == "__main__":
