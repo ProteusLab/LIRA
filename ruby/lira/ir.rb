@@ -10,6 +10,17 @@ module Lira
       @lanes_mult = lanes_mult
     end
 
+    def to_h
+      { lanes_base: lanes_base, lanes_mult: lanes_mult }
+    end
+
+    def self.from_h(hash)
+      lanes_base = hash[:lanes_base] || hash['lanes_base']
+      lanes_mult = hash[:lanes_mult] || hash['lanes_mult']
+      lanes_mult = nil if lanes_mult == {}
+      new(lanes_base, lanes_mult)
+    end
+
     def ==(other)
       other.is_a?(Shape) && lanes_base == other.lanes_base && lanes_mult == other.lanes_mult
     end
@@ -25,6 +36,27 @@ module Lira
       @kind = kind
       @specifier = specifier
       @inputs = inputs
+    end
+
+    def to_h
+      {
+        shape: shape.to_h,
+        outputs: outputs,
+        outputs_types: outputs_types,
+        kind: kind,
+        specifier: specifier,
+        inputs: inputs
+      }
+    end
+
+    def self.from_h(hash)
+      shape = Shape.from_h(hash[:shape] || hash['shape'])
+      new(shape,
+          hash[:outputs] || hash['outputs'],
+          hash[:outputs_types] || hash['outputs_types'],
+          hash[:kind] || hash['kind'],
+          hash[:specifier] || hash['specifier'],
+          hash[:inputs] || hash['inputs'])
     end
 
     def ==(other)
@@ -51,6 +83,20 @@ module Lira
 
     def initialize(stmts)
       @stmts = stmts
+    end
+
+    def to_h
+      { stmts: stmts.map(&:to_h) }
+    end
+
+    def self.from_h(data)
+      if data.is_a?(String)
+        IrSerTxt.deserialize_statement_seq(data)
+      else
+        stmts_data = data[:stmts] || data['stmts']
+        stmts = stmts_data.map { |stmt_h| Statement.from_h(stmt_h) }
+        new(stmts)
+      end
     end
 
     def ==(other)
