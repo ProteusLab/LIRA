@@ -2,41 +2,10 @@
 
 $LOAD_PATH.unshift(File.expand_path('lib', __dir__))
 
+require 'optparse'
+
 require '../lira'
 include Lira
-
-def deep_diff(a, b, path = '')
-  if a.class != b.class
-    return "#{path}: class mismatch: #{a.class} vs #{b.class}"
-  end
-  case a
-  when Array
-    if a.size != b.size
-      return "#{path}: array size mismatch: #{a.size} vs #{b.size}"
-    end
-    a.each_with_index do |item, i|
-      diff = deep_diff(item, b[i], "#{path}[#{i}]")
-      return diff if diff
-    end
-  when Hash
-    keys = (a.keys + b.keys).uniq
-    keys.each do |k|
-      unless a.key?(k)
-        return "#{path}: missing key #{k} in first"
-      end
-      unless b.key?(k)
-        return "#{path}: missing key #{k} in second"
-      end
-      diff = deep_diff(a[k], b[k], "#{path}.#{k}")
-      return diff if diff
-    end
-  else
-    unless a == b
-      return "#{path}: #{a.inspect} != #{b.inspect}"
-    end
-  end
-  nil
-end
 
 def build_test_arch
   rf = RegisterFile.new('X', [], Shape.new(32, nil), (0...32).map { |i| "x#{i}" })
@@ -169,17 +138,40 @@ def build_test_arch
 end
 
 def main
-  if ARGV.size < 1
-    puts "Usage: #{$0} <output_path> [--format txt|yaml]"
+  options = {}
+  opt_parser = OptionParser.new do |opts|
+    opts.banner = "Usage: #{$0} [options]"
+
+    opts.on("--output PATH", "Output file or directory (required)") do |path|
+      options[:output] = path
+    end
+
+    opts.on("--format FORMAT", [:txt, :yaml], "Serialization format (txt or yaml, default: yaml)") do |fmt|
+      options[:format] = fmt
+    end
+
+    opts.on("--help", "Show this help message") do
+      puts opts
+      exit
+    end
+  end
+
+  begin
+    opt_parser.parse!
+  rescue OptionParser::InvalidOption => e
+    puts e
+    puts opt_parser
     exit 1
   end
-  output_path = ARGV[0]
-  format = if ARGV.include?('--format')
-             idx = ARGV.index('--format')
-             ARGV[idx+1].to_sym
-           else
-             :yaml
-           end
+
+  if options[:output].nil?
+    puts "Error: --output is required"
+    puts opt_parser
+    exit 1
+  end
+
+  output_path = options[:output]
+  format = options[:format] || :yaml
 
   arch = build_test_arch
 
@@ -190,18 +182,15 @@ def main
     ArchSerYaml.write_arch(arch, output_path)
     arch2 = ArchSerYaml.read_arch(output_path)
   else
-    raise "Unknown format"
+    raise "Unknown format: #{format}"
   end
 
   if arch == arch2
     puts "Integration test passed"
   else
-    puts "Integration test FAILED"
-    diff = deep_diff(arch, arch2)
-    puts diff if diff
+    puts "Integration test failed"
     exit 1
   end
-
 end
 
 main if __FILE__ == $0
