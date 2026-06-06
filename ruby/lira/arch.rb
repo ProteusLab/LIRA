@@ -10,6 +10,14 @@ module Lira
       @attributes = attributes
     end
 
+    def to_h
+      { name: name, attributes: attributes }
+    end
+
+    def self.from_h(hash)
+      new(hash[:name] || hash['name'], hash[:attributes] || hash['attributes'] || [])
+    end
+
     def ==(other)
       other.is_a?(Component) && name == other.name && attributes == other.attributes
     end
@@ -21,6 +29,15 @@ module Lira
     def initialize(name, seq)
       @name = name
       @seq = seq
+    end
+
+    def to_h
+      { name: name, seq: seq }
+    end
+
+    def self.from_h(hash)
+      seq = StatementSeq.from_h(hash[:seq] || hash['seq'])
+      new(hash[:name] || hash['name'], seq)
     end
 
     def ==(other)
@@ -40,6 +57,38 @@ module Lira
       @semantic_func = semantic_func
       @semantic_func_128 = semantic_func_128
       @semantic_table = semantic_table
+    end
+
+    def to_h
+      super.merge(
+        inputs: inputs,
+        outputs: outputs,
+        semantic_base: semantic_base,
+        semantic_func: semantic_func,
+        semantic_func_128: semantic_func_128,
+        semantic_table: semantic_table
+      )
+    end
+
+    def self.from_h(hash)
+      name = hash[:name] || hash['name']
+      attributes = hash[:attributes] || hash['attributes'] || []
+      inputs = hash[:inputs] || hash['inputs']
+      outputs = hash[:outputs] || hash['outputs']
+
+      semantic_base = hash[:semantic_base] || hash['semantic_base']
+      semantic_base = nil if semantic_base == {}
+      semantic_func = hash[:semantic_func] || hash['semantic_func']
+      semantic_func_128 = hash[:semantic_func_128] || hash['semantic_func_128']
+      semantic_func_128 = nil if semantic_func_128 == {}
+      semantic_table = hash[:semantic_table] || hash['semantic_table']
+      semantic_table = nil if semantic_table == {}
+
+      new(name, attributes, inputs, outputs,
+          semantic_base: semantic_base,
+          semantic_func: semantic_func,
+          semantic_func_128: semantic_func_128,
+          semantic_table: semantic_table)
     end
 
     def ==(other)
@@ -67,6 +116,18 @@ module Lira
       reg_names.length
     end
 
+    def to_h
+      super.merge(reg_size: reg_size.to_h, reg_names: reg_names)
+    end
+
+    def self.from_h(hash)
+      name = hash[:name] || hash['name']
+      attributes = hash[:attributes] || hash['attributes'] || []
+      reg_size = Shape.from_h(hash[:reg_size] || hash['reg_size'])
+      reg_names = hash[:reg_names] || hash['reg_names']
+      new(name, attributes, reg_size, reg_names)
+    end
+
     def ==(other)
       super(other) &&
         other.is_a?(RegisterFile) &&
@@ -82,6 +143,18 @@ module Lira
       super(name, attributes)
       @inputs = inputs
       @outputs = outputs
+    end
+
+    def to_h
+      super.merge(inputs: inputs, outputs: outputs)
+    end
+
+    def self.from_h(hash)
+      name = hash[:name] || hash['name']
+      attributes = hash[:attributes] || hash['attributes'] || []
+      inputs = hash[:inputs] || hash['inputs']
+      outputs = hash[:outputs] || hash['outputs']
+      new(name, attributes, inputs, outputs)
     end
 
     def ==(other)
@@ -101,6 +174,18 @@ module Lira
       @msb = msb
     end
 
+    def to_h
+      super.merge(lsb: lsb, msb: msb)
+    end
+
+    def self.from_h(hash)
+      name = hash[:name] || hash['name']
+      attributes = hash[:attributes] || hash['attributes'] || []
+      lsb = hash[:lsb] || hash['lsb']
+      msb = hash[:msb] || hash['msb']
+      new(name, attributes, lsb, msb)
+    end
+
     def ==(other)
       super(other) &&
         other.is_a?(SystemRegisterField) &&
@@ -118,6 +203,19 @@ module Lira
       @fields = fields
     end
 
+    def to_h
+      super.merge(size: size, fields: fields.map(&:to_h))
+    end
+
+    def self.from_h(hash)
+      name = hash[:name] || hash['name']
+      attributes = hash[:attributes] || hash['attributes'] || []
+      size = hash[:size] || hash['size']
+      fields_data = hash[:fields] || hash['fields']
+      fields = fields_data.map { |f| SystemRegisterField.from_h(f) }
+      new(name, attributes, size, fields)
+    end
+
     def ==(other)
       super(other) &&
         other.is_a?(SystemRegister) &&
@@ -132,6 +230,17 @@ module Lira
     def initialize(name, attributes, values)
       super(name, attributes)
       @values = values
+    end
+
+    def to_h
+      super.merge(values: values)
+    end
+
+    def self.from_h(hash)
+      name = hash[:name] || hash['name']
+      attributes = hash[:attributes] || hash['attributes'] || []
+      values = hash[:values] || hash['values']
+      new(name, attributes, values)
     end
 
     def ==(other)
@@ -154,6 +263,26 @@ module Lira
       @constraint_encode = constraint_encode
     end
 
+    def to_h
+      {
+        encoded_size: encoded_size,
+        const_encoding_part: const_encoding_part,
+        decode: decode,
+        encode: encode,
+        constraint_decode: constraint_decode,
+        constraint_encode: constraint_encode
+      }
+    end
+
+    def self.from_h(hash)
+      new(hash[:encoded_size] || hash['encoded_size'],
+          hash[:const_encoding_part] || hash['const_encoding_part'],
+          hash[:decode] || hash['decode'],
+          hash[:encode] || hash['encode'],
+          hash[:constraint_decode] || hash['constraint_decode'],
+          hash[:constraint_encode] || hash['constraint_encode'])
+    end
+
     def ==(other)
       other.is_a?(InstructionEncoding) &&
         encoded_size == other.encoded_size &&
@@ -174,6 +303,25 @@ module Lira
       @operand_names = operand_names
       @encoding = encoding
       @semantic = semantic
+    end
+
+    def to_h
+      super.merge(
+        operand_sizes: operand_sizes,
+        operand_names: operand_names,
+        encoding: encoding.to_h,
+        semantic: semantic
+      )
+    end
+
+    def self.from_h(hash)
+      name = hash[:name] || hash['name']
+      attributes = hash[:attributes] || hash['attributes'] || []
+      operand_sizes = hash[:operand_sizes] || hash['operand_sizes']
+      operand_names = hash[:operand_names] || hash['operand_names']
+      encoding = InstructionEncoding.from_h(hash[:encoding] || hash['encoding'])
+      semantic = StatementSeq.from_h(hash[:semantic] || hash['semantic'])
+      new(name, attributes, operand_sizes, operand_names, encoding, semantic)
     end
 
     def ==(other)
@@ -206,6 +354,39 @@ module Lira
       @operations = operations
       @snippets = snippets
       @instructions = instructions
+    end
+
+
+    def to_h
+      super.merge(
+        register_files: register_files.map(&:to_h),
+        system_registers: system_registers.map(&:to_h),
+        environment_functions: environment_functions.map(&:to_h),
+        tables_int: tables_int.map(&:to_h),
+        operations: operations.map(&:to_h),
+        snippets: snippets.map(&:to_h),
+        instructions: instructions.map(&:to_h)
+      )
+    end
+
+    def self.from_h(hash)
+      name = hash[:name] || hash['name']
+      attributes = hash[:attributes] || hash['attributes'] || []
+      register_files = (hash[:register_files] || hash['register_files']).map { |rf| RegisterFile.from_h(rf) }
+      system_registers = (hash[:system_registers] || hash['system_registers']).map { |sr| SystemRegister.from_h(sr) }
+      environment_functions = (hash[:environment_functions] || hash['environment_functions']).map { |ef| EnvironmentFunction.from_h(ef) }
+      tables_int = (hash[:tables_int] || hash['tables_int']).map { |ti| TableInt.from_h(ti) }
+      operations = (hash[:operations] || hash['operations']).map { |op| Operation.from_h(op) }
+      snippets = (hash[:snippets] || hash['snippets']).map { |sn| Snippet.from_h(sn) }
+      instructions = (hash[:instructions] || hash['instructions']).map { |ins| Instruction.from_h(ins) }
+      new(name, attributes,
+          register_files: register_files,
+          system_registers: system_registers,
+          environment_functions: environment_functions,
+          tables_int: tables_int,
+          operations: operations,
+          snippets: snippets,
+          instructions: instructions)
     end
 
     def ==(other)
