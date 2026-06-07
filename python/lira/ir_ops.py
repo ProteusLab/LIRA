@@ -299,3 +299,87 @@ class ExtendZero(ExtendOp):
 class ExtractLow(ExtractLowOp):
     def __init__(self, in_bits: int, out_bits: int):
         super().__init__(in_bits, out_bits)
+
+
+class Popcnt(UnaryOp):
+    def __init__(self, bits: int):
+        super().__init__(bits, semantic_base="popcnt")
+
+
+class Ctz(UnaryOp):
+    def __init__(self, bits: int):
+        super().__init__(bits, semantic_base="ctz")
+
+
+class Clz(UnaryOp):
+    def __init__(self, bits: int):
+        super().__init__(bits, semantic_base="clz")
+
+
+class Reverse(UnaryOp):
+    def __init__(self, bits: int):
+        super().__init__(bits, semantic_base="reverse")
+
+
+class RemU(BinaryOp):
+    def __init__(self, bits: int):
+        super().__init__(bits, semantic_base="rem_u")
+
+
+class RemS(BinaryOp):
+    def __init__(self, bits: int):
+        super().__init__(bits, semantic_base="rem_s")
+
+
+class Ror(BinaryOp):
+    def __init__(self, bits: int):
+        super().__init__(bits, semantic_base="ror")
+
+
+class Rol(BinaryOp):
+    def __init__(self, bits: int):
+        super().__init__(bits, semantic_base="rol")
+
+
+class AddOverflow(CmpOp):
+    def __init__(self, bits: int):
+        super().__init__(bits, out_bits=1, semantic_base="add_overflow")
+
+
+class SubOverflow(CmpOp):
+    def __init__(self, bits: int):
+        super().__init__(bits, out_bits=1, semantic_base="sub_overflow")
+
+
+class DivU(TernaryOp):
+    def __init__(self, bits: int):
+        super().__init__(bits, semantic_base="div_u")
+
+
+class DivS(TernaryOp):
+    def __init__(self, bits: int):
+        super().__init__(bits, semantic_base="div_s")
+
+
+class Select(StdOperation):
+    def __init__(self, bits: int):
+        name = f"select_{bits}"
+        super().__init__(
+            name=name,
+            attributes=[],
+            inputs=[1, bits, bits],
+            outputs=[bits],
+            semantic_base="select",
+            semantic_func=None,
+            semantic_table=None,
+        )
+        self._check_signature()
+
+    def _check_signature(self):
+        check_bits(self.inputs[1], "input[1] width")
+        check_bits(self.inputs[2], "input[2] width")
+        check_bits(self.outputs[0], "output width")
+        if not (self.inputs[1] == self.inputs[2] == self.outputs[0]):
+            raise TypeCheckError(
+                "Select: mismatched widths of true/false branches and output"
+            )

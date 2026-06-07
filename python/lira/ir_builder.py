@@ -136,6 +136,131 @@ class SeqBuilder:
         self.add_op(op, [a.name], [out.name])
         return out
 
+    def popcnt(self, a: Value) -> Value:
+        op = self._get_or_create_op(Popcnt, a.width)
+        out = self._new_temp(a.width)
+        self.add_op(op, [a.name], [out.name])
+        return out
+
+    def ctz(self, a: Value) -> Value:
+        op = self._get_or_create_op(Ctz, a.width)
+        out = self._new_temp(a.width)
+        self.add_op(op, [a.name], [out.name])
+        return out
+
+    def clz(self, a: Value) -> Value:
+        op = self._get_or_create_op(Clz, a.width)
+        out = self._new_temp(a.width)
+        self.add_op(op, [a.name], [out.name])
+        return out
+
+    def reverse(self, a: Value) -> Value:
+        op = self._get_or_create_op(Reverse, a.width)
+        out = self._new_temp(a.width)
+        self.add_op(op, [a.name], [out.name])
+        return out
+
+    def rem_u(self, a: Value, b: Value) -> Value:
+        if a.width != b.width:
+            raise TypeError(f"rem_u width mismatch: {a.width} vs {b.width}")
+        op = self._get_or_create_op(RemU, a.width)
+        out = self._new_temp(a.width)
+        self.add_op(op, [a.name, b.name], [out.name])
+        return out
+
+    def rem_s(self, a: Value, b: Value) -> Value:
+        if a.width != b.width:
+            raise TypeError(f"rem_s width mismatch: {a.width} vs {b.width}")
+        op = self._get_or_create_op(RemS, a.width)
+        out = self._new_temp(a.width)
+        self.add_op(op, [a.name, b.name], [out.name])
+        return out
+
+    def ror(self, a: Value, b: Value) -> Value:
+        if a.width != b.width:
+            raise TypeError(f"ror width mismatch: {a.width} vs {b.width}")
+        op = self._get_or_create_op(Ror, a.width)
+        out = self._new_temp(a.width)
+        self.add_op(op, [a.name, b.name], [out.name])
+        return out
+
+    def rol(self, a: Value, b: Value) -> Value:
+        if a.width != b.width:
+            raise TypeError(f"rol width mismatch: {a.width} vs {b.width}")
+        op = self._get_or_create_op(Rol, a.width)
+        out = self._new_temp(a.width)
+        self.add_op(op, [a.name, b.name], [out.name])
+        return out
+
+    def add_overflow(self, a: Value, b: Value) -> Value:
+        if a.width != b.width:
+            raise TypeError(f"add_overflow width mismatch: {a.width} vs {b.width}")
+        op = self._get_or_create_op(AddOverflow, a.width)
+        out = self._new_temp(1)
+        self.add_op(op, [a.name, b.name], [out.name])
+        return out
+
+    def sub_overflow(self, a: Value, b: Value) -> Value:
+        if a.width != b.width:
+            raise TypeError(f"sub_overflow width mismatch: {a.width} vs {b.width}")
+        op = self._get_or_create_op(SubOverflow, a.width)
+        out = self._new_temp(1)
+        self.add_op(op, [a.name, b.name], [out.name])
+        return out
+
+    def div_u(self, a: Value, b: Value, default: Value) -> Value:
+        if a.width != b.width or a.width != default.width:
+            raise TypeError("div_u: widths mismatch")
+        op = self._get_or_create_op(DivU, a.width)
+        out = self._new_temp(a.width)
+        self.add_op(op, [a.name, b.name, default.name], [out.name])
+        return out
+
+    def div_s(self, a: Value, b: Value, default: Value) -> Value:
+        if a.width != b.width or a.width != default.width:
+            raise TypeError("div_s: widths mismatch")
+        op = self._get_or_create_op(DivS, a.width)
+        out = self._new_temp(a.width)
+        self.add_op(op, [a.name, b.name, default.name], [out.name])
+        return out
+
+    def select(self, cond: Value, true_val: Value, false_val: Value) -> Value:
+        if cond.width != 1:
+            raise TypeError("select: condition must be 1-bit")
+        if true_val.width != false_val.width:
+            raise TypeError("select: true and false branch widths mismatch")
+        op = self._get_or_create_op(Select, true_val.width)
+        out = self._new_temp(true_val.width)
+        self.add_op(op, [cond.name, true_val.name, false_val.name], [out.name])
+        return out
+
+    def concat(self, low: Value, high: Value) -> Value:
+        """Concatenate low and high: result = (high << low.width) | low."""
+        low_width = low.width
+        high_width = high.width
+        total_width = low_width + high_width
+
+        high_ext = self.extend_zero(high, total_width)
+
+        shift_width = (low_width.bit_length() + 1) if low_width > 0 else 1
+        shift_amount = self.const(low_width, shift_width)
+
+        high_shifted = self.lsl(high_ext, shift_amount)
+
+        low_ext = self.extend_zero(low, total_width)
+
+        result = self.orr(low_ext, high_shifted)
+        return result
+
+    def extract(self, value: Value, start: Value, out_width: int) -> Value:
+        """Extract bits: result = extract_low(lsr(value, start), out_width)."""
+        # NOTE: Ensure start has same width as value (by zero extension)
+        if start.width != value.width:
+            start = self.extend_zero(start, value.width)
+        shifted = self.lsr(value, start)
+        result = self.extract_low(shifted, out_width)
+        return result
+
     # ------------------------------------------------------------------
     # NOTE: Registers & Memory
     # ------------------------------------------------------------------
@@ -284,6 +409,51 @@ class BaseBuilder:
 
     def extract_low(self, a: Value, out_width: int) -> Value:
         return self.seq.extract_low(a, out_width)
+
+    def popcnt(self, a: Value) -> Value:
+        return self.seq.popcnt(a)
+
+    def ctz(self, a: Value) -> Value:
+        return self.seq.ctz(a)
+
+    def clz(self, a: Value) -> Value:
+        return self.seq.clz(a)
+
+    def reverse(self, a: Value) -> Value:
+        return self.seq.reverse(a)
+
+    def rem_u(self, a: Value, b: Value) -> Value:
+        return self.seq.rem_u(a, b)
+
+    def rem_s(self, a: Value, b: Value) -> Value:
+        return self.seq.rem_s(a, b)
+
+    def ror(self, a: Value, b: Value) -> Value:
+        return self.seq.ror(a, b)
+
+    def rol(self, a: Value, b: Value) -> Value:
+        return self.seq.rol(a, b)
+
+    def add_overflow(self, a: Value, b: Value) -> Value:
+        return self.seq.add_overflow(a, b)
+
+    def sub_overflow(self, a: Value, b: Value) -> Value:
+        return self.seq.sub_overflow(a, b)
+
+    def div_u(self, a: Value, b: Value, default: Value) -> Value:
+        return self.seq.div_u(a, b, default)
+
+    def div_s(self, a: Value, b: Value, default: Value) -> Value:
+        return self.seq.div_s(a, b, default)
+
+    def select(self, cond: Value, true_val: Value, false_val: Value) -> Value:
+        return self.seq.select(cond, true_val, false_val)
+
+    def concat(self, low: Value, high: Value) -> Value:
+        return self.seq.concat(low, high)
+
+    def extract(self, value: Value, start: Value, out_width: int) -> Value:
+        return self.seq.extract(value, start, out_width)
 
     def read(
         self, rf: RegisterFile, rsi: Value, shape: Shape = Shape(1, None)
