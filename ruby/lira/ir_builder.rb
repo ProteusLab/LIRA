@@ -132,12 +132,142 @@ module Lira
       out
     end
 
+    def extend_zero(a, to_width)
+      raise "extend_zero: input width #{a.width} >= output width #{to_width}" if a.width >= to_width
+      op = get_or_create_op(ExtendZero, a.width, to_width)
+      out = new_temp(to_width)
+      add_op(op, [a.name], [out.name])
+      out
+    end
+
+    def popcnt(a)
+      op = get_or_create_op(Popcnt, a.width)
+      out = new_temp(a.width)
+      add_op(op, [a.name], [out.name])
+      out
+    end
+
+    def ctz(a)
+      op = get_or_create_op(Ctz, a.width)
+      out = new_temp(a.width)
+      add_op(op, [a.name], [out.name])
+      out
+    end
+
+    def clz(a)
+      op = get_or_create_op(Clz, a.width)
+      out = new_temp(a.width)
+      add_op(op, [a.name], [out.name])
+      out
+    end
+
+    def reverse(a)
+      op = get_or_create_op(Reverse, a.width)
+      out = new_temp(a.width)
+      add_op(op, [a.name], [out.name])
+      out
+    end
+
+    def rem_u(a, b)
+      check_width_match(a, b)
+      op = get_or_create_op(RemU, a.width)
+      out = new_temp(a.width)
+      add_op(op, [a.name, b.name], [out.name])
+      out
+    end
+
+    def rem_s(a, b)
+      check_width_match(a, b)
+      op = get_or_create_op(RemS, a.width)
+      out = new_temp(a.width)
+      add_op(op, [a.name, b.name], [out.name])
+      out
+    end
+
+    def ror(a, b)
+      check_width_match(a, b)
+      op = get_or_create_op(Ror, a.width)
+      out = new_temp(a.width)
+      add_op(op, [a.name, b.name], [out.name])
+      out
+    end
+
+    def rol(a, b)
+      check_width_match(a, b)
+      op = get_or_create_op(Rol, a.width)
+      out = new_temp(a.width)
+      add_op(op, [a.name, b.name], [out.name])
+      out
+    end
+
+    def add_overflow(a, b)
+      check_width_match(a, b)
+      op = get_or_create_op(AddOverflow, a.width)
+      out = new_temp(1)
+      add_op(op, [a.name, b.name], [out.name])
+      out
+    end
+
+    def sub_overflow(a, b)
+      check_width_match(a, b)
+      op = get_or_create_op(SubOverflow, a.width)
+      out = new_temp(1)
+      add_op(op, [a.name, b.name], [out.name])
+      out
+    end
+
+    def div_u(a, b, default)
+      check_width_match(a, b)
+      raise "div_u: default width mismatch" if a.width != default.width
+      op = get_or_create_op(DivU, a.width)
+      out = new_temp(a.width)
+      add_op(op, [a.name, b.name, default.name], [out.name])
+      out
+    end
+
+    def div_s(a, b, default)
+      check_width_match(a, b)
+      raise "div_s: default width mismatch" if a.width != default.width
+      op = get_or_create_op(DivS, a.width)
+      out = new_temp(a.width)
+      add_op(op, [a.name, b.name, default.name], [out.name])
+      out
+    end
+
+    def select(cond, true_val, false_val)
+      raise "select: condition must be 1-bit" unless cond.width == 1
+      raise "select: true/false widths mismatch" unless true_val.width == false_val.width
+      op = get_or_create_op(Select, true_val.width)
+      out = new_temp(true_val.width)
+      add_op(op, [cond.name, true_val.name, false_val.name], [out.name])
+      out
+    end
+
+    def concat(low, high)
+      low_width = low.width
+      high_width = high.width
+      total_width = low_width + high_width
+
+      high_ext = extend_zero(high, total_width)
+      shift_width = (low_width.bit_length + 1) rescue 1
+      shift_amount = const(low_width, shift_width)
+      high_shifted = lsl(high_ext, shift_amount)
+      low_ext = extend_zero(low, total_width)
+      orr(low_ext, high_shifted)
+    end
+
     def extract_low(a, out_width)
       raise "extract_low: output width #{out_width} > input width #{a.width}" if out_width > a.width
       op = get_or_create_op(ExtractLow, a.width, out_width)
       out = new_temp(out_width)
       add_op(op, [a.name], [out.name])
       out
+    end
+
+    def extract(value, start, out_width)
+      start = extend_zero(start, value.width) if start.width != value.width
+      shifted = lsr(value, start)
+      extract_low(shifted, out_width)
     end
 
     # Register & memory
@@ -262,7 +392,24 @@ module Lira
     def asr(a, b) = @seq.asr(a, b)
     def slt(a, b) = @seq.slt(a, b)
     def extend_sign(a, to_width) = @seq.extend_sign(a, to_width)
+    def extend_zero(a, to_width) = @seq.extend_zero(a, to_width)
+    def popcnt(a) = @seq.popcnt(a)
+    def ctz(a) = @seq.ctz(a)
+    def clz(a) = @seq.clz(a)
+    def reverse(a) = @seq.reverse(a)
+    def rem_u(a, b) = @seq.rem_u(a, b)
+    def rem_s(a, b) = @seq.rem_s(a, b)
+    def ror(a, b) = @seq.ror(a, b)
+    def rol(a, b) = @seq.rol(a, b)
+    def add_overflow(a, b) = @seq.add_overflow(a, b)
+    def sub_overflow(a, b) = @seq.sub_overflow(a, b)
+    def div_u(a, b, default) = @seq.div_u(a, b, default)
+    def div_s(a, b, default) = @seq.div_s(a, b, default)
+    def select(cond, true_val, false_val) = @seq.select(cond, true_val, false_val)
+    def concat(low, high) = @seq.concat(low, high)
     def extract_low(a, out_width) = @seq.extract_low(a, out_width)
+    def extract(value, start, out_width) = @seq.extract(value, start, out_width)
+
     def read(rf, rsi, shape = Shape.new(1, nil)) = @seq.read(rf, rsi, shape)
     def write(rf, rsi, value, shape = Shape.new(1, nil)) = @seq.write(rf, rsi, value, shape)
     def const(value, width = 32) = @seq.const(value, width)

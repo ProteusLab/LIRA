@@ -76,6 +76,28 @@ module Lira
     end
   end
 
+  class TernaryOp < Operation
+    include StdOperation
+
+    def initialize(bits, name: nil, semantic_base: nil)
+      name ||= "#{base_name}_#{bits}"
+      semantic_base ||= base_name
+      super(name, [], [bits, bits, bits], [bits],
+            semantic_base: semantic_base, semantic_func: nil, semantic_table: nil)
+      check_signature
+    end
+
+    def check_signature
+      raise TypeCheckError, "input[0] must be positive" unless inputs[0] > 0
+      raise TypeCheckError, "input[1] must be positive" unless inputs[1] > 0
+      raise TypeCheckError, "input[2] must be positive" unless inputs[2] > 0
+      raise TypeCheckError, "output must be positive" unless outputs[0] > 0
+      unless inputs[0] == inputs[1] && inputs[0] == inputs[2] && inputs[0] == outputs[0]
+        raise TypeCheckError, "mismatched widths: #{inputs} -> #{outputs[0]}"
+      end
+    end
+  end
+
   class ExtendOp < Operation
     include StdOperation
 
@@ -110,7 +132,6 @@ module Lira
     end
   end
 
-  # Concrete operations
   class Not < UnaryOp; def initialize(bits); super(bits, semantic_base: 'not'); end; end
   class Neg < UnaryOp; def initialize(bits); super(bits, semantic_base: 'neg'); end; end
   class Add < BinaryOp; def initialize(bits); super(bits, semantic_base: 'add'); end; end
@@ -135,4 +156,66 @@ module Lira
   class ExtendSign < ExtendOp; def initialize(in_bits, out_bits); super(in_bits, out_bits, 'extend_sign'); end; end
   class ExtendZero < ExtendOp; def initialize(in_bits, out_bits); super(in_bits, out_bits, 'extend_zero'); end; end
   class ExtractLow < ExtractLowOp; def initialize(in_bits, out_bits); super(in_bits, out_bits); end; end
+
+  class Popcnt < UnaryOp
+    def initialize(bits); super(bits, semantic_base: 'popcnt'); end
+  end
+
+  class Ctz < UnaryOp
+    def initialize(bits); super(bits, semantic_base: 'ctz'); end
+  end
+
+  class Clz < UnaryOp
+    def initialize(bits); super(bits, semantic_base: 'clz'); end
+  end
+
+  class Reverse < UnaryOp
+    def initialize(bits); super(bits, semantic_base: 'reverse'); end
+  end
+
+  class RemU < BinaryOp
+    def initialize(bits); super(bits, semantic_base: 'rem_u'); end
+  end
+
+  class RemS < BinaryOp
+    def initialize(bits); super(bits, semantic_base: 'rem_s'); end
+  end
+
+  class Ror < BinaryOp
+    def initialize(bits); super(bits, semantic_base: 'ror'); end
+  end
+
+  class Rol < BinaryOp
+    def initialize(bits); super(bits, semantic_base: 'rol'); end
+  end
+
+  class AddOverflow < CmpOp
+    def initialize(bits); super(bits, out_bits: 1, semantic_base: 'add_overflow'); end
+  end
+
+  class SubOverflow < CmpOp
+    def initialize(bits); super(bits, out_bits: 1, semantic_base: 'sub_overflow'); end
+  end
+
+  class DivU < TernaryOp
+    def initialize(bits); super(bits, semantic_base: 'div_u'); end
+  end
+
+  class DivS < TernaryOp
+    def initialize(bits); super(bits, semantic_base: 'div_s'); end
+  end
+
+  class Select < Operation
+    include StdOperation
+    def initialize(bits)
+      name = "select_#{bits}"
+      super(name, [], [1, bits, bits], [bits],
+            semantic_base: 'select', semantic_func: nil, semantic_table: nil)
+      check_signature
+    end
+
+    def check_signature
+      raise TypeCheckError, "true/false branches mismatch" unless inputs[1] == inputs[2] && inputs[1] == outputs[0]
+    end
+  end
 end
