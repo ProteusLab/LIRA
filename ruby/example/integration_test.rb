@@ -8,7 +8,8 @@ require '../lira'
 include Lira
 
 def build_test_arch
-  rf = RegisterFile.new('X', [], Shape.new(32, nil), (0...32).map { |i| "x#{i}" })
+  registers = (0...32).map { |i| Register.new("x#{i}") }
+  rf = RegisterFile.new('X', [], Shape.new(32, nil), registers)
 
   ld32 = EnvironmentFunction.new('ld32', ['mem.read'], [32], [32])
   st32 = EnvironmentFunction.new('st32', ['mem.write'], [32,32], [])
