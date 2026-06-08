@@ -103,38 +103,64 @@ module Lira
     end
   end
 
-  class RegisterFile < Component
-    attr_accessor :reg_size, :reg_names
-
-    def initialize(name, attributes, reg_size, reg_names)
+  class Register < Component
+    def initialize(name, attributes = [])
       super(name, attributes)
-      @reg_size = reg_size
-      @reg_names = reg_names
-    end
-
-    def regs_num
-      reg_names.length
     end
 
     def to_h
-      super.merge(reg_size: reg_size.to_h, reg_names: reg_names)
+      super.merge()
+    end
+
+    def self.from_h(hash)
+      name = hash[:name] || hash['name']
+      attributes = hash[:attributes] || hash['attributes'] || []
+      new(name, attributes)
+    end
+
+    def ==(other)
+      super(other) && other.is_a?(Register)
+    end
+  end
+
+  class RegisterFile < Component
+    attr_accessor :reg_size, :regs
+
+    def initialize(name, attributes, reg_size, regs)
+      super(name, attributes)
+      @reg_size = reg_size
+      @regs = regs
+    end
+
+    def reg_names
+      @regs.map(&:name)
+    end
+
+    def regs_num
+      @regs.length
+    end
+
+    def to_h
+      super.merge(reg_size: reg_size.to_h, regs: regs.map(&:to_h))
     end
 
     def self.from_h(hash)
       name = hash[:name] || hash['name']
       attributes = hash[:attributes] || hash['attributes'] || []
       reg_size = Shape.from_h(hash[:reg_size] || hash['reg_size'])
-      reg_names = hash[:reg_names] || hash['reg_names']
-      new(name, attributes, reg_size, reg_names)
+      regs_data = hash[:regs] || hash['regs'] || []
+      regs = regs_data.map { |r| Register.from_h(r) }
+      new(name, attributes, reg_size, regs)
     end
 
     def ==(other)
       super(other) &&
         other.is_a?(RegisterFile) &&
         reg_size == other.reg_size &&
-        reg_names == other.reg_names
+        regs == other.regs
     end
   end
+
 
   class EnvironmentFunction < Component
     attr_accessor :inputs, :outputs

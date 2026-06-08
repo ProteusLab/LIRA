@@ -24,13 +24,22 @@ class Operation(Component):
     semantic_func_128: Optional[str] = None # Snippet
     semantic_table: Optional[str] = None # TableInt
 
+
+@dataclass
+class Register(Component):
+    def __init__(self, name, attributes: list[str] = []):
+        super().__init__(name=name, attributes=attributes)
+
 @dataclass
 class RegisterFile(Component):
     reg_size: Shape
-    reg_names: list[str]
+    regs: list[Register]
+
+    def reg_names(self) -> list[str]:
+        return [r.name for r in self.regs]
 
     def regs_num(self) -> int:
-        return len(self.reg_names)
+        return len(self.regs)
 
 @dataclass
 class EnvironmentFunction(Component):
