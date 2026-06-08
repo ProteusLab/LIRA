@@ -13,7 +13,7 @@ def _setup_imports():
 _setup_imports()
 
 from lira.ir import Shape
-from lira.arch import RegisterFile, EnvironmentFunction, InstructionEncoding, Operation
+from lira.arch import Register, RegisterFile, EnvironmentFunction, InstructionEncoding, Operation
 from lira.ir_builder import ArchBuilder, SnippetBuilder, InstructionBuilder
 
 from lira import arch_ser_txt
@@ -21,7 +21,8 @@ from lira import arch_ser_yaml
 from lira.arch_ser import SerializationFormat
 
 def build_test_arch() -> ArchBuilder:
-    rf = RegisterFile("X", [], Shape(32, None), [f"x{i}" for i in range(32)])
+    registers = [Register(f"x{i}") for i in range(32)]
+    rf = RegisterFile("X", [], Shape(32, None), registers)
 
     ld32 = EnvironmentFunction("ld32", ["mem.read"], [32], [32])
     st32 = EnvironmentFunction("st32", ["mem.write"], [32, 32], [])
