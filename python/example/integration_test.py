@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import subprocess
 import sys
 from pathlib import Path
 
@@ -16,9 +17,7 @@ from lira.ir import Shape
 from lira.arch import Register, RegisterFile, EnvironmentFunction, InstructionEncoding, Operation
 from lira.ir_builder import ArchBuilder, SnippetBuilder, InstructionBuilder
 
-from lira import arch_ser_txt
 from lira import arch_ser_yaml
-from lira.arch_ser import SerializationFormat
 
 def build_test_arch() -> ArchBuilder:
     registers = [Register(f"x{i}") for i in range(32)]
@@ -206,33 +205,27 @@ def build_test_arch() -> ArchBuilder:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Test LIRA serialization (folder/JSON or single YAML file)"
+        description="Test LIRA YAML serialization"
     )
     parser.add_argument(
-        "output",
+        "--output",
         type=str,
-        help="Output location: for txt format it's a directory, for yaml it's a file path"
-    )
-    parser.add_argument(
-        "--format",
-        type=SerializationFormat,
-        choices=list(SerializationFormat),
-        default=SerializationFormat.YAML,
-        help="Serialization format"
+        default="lira.yaml",
+        help="Output YAML file path (default: lira.yaml)"
     )
     args = parser.parse_args()
 
     output_path = Path(args.output)
     arch = build_test_arch().build()
 
-    if args.format == SerializationFormat.TXT:
-        arch_ser_txt.write_arch(arch, output_path)
-        arch2 = arch_ser_txt.read_arch(output_path)
-    elif args.format == SerializationFormat.YAML:
-        arch_ser_yaml.write_arch(arch, output_path)
-        arch2 = arch_ser_yaml.read_arch(output_path)
-    else:
-        assert False, "Unsupported format"
+    raw_path = output_path.with_suffix('.raw.yaml')
+    arch_ser_yaml.write_arch(arch, raw_path)
+
+    canonicalize = Path(__file__).parent.parent.parent / 'tools' / 'yaml_canonicalize.py'
+    subprocess.run([sys.executable, str(canonicalize), str(raw_path), str(output_path)], check=True)
+    raw_path.unlink()
+
+    arch2 = arch_ser_yaml.read_arch(output_path)
 
     assert arch == arch2, "Integration test failed"
     print("Integration test passed successfully")

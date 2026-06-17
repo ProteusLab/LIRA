@@ -33,84 +33,87 @@ class SeqBuilder:
             self._op_cache[key] = op_class(*args, **kwargs)
         return self._op_cache[key]
 
+    def check_width_match(self, a: Value, b: Value):
+        if a.width != b.width:
+            raise TypeError(f"width mismatch: {a.width} vs {b.width}")
+
+    def ensure_width(self, val: Value, width: int) -> Value:
+        if val.width == width:
+            return val
+        return self.extend_zero(val, width) if val.width < width else self.extract_low(val, width)
+
+    @property
+    def operations_map(self) -> Dict[str, Operation]:
+        return {op.name: op for op in self._op_cache.values()}
+
     # ------------------------------------------------------------------
     # NOTE: Standart operations
     # ------------------------------------------------------------------
     def add(self, a: Value, b: Value) -> Value:
-        if a.width != b.width:
-            raise TypeError(f"add width mismatch: {a.width} vs {b.width}")
+        self.check_width_match(a, b)
         op = self._get_or_create_op(Add, a.width)
         out = self._new_temp(a.width)
         self.add_op(op, [a.name, b.name], [out.name])
         return out
 
     def sub(self, a: Value, b: Value) -> Value:
-        if a.width != b.width:
-            raise TypeError(f"sub width mismatch: {a.width} vs {b.width}")
+        self.check_width_match(a, b)
         op = self._get_or_create_op(Sub, a.width)
         out = self._new_temp(a.width)
         self.add_op(op, [a.name, b.name], [out.name])
         return out
 
     def mul(self, a: Value, b: Value) -> Value:
-        if a.width != b.width:
-            raise TypeError(f"mul width mismatch: {a.width} vs {b.width}")
+        self.check_width_match(a, b)
         op = self._get_or_create_op(Mul, a.width)
         out = self._new_temp(a.width)
         self.add_op(op, [a.name, b.name], [out.name])
         return out
 
     def and_(self, a: Value, b: Value) -> Value:
-        if a.width != b.width:
-            raise TypeError(f"and width mismatch: {a.width} vs {b.width}")
+        self.check_width_match(a, b)
         op = self._get_or_create_op(And, a.width)
         out = self._new_temp(a.width)
         self.add_op(op, [a.name, b.name], [out.name])
         return out
 
     def orr(self, a: Value, b: Value) -> Value:
-        if a.width != b.width:
-            raise TypeError(f"orr width mismatch: {a.width} vs {b.width}")
+        self.check_width_match(a, b)
         op = self._get_or_create_op(Orr, a.width)
         out = self._new_temp(a.width)
         self.add_op(op, [a.name, b.name], [out.name])
         return out
 
     def xor(self, a: Value, b: Value) -> Value:
-        if a.width != b.width:
-            raise TypeError(f"xor width mismatch: {a.width} vs {b.width}")
+        self.check_width_match(a, b)
         op = self._get_or_create_op(Xor, a.width)
         out = self._new_temp(a.width)
         self.add_op(op, [a.name, b.name], [out.name])
         return out
 
     def lsl(self, a: Value, b: Value) -> Value:
-        if a.width != b.width:
-            raise TypeError(f"lsl width mismatch: {a.width} vs {b.width}")
+        self.check_width_match(a, b)
         op = self._get_or_create_op(Lsl, a.width)
         out = self._new_temp(a.width)
         self.add_op(op, [a.name, b.name], [out.name])
         return out
 
     def lsr(self, a: Value, b: Value) -> Value:
-        if a.width != b.width:
-            raise TypeError(f"lsr width mismatch: {a.width} vs {b.width}")
+        self.check_width_match(a, b)
         op = self._get_or_create_op(Lsr, a.width)
         out = self._new_temp(a.width)
         self.add_op(op, [a.name, b.name], [out.name])
         return out
 
     def asr(self, a: Value, b: Value) -> Value:
-        if a.width != b.width:
-            raise TypeError(f"asr width mismatch: {a.width} vs {b.width}")
+        self.check_width_match(a, b)
         op = self._get_or_create_op(Asr, a.width)
         out = self._new_temp(a.width)
         self.add_op(op, [a.name, b.name], [out.name])
         return out
 
     def slt(self, a: Value, b: Value) -> Value:
-        if a.width != b.width:
-            raise TypeError(f"slt width mismatch: {a.width} vs {b.width}")
+        self.check_width_match(a, b)
         op = self._get_or_create_op(Slt, a.width)
         out = self._new_temp(1)
         self.add_op(op, [a.name, b.name], [out.name])
@@ -161,64 +164,60 @@ class SeqBuilder:
         return out
 
     def rem_u(self, a: Value, b: Value) -> Value:
-        if a.width != b.width:
-            raise TypeError(f"rem_u width mismatch: {a.width} vs {b.width}")
+        self.check_width_match(a, b)
         op = self._get_or_create_op(RemU, a.width)
         out = self._new_temp(a.width)
         self.add_op(op, [a.name, b.name], [out.name])
         return out
 
     def rem_s(self, a: Value, b: Value) -> Value:
-        if a.width != b.width:
-            raise TypeError(f"rem_s width mismatch: {a.width} vs {b.width}")
+        self.check_width_match(a, b)
         op = self._get_or_create_op(RemS, a.width)
         out = self._new_temp(a.width)
         self.add_op(op, [a.name, b.name], [out.name])
         return out
 
     def ror(self, a: Value, b: Value) -> Value:
-        if a.width != b.width:
-            raise TypeError(f"ror width mismatch: {a.width} vs {b.width}")
+        self.check_width_match(a, b)
         op = self._get_or_create_op(Ror, a.width)
         out = self._new_temp(a.width)
         self.add_op(op, [a.name, b.name], [out.name])
         return out
 
     def rol(self, a: Value, b: Value) -> Value:
-        if a.width != b.width:
-            raise TypeError(f"rol width mismatch: {a.width} vs {b.width}")
+        self.check_width_match(a, b)
         op = self._get_or_create_op(Rol, a.width)
         out = self._new_temp(a.width)
         self.add_op(op, [a.name, b.name], [out.name])
         return out
 
     def add_overflow(self, a: Value, b: Value) -> Value:
-        if a.width != b.width:
-            raise TypeError(f"add_overflow width mismatch: {a.width} vs {b.width}")
+        self.check_width_match(a, b)
         op = self._get_or_create_op(AddOverflow, a.width)
         out = self._new_temp(1)
         self.add_op(op, [a.name, b.name], [out.name])
         return out
 
     def sub_overflow(self, a: Value, b: Value) -> Value:
-        if a.width != b.width:
-            raise TypeError(f"sub_overflow width mismatch: {a.width} vs {b.width}")
+        self.check_width_match(a, b)
         op = self._get_or_create_op(SubOverflow, a.width)
         out = self._new_temp(1)
         self.add_op(op, [a.name, b.name], [out.name])
         return out
 
     def div_u(self, a: Value, b: Value, default: Value) -> Value:
-        if a.width != b.width or a.width != default.width:
-            raise TypeError("div_u: widths mismatch")
+        self.check_width_match(a, b)
+        if a.width != default.width:
+            raise TypeError("div_u: default width mismatch")
         op = self._get_or_create_op(DivU, a.width)
         out = self._new_temp(a.width)
         self.add_op(op, [a.name, b.name, default.name], [out.name])
         return out
 
     def div_s(self, a: Value, b: Value, default: Value) -> Value:
-        if a.width != b.width or a.width != default.width:
-            raise TypeError("div_s: widths mismatch")
+        self.check_width_match(a, b)
+        if a.width != default.width:
+            raise TypeError("div_s: default width mismatch")
         op = self._get_or_create_op(DivS, a.width)
         out = self._new_temp(a.width)
         self.add_op(op, [a.name, b.name, default.name], [out.name])
