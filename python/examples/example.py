@@ -161,6 +161,7 @@ def build_test_arch() -> ArchBuilder:
     enc_blt = InstructionEncoding(
         32,
         (0b100 << 12) + 0b1100011,
+        0,
         ["decode_b_rs1", "decode_b_rs2", "decode_b_imm"],
         "encode_b",
         "",

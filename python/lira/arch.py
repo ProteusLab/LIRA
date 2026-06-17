@@ -64,6 +64,7 @@ class InstructionEncoding:
     encoded_size: int
     # Used to reuse same encode/constraint_decode for multiple instructions
     const_encoding_part: int
+    const_mask: int
     # `[encoding_size -> operand_size]`
     decode: list[str] # Snippet
     # `[operand_size] -> encoding_size`

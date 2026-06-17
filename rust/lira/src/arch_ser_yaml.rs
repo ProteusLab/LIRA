@@ -77,6 +77,10 @@ fn arch_to_yaml(arch: &Arch) -> anyhow::Result<String> {
                     Yaml::Integer(i.encoding.const_encoding_part as i64),
                 );
                 enc_map.insert(
+                    Yaml::String("const_mask".into()),
+                    Yaml::Integer(i.encoding.const_mask as i64),
+                );
+                enc_map.insert(
                     Yaml::String("decode".into()),
                     Yaml::Array(
                         i.encoding.decode.iter().map(|d| Yaml::String(d.clone())).collect(),

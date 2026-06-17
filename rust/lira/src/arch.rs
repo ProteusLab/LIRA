@@ -80,6 +80,7 @@ pub struct TableInt {
 pub struct InstructionEncoding {
     pub encoded_size: usize,
     pub const_encoding_part: usize,
+    pub const_mask: usize,
     /// Names of snippets
     ///
     /// `[encoding_size -> operand_size]`

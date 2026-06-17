@@ -166,6 +166,7 @@ fn build_test_arch() -> anyhow::Result<Arch> {
     let enc_blt = InstructionEncoding {
         encoded_size: 32,
         const_encoding_part: (0b100 << 12) + 0b1100011,
+        const_mask: 0,
         decode: vec!["decode_b_rs1".to_string(), "decode_b_rs2".to_string(), "decode_b_imm".to_string()],
         encode: "encode_b".to_string(),
         constraint_decode: String::new(),
