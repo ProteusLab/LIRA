@@ -223,6 +223,30 @@ impl SeqBuilder {
         self.op(&op, vec![a, b]).unwrap()
     }
 
+    pub fn ult(&mut self, a: &Value, b: &Value) -> Value {
+        self.check_width_match(a, b);
+        let op = ult_op(a.width);
+        self.op(&op, vec![a, b]).unwrap()
+    }
+
+    pub fn ule(&mut self, a: &Value, b: &Value) -> Value {
+        self.check_width_match(a, b);
+        let op = ule_op(a.width);
+        self.op(&op, vec![a, b]).unwrap()
+    }
+
+    pub fn ugt(&mut self, a: &Value, b: &Value) -> Value {
+        self.check_width_match(a, b);
+        let op = ugt_op(a.width);
+        self.op(&op, vec![a, b]).unwrap()
+    }
+
+    pub fn uge(&mut self, a: &Value, b: &Value) -> Value {
+        self.check_width_match(a, b);
+        let op = uge_op(a.width);
+        self.op(&op, vec![a, b]).unwrap()
+    }
+
     pub fn eq(&mut self, a: &Value, b: &Value) -> Value {
         self.check_width_match(a, b);
         let op = eq_op(a.width);
