@@ -228,7 +228,7 @@ def main():
     arch2 = arch_ser_yaml.read_arch(output_path)
 
     assert arch == arch2, "Integration test failed"
-    print("Integration test passed successfully")
+    print("Integration test passed")
 
 
 if __name__ == "__main__":
