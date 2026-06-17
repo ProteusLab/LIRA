@@ -90,7 +90,6 @@ dependencies = [
  "ahash",
  "anyhow",
  "log",
- "once_cell",
  "regex",
  "serde",
  "serde_yaml",
@@ -99,6 +98,14 @@ dependencies = [
 
 [[package]]
 name = "lira-example"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "lira",
+]
+
+[[package]]
+name = "lira-tests"
 version = "0.1.0"
 dependencies = [
  "anyhow",

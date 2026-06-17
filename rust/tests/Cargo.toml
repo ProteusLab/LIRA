@@ -1,0 +1,24 @@
+[package]
+name = "lira-tests"
+version = "0.1.0"
+edition = "2024"
+
+[[test]]
+name = "unit_ir_ser_txt"
+path = "unit/test_ir_ser_txt.rs"
+
+[[test]]
+name = "unit_arch_ser_yaml"
+path = "unit/test_arch_ser_yaml.rs"
+
+[[test]]
+name = "unit_ir_builder"
+path = "unit/test_ir_builder.rs"
+
+[[test]]
+name = "integration"
+path = "integration/main.rs"
+
+[dependencies]
+lira = { path = "../lira" }
+anyhow = { workspace = true }
