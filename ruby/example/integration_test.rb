@@ -112,7 +112,7 @@ def build_test_arch
   encode_b_snip = snip5.build
 
   # blt instruction
-  enc_blt = InstructionEncoding.new(32, (0b100 << 12) + 0b1100011,
+  enc_blt = InstructionEncoding.new(32, (0b100 << 12) + 0b1100011, 0,
                                     ['decode_b_rs1', 'decode_b_rs2', 'decode_b_imm'],
                                     'encode_b', '', '')
   instr_builder = InstructionBuilder.new('blt', [5,5,32], ['x1','x2','offset'], enc_blt)
