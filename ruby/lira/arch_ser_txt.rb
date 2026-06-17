@@ -36,7 +36,6 @@ module Lira
       end
 
       if klass.respond_to?(:from_h)
-        # Рекурсивно преобразуем все значения хеша
         transformed = data.transform_values { |v| from_serializable(Object, v) }
         klass.from_h(transformed)
       else
@@ -44,7 +43,6 @@ module Lira
       end
     end
 
-    # Вспомогательные методы для работы с JSON
     def write_json(data, path)
       File.write(path, JSON.pretty_generate(data))
     end

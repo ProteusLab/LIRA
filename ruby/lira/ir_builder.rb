@@ -270,6 +270,11 @@ module Lira
       extract_low(shifted, out_width)
     end
 
+    def ensure_width(val, width)
+      return val if val.width == width
+      val.width < width ? extend_zero(val, width) : extract_low(val, width)
+    end
+
     # Register & memory
     def read(rf, rsi, shape = Shape.new(1, nil))
       width = rf.reg_size.lanes_base
@@ -367,6 +372,10 @@ module Lira
       self
     end
 
+    def operations_map
+      @op_cache.each_value.to_h { |op| [op.name, op] }
+    end
+
     private
 
     def check_width_match(a, b)
@@ -409,6 +418,7 @@ module Lira
     def concat(low, high) = @seq.concat(low, high)
     def extract_low(a, out_width) = @seq.extract_low(a, out_width)
     def extract(value, start, out_width) = @seq.extract(value, start, out_width)
+    def ensure_width(val, width) = @seq.ensure_width(val, width)
 
     def read(rf, rsi, shape = Shape.new(1, nil)) = @seq.read(rf, rsi, shape)
     def write(rf, rsi, value, shape = Shape.new(1, nil)) = @seq.write(rf, rsi, value, shape)
@@ -420,6 +430,8 @@ module Lira
     def output(value, idx) = @seq.output(value, idx)
     def op(operation, inputs) = @seq.op(operation, inputs)
     def op_multi(operation, inputs) = @seq.op_multi(operation, inputs)
+    def operations_map = @seq.operations_map
+    def get_or_create_op(op_class, *args) = @seq.get_or_create_op(op_class, *args)
   end
 
   class SnippetBuilder < BaseBuilder
