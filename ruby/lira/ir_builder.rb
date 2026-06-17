@@ -124,6 +124,92 @@ module Lira
       out
     end
 
+    def sle(a, b)
+      check_width_match(a, b)
+      op = get_or_create_op(Sle, a.width)
+      out = new_temp(1)
+      add_op(op, [a.name, b.name], [out.name])
+      out
+    end
+
+    def sgt(a, b)
+      check_width_match(a, b)
+      op = get_or_create_op(Sgt, a.width)
+      out = new_temp(1)
+      add_op(op, [a.name, b.name], [out.name])
+      out
+    end
+
+    def sge(a, b)
+      check_width_match(a, b)
+      op = get_or_create_op(Sge, a.width)
+      out = new_temp(1)
+      add_op(op, [a.name, b.name], [out.name])
+      out
+    end
+
+    def ult(a, b)
+      check_width_match(a, b)
+      op = get_or_create_op(Ult, a.width)
+      out = new_temp(1)
+      add_op(op, [a.name, b.name], [out.name])
+      out
+    end
+
+    def ule(a, b)
+      check_width_match(a, b)
+      op = get_or_create_op(Ule, a.width)
+      out = new_temp(1)
+      add_op(op, [a.name, b.name], [out.name])
+      out
+    end
+
+    def ugt(a, b)
+      check_width_match(a, b)
+      op = get_or_create_op(Ugt, a.width)
+      out = new_temp(1)
+      add_op(op, [a.name, b.name], [out.name])
+      out
+    end
+
+    def uge(a, b)
+      check_width_match(a, b)
+      op = get_or_create_op(Uge, a.width)
+      out = new_temp(1)
+      add_op(op, [a.name, b.name], [out.name])
+      out
+    end
+
+    def eq(a, b)
+      check_width_match(a, b)
+      op = get_or_create_op(Eq, a.width)
+      out = new_temp(1)
+      add_op(op, [a.name, b.name], [out.name])
+      out
+    end
+
+    def ne(a, b)
+      check_width_match(a, b)
+      op = get_or_create_op(Ne, a.width)
+      out = new_temp(1)
+      add_op(op, [a.name, b.name], [out.name])
+      out
+    end
+
+    def not_(a)
+      op = get_or_create_op(Not, a.width)
+      out = new_temp(a.width)
+      add_op(op, [a.name], [out.name])
+      out
+    end
+
+    def neg(a)
+      op = get_or_create_op(Neg, a.width)
+      out = new_temp(a.width)
+      add_op(op, [a.name], [out.name])
+      out
+    end
+
     def extend_sign(a, to_width)
       raise "extend_sign: input width #{a.width} >= output width #{to_width}" if a.width >= to_width
       op = get_or_create_op(ExtendSign, a.width, to_width)
@@ -400,6 +486,17 @@ module Lira
     def lsr(a, b) = @seq.lsr(a, b)
     def asr(a, b) = @seq.asr(a, b)
     def slt(a, b) = @seq.slt(a, b)
+    def sle(a, b) = @seq.sle(a, b)
+    def sgt(a, b) = @seq.sgt(a, b)
+    def sge(a, b) = @seq.sge(a, b)
+    def ult(a, b) = @seq.ult(a, b)
+    def ule(a, b) = @seq.ule(a, b)
+    def ugt(a, b) = @seq.ugt(a, b)
+    def uge(a, b) = @seq.uge(a, b)
+    def eq(a, b) = @seq.eq(a, b)
+    def ne(a, b) = @seq.ne(a, b)
+    def not_(a) = @seq.not_(a)
+    def neg(a) = @seq.neg(a)
     def extend_sign(a, to_width) = @seq.extend_sign(a, to_width)
     def extend_zero(a, to_width) = @seq.extend_zero(a, to_width)
     def popcnt(a) = @seq.popcnt(a)
