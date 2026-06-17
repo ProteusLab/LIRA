@@ -277,13 +277,12 @@ module Lira
   end
 
   class InstructionEncoding
-    attr_accessor :encoded_size, :const_encoding_part, :const_mask, :decode, :encode,
+    attr_accessor :encoded_size, :const_encoding_part, :decode, :encode,
                   :constraint_decode, :constraint_encode
 
-    def initialize(encoded_size, const_encoding_part, const_mask, decode, encode, constraint_decode, constraint_encode)
+    def initialize(encoded_size, const_encoding_part, decode, encode, constraint_decode, constraint_encode)
       @encoded_size = encoded_size
       @const_encoding_part = const_encoding_part
-      @const_mask = const_mask
       @decode = decode
       @encode = encode
       @constraint_decode = constraint_decode
@@ -294,7 +293,6 @@ module Lira
       {
         encoded_size: encoded_size,
         const_encoding_part: const_encoding_part,
-        const_mask: const_mask,
         decode: decode,
         encode: encode,
         constraint_decode: constraint_decode,
@@ -305,7 +303,6 @@ module Lira
     def self.from_h(hash)
       new(hash[:encoded_size] || hash['encoded_size'],
           hash[:const_encoding_part] || hash['const_encoding_part'],
-          hash[:const_mask] || hash['const_mask'],
           hash[:decode] || hash['decode'],
           hash[:encode] || hash['encode'],
           hash[:constraint_decode] || hash['constraint_decode'],
@@ -315,7 +312,6 @@ module Lira
     def ==(other)
       other.is_a?(InstructionEncoding) &&
         encoded_size == other.encoded_size &&
-        const_mask == other.const_mask &&
         const_encoding_part == other.const_encoding_part &&
         decode == other.decode &&
         encode == other.encode &&

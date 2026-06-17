@@ -9,15 +9,17 @@ module Lira
 
     def to_serializable(obj)
       case obj
+      when nil
+        nil
       when StatementSeq
         IrSerTxt.serialize_statement_seq(obj)
       when Array
         obj.map { |item| to_serializable(item) }
       when Hash
-        obj.transform_values { |v| to_serializable(v) }
+        obj.transform_keys(&:to_s).transform_values { |v| to_serializable(v) }
       else
         if obj.respond_to?(:to_h)
-          obj.to_h.transform_values { |v| to_serializable(v) }
+          obj.to_h.transform_keys(&:to_s).transform_values { |v| to_serializable(v) }
         else
           obj
         end
@@ -38,7 +40,7 @@ module Lira
       end
 
       if klass.respond_to?(:from_h)
-        transformed = data.transform_values { |v| from_serializable(Object, v) }
+        transformed = data.transform_keys(&:to_sym).transform_values { |v| from_serializable(Object, v) }
         klass.from_h(transformed)
       else
         data

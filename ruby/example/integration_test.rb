@@ -1,10 +1,10 @@
 #!/usr/bin/env ruby
 
-$LOAD_PATH.unshift(File.expand_path('lib', __dir__))
+$LOAD_PATH.unshift(File.expand_path('..', __dir__))
 
 require 'optparse'
 
-require '../lira'
+require 'lira'
 include Lira
 
 def build_test_arch
@@ -112,9 +112,9 @@ def build_test_arch
   encode_b_snip = snip5.build
 
   # blt instruction
-  enc_blt = InstructionEncoding.new(32, (0b100 << 12) + 0b1100011, 0,
-                                    ['decode_b_rs1', 'decode_b_rs2', 'decode_b_imm'],
-                                    'encode_b', '', '')
+  enc_blt = InstructionEncoding.new(32, (0b100 << 12) + 0b1100011,
+                                     ['decode_b_rs1', 'decode_b_rs2', 'decode_b_imm'],
+                                     'encode_b', '', '')
   instr_builder = InstructionBuilder.new('blt', [5,5,32], ['x1','x2','offset'], enc_blt)
   x1 = instr_builder.add_input_operand(0, 5)
   x2 = instr_builder.add_input_operand(1, 5)
@@ -143,12 +143,8 @@ def main
   opt_parser = OptionParser.new do |opts|
     opts.banner = "Usage: #{$0} [options]"
 
-    opts.on("--output PATH", "Output file or directory (required)") do |path|
+    opts.on("--output PATH", "Output YAML file (default: lira.yaml)") do |path|
       options[:output] = path
-    end
-
-    opts.on("--format FORMAT", [:txt, :yaml], "Serialization format (txt or yaml, default: yaml)") do |fmt|
-      options[:format] = fmt
     end
 
     opts.on("--help", "Show this help message") do
@@ -165,26 +161,18 @@ def main
     exit 1
   end
 
-  if options[:output].nil?
-    puts "Error: --output is required"
-    puts opt_parser
-    exit 1
-  end
-
-  output_path = options[:output]
-  format = options[:format] || :yaml
+  output_path = options[:output] || 'lira.yaml'
 
   arch = build_test_arch
 
-  if format == :txt
-    ArchSerTxt.write_arch(arch, output_path)
-    arch2 = ArchSerTxt.read_arch(output_path)
-  elsif format == :yaml
-    ArchSerYaml.write_arch(arch, output_path)
-    arch2 = ArchSerYaml.read_arch(output_path)
-  else
-    raise "Unknown format: #{format}"
-  end
+  raw_path = "#{output_path}.raw"
+  ArchSerYaml.write_arch(arch, raw_path)
+
+  canonicalize = File.expand_path('../../tools/yaml_canonicalize.py', __dir__)
+  system('python3', canonicalize, raw_path, output_path)
+  File.delete(raw_path)
+
+  arch2 = ArchSerYaml.read_arch(output_path)
 
   if arch == arch2
     puts "Integration test passed"
