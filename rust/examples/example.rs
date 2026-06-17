@@ -200,8 +200,60 @@ fn build_test_arch() -> anyhow::Result<Arch> {
     Ok(arch_builder.build())
 }
 
+fn main() -> anyhow::Result<()> {
+    let args: Vec<String> = std::env::args().collect();
+    let mut output = PathBuf::from("lira.yaml");
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--output" | "-o" => {
+                i += 1;
+                if i < args.len() {
+                    output = PathBuf::from(&args[i]);
+                } else {
+                    anyhow::bail!("--output requires a value");
+                }
+            }
+            "--help" | "-h" => {
+                println!("Usage: cargo run --example example [--output PATH]");
+                println!();
+                println!("Options:");
+                println!("  --output, -o PATH  Output YAML file (default: lira.yaml)");
+                println!("  --help, -h         Show this help message");
+                return Ok(());
+            }
+            other if other.starts_with('-') => {
+                anyhow::bail!("unknown option: {other}");
+            }
+            _ => {
+                anyhow::bail!("unexpected positional argument: {}", args[i]);
+            }
+        }
+        i += 1;
+    }
+
+    let arch = build_test_arch()?;
+
+    let raw = output.with_extension("raw.yaml");
+    arch.write_yaml(&raw)?;
+
+    let canonicalize = find_tools_dir().join("yaml_canonicalize.py");
+    std::process::Command::new("python3")
+        .arg(canonicalize)
+        .arg(&raw)
+        .args([&output])
+        .status()?;
+    std::fs::remove_file(&raw)?;
+
+    let arch2 = Arch::read_yaml(&output)?;
+
+    assert_eq!(arch, arch2, "integration test failed");
+    println!("Integration test passed");
+    Ok(())
+}
+
 #[test]
-fn integration() -> anyhow::Result<()> {
+fn example() -> anyhow::Result<()> {
     let arch = build_test_arch()?;
 
     let output = PathBuf::from("lira.yaml");
