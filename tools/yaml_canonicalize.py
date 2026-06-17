@@ -35,6 +35,8 @@ def main():
 
     content = output_path.read_text()
     content = content.replace('\"\"', "''")
+    import re
+    content = re.sub(r'":(\w+)"', r':\1', content)
     output_path.write_text(content)
 
 
