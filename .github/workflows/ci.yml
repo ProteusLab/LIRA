@@ -1,0 +1,65 @@
+name: LIRA CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  python-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - run: pip install ruamel.yaml pytest pytest-cov
+      - name: Unit tests
+        run: pytest python/tests/unit/ -v
+      - name: Unit coverage
+        run: pytest --cov=python/lira python/tests/unit/ --cov-report=term
+      - name: Integration tests
+        run: pytest python/tests/integration/ -v
+      - name: Diff integration output vs reference
+        run: diff python/tests/integration/integration.yaml tests/integration/reference.yaml
+
+  ruby-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+      - run: gem install minitest simplecov
+      - name: Unit tests
+        run: |
+          ruby -I ruby -I ruby/lib ruby/tests/unit/test_ir_ser_txt.rb
+          ruby -I ruby -I ruby/lib ruby/tests/unit/test_arch_ser_yaml.rb
+          ruby -I ruby -I ruby/lib ruby/tests/unit/test_ir_builder.rb
+      - name: Unit coverage
+        run: |
+          ruby -r simplecov -I ruby -I ruby/lib -e 'SimpleCov.start; Dir["ruby/tests/unit/*.rb"].each { |f| require_relative f }'
+      - name: Integration tests
+        run: ruby -I ruby -I ruby/lib ruby/tests/integration/test_integration.rb
+      - name: Diff integration output vs reference
+        run: diff ruby/tests/integration/integration.yaml tests/integration/reference.yaml
+
+  rust-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - run: pip install ruamel.yaml
+      - name: Install cargo-llvm-cov
+        run: cargo install cargo-llvm-cov
+      - name: Unit tests
+        run: cd rust && cargo test -p lira --lib -p lira-tests --test unit_ir_ser_txt --test unit_arch_ser_yaml --test unit_ir_builder
+      - name: Unit coverage
+        run: cd rust && cargo llvm-cov -p lira --lib -p lira-tests --test unit_ir_ser_txt --test unit_arch_ser_yaml --test unit_ir_builder --fail-under-lines 0
+      - name: Integration tests
+        run: cd rust && cargo test -p lira-tests --test integration
+      - name: Diff integration output vs reference
+        run: diff rust/tests/integration/integration.yaml tests/integration/reference.yaml
