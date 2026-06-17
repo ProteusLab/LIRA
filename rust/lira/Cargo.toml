@@ -9,4 +9,6 @@ anyhow = { workspace = true }
 ahash = { workspace = true, features = ["serde"] }
 regex = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
-serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+yaml-rust = { workspace = true }
+once_cell = { workspace = true }
