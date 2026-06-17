@@ -119,12 +119,97 @@ class SeqBuilder:
         self.add_op(op, [a.name, b.name], [out.name])
         return out
 
+    def sle(self, a: Value, b: Value) -> Value:
+        self.check_width_match(a, b)
+        op = self._get_or_create_op(Sle, a.width)
+        out = self._new_temp(1)
+        self.add_op(op, [a.name, b.name], [out.name])
+        return out
+
+    def sgt(self, a: Value, b: Value) -> Value:
+        self.check_width_match(a, b)
+        op = self._get_or_create_op(Sgt, a.width)
+        out = self._new_temp(1)
+        self.add_op(op, [a.name, b.name], [out.name])
+        return out
+
+    def sge(self, a: Value, b: Value) -> Value:
+        self.check_width_match(a, b)
+        op = self._get_or_create_op(Sge, a.width)
+        out = self._new_temp(1)
+        self.add_op(op, [a.name, b.name], [out.name])
+        return out
+
+    def ult(self, a: Value, b: Value) -> Value:
+        self.check_width_match(a, b)
+        op = self._get_or_create_op(Ult, a.width)
+        out = self._new_temp(1)
+        self.add_op(op, [a.name, b.name], [out.name])
+        return out
+
+    def ule(self, a: Value, b: Value) -> Value:
+        self.check_width_match(a, b)
+        op = self._get_or_create_op(Ule, a.width)
+        out = self._new_temp(1)
+        self.add_op(op, [a.name, b.name], [out.name])
+        return out
+
+    def ugt(self, a: Value, b: Value) -> Value:
+        self.check_width_match(a, b)
+        op = self._get_or_create_op(Ugt, a.width)
+        out = self._new_temp(1)
+        self.add_op(op, [a.name, b.name], [out.name])
+        return out
+
+    def uge(self, a: Value, b: Value) -> Value:
+        self.check_width_match(a, b)
+        op = self._get_or_create_op(Uge, a.width)
+        out = self._new_temp(1)
+        self.add_op(op, [a.name, b.name], [out.name])
+        return out
+
+    def eq(self, a: Value, b: Value) -> Value:
+        self.check_width_match(a, b)
+        op = self._get_or_create_op(Eq, a.width)
+        out = self._new_temp(1)
+        self.add_op(op, [a.name, b.name], [out.name])
+        return out
+
+    def ne(self, a: Value, b: Value) -> Value:
+        self.check_width_match(a, b)
+        op = self._get_or_create_op(Ne, a.width)
+        out = self._new_temp(1)
+        self.add_op(op, [a.name, b.name], [out.name])
+        return out
+
+    def not_(self, a: Value) -> Value:
+        op = self._get_or_create_op(Not, a.width)
+        out = self._new_temp(a.width)
+        self.add_op(op, [a.name], [out.name])
+        return out
+
+    def neg(self, a: Value) -> Value:
+        op = self._get_or_create_op(Neg, a.width)
+        out = self._new_temp(a.width)
+        self.add_op(op, [a.name], [out.name])
+        return out
+
     def extend_sign(self, a: Value, to_width: int) -> Value:
         if a.width >= to_width:
             raise ValueError(
                 f"extend_sign: input width {a.width} >= output width {to_width}"
             )
         op = self._get_or_create_op(ExtendSign, a.width, to_width)
+        out = self._new_temp(to_width)
+        self.add_op(op, [a.name], [out.name])
+        return out
+
+    def extend_zero(self, a: Value, to_width: int) -> Value:
+        if a.width >= to_width:
+            raise ValueError(
+                f"extend_zero: input width {a.width} >= output width {to_width}"
+            )
+        op = self._get_or_create_op(ExtendZero, a.width, to_width)
         out = self._new_temp(to_width)
         self.add_op(op, [a.name], [out.name])
         return out
@@ -403,11 +488,50 @@ class BaseBuilder:
     def slt(self, a: Value, b: Value) -> Value:
         return self.seq.slt(a, b)
 
+    def sle(self, a: Value, b: Value) -> Value:
+        return self.seq.sle(a, b)
+
+    def sgt(self, a: Value, b: Value) -> Value:
+        return self.seq.sgt(a, b)
+
+    def sge(self, a: Value, b: Value) -> Value:
+        return self.seq.sge(a, b)
+
+    def ult(self, a: Value, b: Value) -> Value:
+        return self.seq.ult(a, b)
+
+    def ule(self, a: Value, b: Value) -> Value:
+        return self.seq.ule(a, b)
+
+    def ugt(self, a: Value, b: Value) -> Value:
+        return self.seq.ugt(a, b)
+
+    def uge(self, a: Value, b: Value) -> Value:
+        return self.seq.uge(a, b)
+
+    def eq(self, a: Value, b: Value) -> Value:
+        return self.seq.eq(a, b)
+
+    def ne(self, a: Value, b: Value) -> Value:
+        return self.seq.ne(a, b)
+
+    def not_(self, a: Value) -> Value:
+        return self.seq.not_(a)
+
+    def neg(self, a: Value) -> Value:
+        return self.seq.neg(a)
+
     def extend_sign(self, a: Value, to_width: int) -> Value:
         return self.seq.extend_sign(a, to_width)
 
+    def extend_zero(self, a: Value, to_width: int) -> Value:
+        return self.seq.extend_zero(a, to_width)
+
     def extract_low(self, a: Value, out_width: int) -> Value:
         return self.seq.extract_low(a, out_width)
+
+    def ensure_width(self, val: Value, width: int) -> Value:
+        return self.seq.ensure_width(val, width)
 
     def popcnt(self, a: Value) -> Value:
         return self.seq.popcnt(a)

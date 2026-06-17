@@ -24,6 +24,16 @@ class Operation(Component):
     semantic_func_128: Optional[str] = None # Snippet
     semantic_table: Optional[str] = None # TableInt
 
+    def __eq__(self, other):
+        if not isinstance(other, Operation):
+            return NotImplemented
+        return (self.name, self.attributes, self.inputs, self.outputs,
+                self.semantic_base, self.semantic_func,
+                self.semantic_func_128, self.semantic_table) == \
+               (other.name, other.attributes, other.inputs, other.outputs,
+                other.semantic_base, other.semantic_func,
+                other.semantic_func_128, other.semantic_table)
+
 
 @dataclass
 class Register(Component):

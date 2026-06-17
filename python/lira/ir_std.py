@@ -36,8 +36,8 @@ class StmtEnv:
 class CondEnv:
     env: EnvironmentFunction
     cond: str
-    on_false: [str]
-    inputs: [str]
+    on_false: list[str]
+    inputs: list[str]
 
 @dataclass
 class StmtIndex:
@@ -60,14 +60,14 @@ class StmtGather:
 @dataclass
 class StmtFold:
     op: Operation
-    args: [str]
+    args: list[str]
 
 @dataclass
 class StmtScan:
     op: Operation
-    args: [str]
+    args: list[str]
 
 @dataclass
 class StmtAlias:
     semantic: Snippet
-    args: [str]
+    args: list[str]
