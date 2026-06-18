@@ -68,10 +68,7 @@ jobs:
       - name: Diff integration output vs reference
         run: diff rust/tests/integration/integration.yaml tests/integration/reference.yaml
 
-  cross-language-write:
-    strategy:
-      matrix:
-        lang: [python, ruby, rust]
+  cross-language:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -84,44 +81,17 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: pip install ruamel.yaml pytest
       - run: gem install minitest
-      - name: Write native YAML
-        run: |
-          case ${{ matrix.lang }} in
-            python) pytest tests/cross_language/test_cross.py -k "write" -v ;;
-            ruby)   ruby -I ruby -I ruby/lib tests/cross_language/test_cross.rb --name test_ruby_write_and_self_read ;;
-            rust)   cd rust && cargo test -p lira-tests --test cross_language test_rust_write_and_self_read ;;
-          esac
-      - uses: actions/upload-artifact@v4
-        with:
-          name: native-${{ matrix.lang }}
-          path: tests/cross_language/${{ matrix.lang == 'ruby' && 'rb' || matrix.lang == 'rust' && 'rs' || 'py' }}_native.yaml
 
-  cross-language-read:
-    needs: cross-language-write
-    strategy:
-      matrix:
-        lang: [python, ruby, rust]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-      - uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: '3.3'
-      - uses: dtolnay/rust-toolchain@stable
-      - run: pip install ruamel.yaml pytest
-      - run: gem install minitest
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: native-*
-          path: tests/cross_language
-          merge-multiple: true
-      - name: Cross-language read tests
-        run: |
-          case ${{ matrix.lang }} in
-            python) pytest tests/cross_language/test_cross.py -k "reads" -v ;;
-            ruby)   ruby -I ruby -I ruby/lib tests/cross_language/test_cross.rb --name test_ruby_reads ;;
-            rust)   cd rust && cargo test -p lira-tests --test cross_language test_rust_reads ;;
-          esac
+      - name: Python writes native YAML
+        run: pytest tests/cross_language/test_cross.py -k "write" -v
+      - name: Ruby writes native YAML
+        run: ruby -I ruby -I ruby/lib tests/cross_language/test_cross.rb --name test_ruby_write_and_self_read
+      - name: Rust writes native YAML
+        run: cd rust && cargo test -p lira-tests --test cross_language test_rust_write_and_self_read
+
+      - name: Python reads Ruby and Rust
+        run: pytest tests/cross_language/test_cross.py -k "reads" -v
+      - name: Ruby reads Python and Rust
+        run: ruby -I ruby -I ruby/lib tests/cross_language/test_cross.rb --name '/test_ruby_reads/'
+      - name: Rust reads Python and Ruby
+        run: cd rust && cargo test -p lira-tests --test cross_language test_rust_reads
