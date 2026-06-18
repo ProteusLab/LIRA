@@ -16,6 +16,10 @@ name = "unit_ir_builder"
 path = "unit/test_ir_builder.rs"
 
 [[test]]
+name = "cross_language"
+path = "../../tests/cross_language/test_cross.rs"
+
+[[test]]
 name = "integration"
 path = "integration/main.rs"
 
