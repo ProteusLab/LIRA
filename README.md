@@ -7,6 +7,21 @@ LIRA is a framework that provides a data-flow Intermediate Representation for op
 - [ruby/lira](ruby/lira) — Ruby library
 - [rust/lira](rust/lira) — Rust library
 
+## Install
+
+```bash
+# Python (pip)
+pip install -e python/
+
+# Ruby (gem)
+gem build ruby/lira.gemspec && gem install lira-*.gem
+# or via Gemfile:
+#   gem "lira", path: "ruby"
+
+# Rust (Cargo)
+cargo add --path rust/lira
+```
+
 ## CPM / CMake integration
 
 Configure and build:
