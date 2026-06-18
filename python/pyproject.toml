@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "lira-ir"
+version = "0.1.0"
+description = "LIRA IR — simulator intermediate representation with data-flow IR"
+readme = "../README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "ruamel.yaml",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "pytest-cov",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
