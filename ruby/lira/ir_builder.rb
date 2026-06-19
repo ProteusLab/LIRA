@@ -345,9 +345,9 @@ module Lira
       @op_cache = {}
     end
 
-    def get_or_create_op(op_class, *args)
-      key = [op_class, args]
-      @op_cache[key] ||= op_class.new(*args)
+    def cache_op(op_class, *args)
+      op = op_class.new(*args)
+      @op_cache[op.name] ||= op
     end
 
     def operations_map
@@ -358,187 +358,187 @@ module Lira
     # NOTE: Building ruby/lira/ir_ops.rb objects
     # ------------------------------------------------------------------
     def add(a, b)
-      get_or_create_op(Add, a.width)
+      cache_op(Add, a.width)
       @seq.add(a, b)
     end
 
     def sub(a, b)
-      get_or_create_op(Sub, a.width)
+      cache_op(Sub, a.width)
       @seq.sub(a, b)
     end
 
     def mul(a, b)
-      get_or_create_op(Mul, a.width)
+      cache_op(Mul, a.width)
       @seq.mul(a, b)
     end
 
     def and_(a, b)
-      get_or_create_op(And, a.width)
+      cache_op(And, a.width)
       @seq.and_(a, b)
     end
 
     def orr(a, b)
-      get_or_create_op(Orr, a.width)
+      cache_op(Orr, a.width)
       @seq.orr(a, b)
     end
 
     def xor(a, b)
-      get_or_create_op(Xor, a.width)
+      cache_op(Xor, a.width)
       @seq.xor(a, b)
     end
 
     def lsl(a, b)
-      get_or_create_op(Lsl, a.width)
+      cache_op(Lsl, a.width)
       @seq.lsl(a, b)
     end
 
     def lsr(a, b)
-      get_or_create_op(Lsr, a.width)
+      cache_op(Lsr, a.width)
       @seq.lsr(a, b)
     end
 
     def asr(a, b)
-      get_or_create_op(Asr, a.width)
+      cache_op(Asr, a.width)
       @seq.asr(a, b)
     end
 
     def slt(a, b)
-      get_or_create_op(Slt, a.width)
+      cache_op(Slt, a.width)
       @seq.slt(a, b)
     end
 
     def sle(a, b)
-      get_or_create_op(Sle, a.width)
+      cache_op(Sle, a.width)
       @seq.sle(a, b)
     end
 
     def sgt(a, b)
-      get_or_create_op(Sgt, a.width)
+      cache_op(Sgt, a.width)
       @seq.sgt(a, b)
     end
 
     def sge(a, b)
-      get_or_create_op(Sge, a.width)
+      cache_op(Sge, a.width)
       @seq.sge(a, b)
     end
 
     def ult(a, b)
-      get_or_create_op(Ult, a.width)
+      cache_op(Ult, a.width)
       @seq.ult(a, b)
     end
 
     def ule(a, b)
-      get_or_create_op(Ule, a.width)
+      cache_op(Ule, a.width)
       @seq.ule(a, b)
     end
 
     def ugt(a, b)
-      get_or_create_op(Ugt, a.width)
+      cache_op(Ugt, a.width)
       @seq.ugt(a, b)
     end
 
     def uge(a, b)
-      get_or_create_op(Uge, a.width)
+      cache_op(Uge, a.width)
       @seq.uge(a, b)
     end
 
     def eq(a, b)
-      get_or_create_op(Eq, a.width)
+      cache_op(Eq, a.width)
       @seq.eq(a, b)
     end
 
     def ne(a, b)
-      get_or_create_op(Ne, a.width)
+      cache_op(Ne, a.width)
       @seq.ne(a, b)
     end
 
     def rem_u(a, b)
-      get_or_create_op(RemU, a.width)
+      cache_op(RemU, a.width)
       @seq.rem_u(a, b)
     end
 
     def rem_s(a, b)
-      get_or_create_op(RemS, a.width)
+      cache_op(RemS, a.width)
       @seq.rem_s(a, b)
     end
 
     def ror(a, b)
-      get_or_create_op(Ror, a.width)
+      cache_op(Ror, a.width)
       @seq.ror(a, b)
     end
 
     def rol(a, b)
-      get_or_create_op(Rol, a.width)
+      cache_op(Rol, a.width)
       @seq.rol(a, b)
     end
 
     def add_overflow(a, b)
-      get_or_create_op(AddOverflow, a.width)
+      cache_op(AddOverflow, a.width)
       @seq.add_overflow(a, b)
     end
 
     def sub_overflow(a, b)
-      get_or_create_op(SubOverflow, a.width)
+      cache_op(SubOverflow, a.width)
       @seq.sub_overflow(a, b)
     end
 
     def not_(a)
-      get_or_create_op(Not, a.width)
+      cache_op(Not, a.width)
       @seq.not_(a)
     end
 
     def neg(a)
-      get_or_create_op(Neg, a.width)
+      cache_op(Neg, a.width)
       @seq.neg(a)
     end
 
     def popcnt(a)
-      get_or_create_op(Popcnt, a.width)
+      cache_op(Popcnt, a.width)
       @seq.popcnt(a)
     end
 
     def ctz(a)
-      get_or_create_op(Ctz, a.width)
+      cache_op(Ctz, a.width)
       @seq.ctz(a)
     end
 
     def clz(a)
-      get_or_create_op(Clz, a.width)
+      cache_op(Clz, a.width)
       @seq.clz(a)
     end
 
     def reverse(a)
-      get_or_create_op(Reverse, a.width)
+      cache_op(Reverse, a.width)
       @seq.reverse(a)
     end
 
     def extend_sign(a, to_width)
-      get_or_create_op(ExtendSign, a.width, to_width)
+      cache_op(ExtendSign, a.width, to_width)
       @seq.extend_sign(a, to_width)
     end
 
     def extend_zero(a, to_width)
-      get_or_create_op(ExtendZero, a.width, to_width)
+      cache_op(ExtendZero, a.width, to_width)
       @seq.extend_zero(a, to_width)
     end
 
     def extract_low(a, out_width)
-      get_or_create_op(ExtractLow, a.width, out_width)
+      cache_op(ExtractLow, a.width, out_width)
       @seq.extract_low(a, out_width)
     end
 
     def div_u(a, b, default)
-      get_or_create_op(DivU, a.width)
+      cache_op(DivU, a.width)
       @seq.div_u(a, b, default)
     end
 
     def div_s(a, b, default)
-      get_or_create_op(DivS, a.width)
+      cache_op(DivS, a.width)
       @seq.div_s(a, b, default)
     end
 
     def select(cond, true_val, false_val)
-      get_or_create_op(Select, true_val.width)
+      cache_op(Select, true_val.width)
       @seq.select(cond, true_val, false_val)
     end
 
@@ -578,6 +578,7 @@ module Lira
     end
 
     def op(operation, inputs)
+      @op_cache[operation.name] ||= operation
       @seq.op(operation, inputs)
     end
 

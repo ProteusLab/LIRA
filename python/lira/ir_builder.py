@@ -345,13 +345,13 @@ class SeqBuilder:
 class BaseBuilder:
     def __init__(self):
         self.seq = SeqBuilder()
-        self._op_cache: Dict[Tuple[type, Tuple, Tuple], Operation] = {}
+        self._op_cache: Dict[str, Operation] = {}
 
-    def _get_or_create_op(self, op_class, *args, **kwargs) -> Operation:
-        key = (op_class, args, tuple(sorted(kwargs.items())))
-        if key not in self._op_cache:
-            self._op_cache[key] = op_class(*args, **kwargs)
-        return self._op_cache[key]
+    def _cache_op(self, op_class, *args, **kwargs) -> Operation:
+        op = op_class(*args, **kwargs)
+        if op.name not in self._op_cache:
+            self._op_cache[op.name] = op
+        return self._op_cache[op.name]
 
     @property
     def operations_map(self) -> Dict[str, Operation]:
@@ -361,151 +361,151 @@ class BaseBuilder:
     # NOTE: Building python/lira/ir_ops.py objects
     # ------------------------------------------------------------------
     def add(self, a: Value, b: Value) -> Value:
-        self._get_or_create_op(Add, a.width)
+        self._cache_op(Add, a.width)
         return self.seq.add(a, b)
 
     def sub(self, a: Value, b: Value) -> Value:
-        self._get_or_create_op(Sub, a.width)
+        self._cache_op(Sub, a.width)
         return self.seq.sub(a, b)
 
     def mul(self, a: Value, b: Value) -> Value:
-        self._get_or_create_op(Mul, a.width)
+        self._cache_op(Mul, a.width)
         return self.seq.mul(a, b)
 
     def and_(self, a: Value, b: Value) -> Value:
-        self._get_or_create_op(And, a.width)
+        self._cache_op(And, a.width)
         return self.seq.and_(a, b)
 
     def orr(self, a: Value, b: Value) -> Value:
-        self._get_or_create_op(Orr, a.width)
+        self._cache_op(Orr, a.width)
         return self.seq.orr(a, b)
 
     def xor(self, a: Value, b: Value) -> Value:
-        self._get_or_create_op(Xor, a.width)
+        self._cache_op(Xor, a.width)
         return self.seq.xor(a, b)
 
     def lsl(self, a: Value, b: Value) -> Value:
-        self._get_or_create_op(Lsl, a.width)
+        self._cache_op(Lsl, a.width)
         return self.seq.lsl(a, b)
 
     def lsr(self, a: Value, b: Value) -> Value:
-        self._get_or_create_op(Lsr, a.width)
+        self._cache_op(Lsr, a.width)
         return self.seq.lsr(a, b)
 
     def asr(self, a: Value, b: Value) -> Value:
-        self._get_or_create_op(Asr, a.width)
+        self._cache_op(Asr, a.width)
         return self.seq.asr(a, b)
 
     def slt(self, a: Value, b: Value) -> Value:
-        self._get_or_create_op(Slt, a.width)
+        self._cache_op(Slt, a.width)
         return self.seq.slt(a, b)
 
     def sle(self, a: Value, b: Value) -> Value:
-        self._get_or_create_op(Sle, a.width)
+        self._cache_op(Sle, a.width)
         return self.seq.sle(a, b)
 
     def sgt(self, a: Value, b: Value) -> Value:
-        self._get_or_create_op(Sgt, a.width)
+        self._cache_op(Sgt, a.width)
         return self.seq.sgt(a, b)
 
     def sge(self, a: Value, b: Value) -> Value:
-        self._get_or_create_op(Sge, a.width)
+        self._cache_op(Sge, a.width)
         return self.seq.sge(a, b)
 
     def ult(self, a: Value, b: Value) -> Value:
-        self._get_or_create_op(Ult, a.width)
+        self._cache_op(Ult, a.width)
         return self.seq.ult(a, b)
 
     def ule(self, a: Value, b: Value) -> Value:
-        self._get_or_create_op(Ule, a.width)
+        self._cache_op(Ule, a.width)
         return self.seq.ule(a, b)
 
     def ugt(self, a: Value, b: Value) -> Value:
-        self._get_or_create_op(Ugt, a.width)
+        self._cache_op(Ugt, a.width)
         return self.seq.ugt(a, b)
 
     def uge(self, a: Value, b: Value) -> Value:
-        self._get_or_create_op(Uge, a.width)
+        self._cache_op(Uge, a.width)
         return self.seq.uge(a, b)
 
     def eq(self, a: Value, b: Value) -> Value:
-        self._get_or_create_op(Eq, a.width)
+        self._cache_op(Eq, a.width)
         return self.seq.eq(a, b)
 
     def ne(self, a: Value, b: Value) -> Value:
-        self._get_or_create_op(Ne, a.width)
+        self._cache_op(Ne, a.width)
         return self.seq.ne(a, b)
 
     def rem_u(self, a: Value, b: Value) -> Value:
-        self._get_or_create_op(RemU, a.width)
+        self._cache_op(RemU, a.width)
         return self.seq.rem_u(a, b)
 
     def rem_s(self, a: Value, b: Value) -> Value:
-        self._get_or_create_op(RemS, a.width)
+        self._cache_op(RemS, a.width)
         return self.seq.rem_s(a, b)
 
     def ror(self, a: Value, b: Value) -> Value:
-        self._get_or_create_op(Ror, a.width)
+        self._cache_op(Ror, a.width)
         return self.seq.ror(a, b)
 
     def rol(self, a: Value, b: Value) -> Value:
-        self._get_or_create_op(Rol, a.width)
+        self._cache_op(Rol, a.width)
         return self.seq.rol(a, b)
 
     def add_overflow(self, a: Value, b: Value) -> Value:
-        self._get_or_create_op(AddOverflow, a.width)
+        self._cache_op(AddOverflow, a.width)
         return self.seq.add_overflow(a, b)
 
     def sub_overflow(self, a: Value, b: Value) -> Value:
-        self._get_or_create_op(SubOverflow, a.width)
+        self._cache_op(SubOverflow, a.width)
         return self.seq.sub_overflow(a, b)
 
     def not_(self, a: Value) -> Value:
-        self._get_or_create_op(Not, a.width)
+        self._cache_op(Not, a.width)
         return self.seq.not_(a)
 
     def neg(self, a: Value) -> Value:
-        self._get_or_create_op(Neg, a.width)
+        self._cache_op(Neg, a.width)
         return self.seq.neg(a)
 
     def popcnt(self, a: Value) -> Value:
-        self._get_or_create_op(Popcnt, a.width)
+        self._cache_op(Popcnt, a.width)
         return self.seq.popcnt(a)
 
     def ctz(self, a: Value) -> Value:
-        self._get_or_create_op(Ctz, a.width)
+        self._cache_op(Ctz, a.width)
         return self.seq.ctz(a)
 
     def clz(self, a: Value) -> Value:
-        self._get_or_create_op(Clz, a.width)
+        self._cache_op(Clz, a.width)
         return self.seq.clz(a)
 
     def reverse(self, a: Value) -> Value:
-        self._get_or_create_op(Reverse, a.width)
+        self._cache_op(Reverse, a.width)
         return self.seq.reverse(a)
 
     def extend_sign(self, a: Value, to_width: int) -> Value:
-        self._get_or_create_op(ExtendSign, a.width, to_width)
+        self._cache_op(ExtendSign, a.width, to_width)
         return self.seq.extend_sign(a, to_width)
 
     def extend_zero(self, a: Value, to_width: int) -> Value:
-        self._get_or_create_op(ExtendZero, a.width, to_width)
+        self._cache_op(ExtendZero, a.width, to_width)
         return self.seq.extend_zero(a, to_width)
 
     def extract_low(self, a: Value, out_width: int) -> Value:
-        self._get_or_create_op(ExtractLow, a.width, out_width)
+        self._cache_op(ExtractLow, a.width, out_width)
         return self.seq.extract_low(a, out_width)
 
     def div_u(self, a: Value, b: Value, default: Value) -> Value:
-        self._get_or_create_op(DivU, a.width)
+        self._cache_op(DivU, a.width)
         return self.seq.div_u(a, b, default)
 
     def div_s(self, a: Value, b: Value, default: Value) -> Value:
-        self._get_or_create_op(DivS, a.width)
+        self._cache_op(DivS, a.width)
         return self.seq.div_s(a, b, default)
 
     def select(self, cond: Value, true_val: Value, false_val: Value) -> Value:
-        self._get_or_create_op(Select, true_val.width)
+        self._cache_op(Select, true_val.width)
         return self.seq.select(cond, true_val, false_val)
 
     def concat(self, low: Value, high: Value) -> Value:
@@ -558,6 +558,7 @@ class BaseBuilder:
     # NOTE: Others
     # ------------------------------------------------------------------
     def op(self, operation: Operation, inputs: List[Value]) -> Value:
+        self._op_cache[operation.name] = operation
         return self.seq.op(operation, inputs)
 
     def op_multi(self, operation: Operation, inputs: List[Value]) -> List[Value]:
