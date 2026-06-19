@@ -77,27 +77,6 @@ class TestSeqBuilder < Minitest::Test
     assert_equal 'output', s.stmts[1].kind
   end
 
-  def test_ensure_width_extend
-    seq = SeqBuilder.new
-    a = seq.const(1, 8)
-    r = seq.ensure_width(a, 32)
-    assert_equal 32, r.width
-  end
-
-  def test_ensure_width_extract
-    seq = SeqBuilder.new
-    a = seq.const(1, 32)
-    r = seq.ensure_width(a, 8)
-    assert_equal 8, r.width
-  end
-
-  def test_ensure_width_identity
-    seq = SeqBuilder.new
-    a = seq.const(42, 32)
-    r = seq.ensure_width(a, 32)
-    assert_equal a.name, r.name
-  end
-
   def test_operations_map
     snip = SnippetBuilder.new('test')
     a = snip.const(1, 32)

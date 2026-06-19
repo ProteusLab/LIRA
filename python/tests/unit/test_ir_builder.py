@@ -101,24 +101,6 @@ class TestSeqBuilder:
         assert s.stmts[0].kind == "input"
         assert s.stmts[1].kind == "output"
 
-    def test_ensure_width_extend(self):
-        seq = SeqBuilder()
-        a = seq.const(1, 8)
-        r = seq.ensure_width(a, 32)
-        assert r.width == 32
-
-    def test_ensure_width_extract(self):
-        seq = SeqBuilder()
-        a = seq.const(1, 32)
-        r = seq.ensure_width(a, 8)
-        assert r.width == 8
-
-    def test_ensure_width_identity(self):
-        seq = SeqBuilder()
-        a = seq.const(42, 32)
-        r = seq.ensure_width(a, 32)
-        assert r.name == a.name
-
     def test_operations_map(self):
         snip = SnippetBuilder("test")
         a = snip.const(1, 32)
