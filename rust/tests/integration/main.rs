@@ -26,5 +26,13 @@ fn test_roundtrip_from_reference() {
     std::fs::remove_file(&raw).ok();
 
     let arch2 = Arch::read_yaml(&output).unwrap();
+
+    assert_eq!(ref_arch.register_files, arch2.register_files);
+    assert_eq!(ref_arch.system_registers, arch2.system_registers);
+    assert_eq!(ref_arch.environment_functions, arch2.environment_functions);
+    assert_eq!(ref_arch.tables_int, arch2.tables_int);
+    assert_eq!(ref_arch.operations, arch2.operations);
+    assert_eq!(ref_arch.snippets, arch2.snippets);
+    assert_eq!(ref_arch.instructions, arch2.instructions);
     assert_eq!(ref_arch, arch2);
 }
