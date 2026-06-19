@@ -24,4 +24,4 @@ class Statement:
 
 @dataclass
 class StatementSeq:
-    stmts: [Statement]
+    stmts: list[Statement]
