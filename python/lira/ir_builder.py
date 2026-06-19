@@ -201,39 +201,6 @@ class SeqBuilder:
             true_val.width,
         )
 
-    def concat(self, low: Value, high: Value) -> Value:
-        low_width = low.width
-        high_width = high.width
-        total_width = low_width + high_width
-
-        high_ext = self.extend_zero(high, total_width)
-
-        shift_width = (low_width.bit_length() + 1) if low_width > 0 else 1
-        shift_amount = self.const(low_width, shift_width)
-
-        high_shifted = self.lsl(high_ext, shift_amount)
-
-        low_ext = self.extend_zero(low, total_width)
-
-        result = self.orr(low_ext, high_shifted)
-        return result
-
-    def extract(self, value: Value, start: Value, out_width: int) -> Value:
-        if start.width != value.width:
-            start = self.extend_zero(start, value.width)
-        shifted = self.lsr(value, start)
-        result = self.extract_low(shifted, out_width)
-        return result
-
-    def ensure_width(self, val: Value, width: int) -> Value:
-        if val.width == width:
-            return val
-        return (
-            self.extend_zero(val, width)
-            if val.width < width
-            else self.extract_low(val, width)
-        )
-
     # ------------------------------------------------------------------
     # NOTE: Building python/lira/ir_std.py objects
     # ------------------------------------------------------------------
@@ -507,15 +474,6 @@ class BaseBuilder:
     def select(self, cond: Value, true_val: Value, false_val: Value) -> Value:
         self._cache_op(Select, true_val.width)
         return self.seq.select(cond, true_val, false_val)
-
-    def concat(self, low: Value, high: Value) -> Value:
-        return self.seq.concat(low, high)
-
-    def extract(self, value: Value, start: Value, out_width: int) -> Value:
-        return self.seq.extract(value, start, out_width)
-
-    def ensure_width(self, val: Value, width: int) -> Value:
-        return self.seq.ensure_width(val, width)
 
     # ------------------------------------------------------------------
     # NOTE: Building python/lira/ir_std.py objects
