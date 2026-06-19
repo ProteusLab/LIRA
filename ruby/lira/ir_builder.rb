@@ -10,6 +10,7 @@ module Lira
     def initialize(name, width = 32)
       @name = name
       @width = width
+      @shape = Shape.new(1, nil)
     end
 
     def to_s
@@ -26,12 +27,11 @@ module Lira
   end
 
   class SeqBuilder
-    attr_reader :stmts, :temp_counter, :op_cache
+    attr_reader :stmts, :temp_counter
 
     def initialize
       @stmts = []
       @temp_counter = 0
-      @op_cache = {}
     end
 
     def new_temp(width = 32)
@@ -39,294 +39,203 @@ module Lira
       Value.new("_t#{@temp_counter}", width)
     end
 
-    def get_or_create_op(op_class, *args)
-      key = [op_class, args]
-      @op_cache[key] ||= op_class.new(*args)
+    def emit_op(op, inputs, out_bits)
+      out = new_temp(out_bits)
+      add_op(op, inputs, [out.name])
+      out
     end
 
+    def check_width_match(a, b)
+      raise "width mismatch: #{a.width} != #{b.width}" if a.width != b.width
+    end
+
+    # ------------------------------------------------------------------
+    # NOTE: Building ruby/lira/ir_ops.rb objects
+    # ------------------------------------------------------------------
     def add(a, b)
       check_width_match(a, b)
-      op = get_or_create_op(Add, a.width)
-      out = new_temp(a.width)
-      add_op(op, [a.name, b.name], [out.name])
-      out
+      emit_op(Add.new(a.width), [a.name, b.name], a.width)
     end
 
     def sub(a, b)
       check_width_match(a, b)
-      op = get_or_create_op(Sub, a.width)
-      out = new_temp(a.width)
-      add_op(op, [a.name, b.name], [out.name])
-      out
+      emit_op(Sub.new(a.width), [a.name, b.name], a.width)
     end
 
     def mul(a, b)
       check_width_match(a, b)
-      op = get_or_create_op(Mul, a.width)
-      out = new_temp(a.width)
-      add_op(op, [a.name, b.name], [out.name])
-      out
+      emit_op(Mul.new(a.width), [a.name, b.name], a.width)
     end
 
     def and_(a, b)
       check_width_match(a, b)
-      op = get_or_create_op(And, a.width)
-      out = new_temp(a.width)
-      add_op(op, [a.name, b.name], [out.name])
-      out
+      emit_op(And.new(a.width), [a.name, b.name], a.width)
     end
 
     def orr(a, b)
       check_width_match(a, b)
-      op = get_or_create_op(Orr, a.width)
-      out = new_temp(a.width)
-      add_op(op, [a.name, b.name], [out.name])
-      out
+      emit_op(Orr.new(a.width), [a.name, b.name], a.width)
     end
 
     def xor(a, b)
       check_width_match(a, b)
-      op = get_or_create_op(Xor, a.width)
-      out = new_temp(a.width)
-      add_op(op, [a.name, b.name], [out.name])
-      out
+      emit_op(Xor.new(a.width), [a.name, b.name], a.width)
     end
 
     def lsl(a, b)
       check_width_match(a, b)
-      op = get_or_create_op(Lsl, a.width)
-      out = new_temp(a.width)
-      add_op(op, [a.name, b.name], [out.name])
-      out
+      emit_op(Lsl.new(a.width), [a.name, b.name], a.width)
     end
 
     def lsr(a, b)
       check_width_match(a, b)
-      op = get_or_create_op(Lsr, a.width)
-      out = new_temp(a.width)
-      add_op(op, [a.name, b.name], [out.name])
-      out
+      emit_op(Lsr.new(a.width), [a.name, b.name], a.width)
     end
 
     def asr(a, b)
       check_width_match(a, b)
-      op = get_or_create_op(Asr, a.width)
-      out = new_temp(a.width)
-      add_op(op, [a.name, b.name], [out.name])
-      out
+      emit_op(Asr.new(a.width), [a.name, b.name], a.width)
     end
 
     def slt(a, b)
       check_width_match(a, b)
-      op = get_or_create_op(Slt, a.width)
-      out = new_temp(1)
-      add_op(op, [a.name, b.name], [out.name])
-      out
+      emit_op(Slt.new(a.width), [a.name, b.name], 1)
     end
 
     def sle(a, b)
       check_width_match(a, b)
-      op = get_or_create_op(Sle, a.width)
-      out = new_temp(1)
-      add_op(op, [a.name, b.name], [out.name])
-      out
+      emit_op(Sle.new(a.width), [a.name, b.name], 1)
     end
 
     def sgt(a, b)
       check_width_match(a, b)
-      op = get_or_create_op(Sgt, a.width)
-      out = new_temp(1)
-      add_op(op, [a.name, b.name], [out.name])
-      out
+      emit_op(Sgt.new(a.width), [a.name, b.name], 1)
     end
 
     def sge(a, b)
       check_width_match(a, b)
-      op = get_or_create_op(Sge, a.width)
-      out = new_temp(1)
-      add_op(op, [a.name, b.name], [out.name])
-      out
+      emit_op(Sge.new(a.width), [a.name, b.name], 1)
     end
 
     def ult(a, b)
       check_width_match(a, b)
-      op = get_or_create_op(Ult, a.width)
-      out = new_temp(1)
-      add_op(op, [a.name, b.name], [out.name])
-      out
+      emit_op(Ult.new(a.width), [a.name, b.name], 1)
     end
 
     def ule(a, b)
       check_width_match(a, b)
-      op = get_or_create_op(Ule, a.width)
-      out = new_temp(1)
-      add_op(op, [a.name, b.name], [out.name])
-      out
+      emit_op(Ule.new(a.width), [a.name, b.name], 1)
     end
 
     def ugt(a, b)
       check_width_match(a, b)
-      op = get_or_create_op(Ugt, a.width)
-      out = new_temp(1)
-      add_op(op, [a.name, b.name], [out.name])
-      out
+      emit_op(Ugt.new(a.width), [a.name, b.name], 1)
     end
 
     def uge(a, b)
       check_width_match(a, b)
-      op = get_or_create_op(Uge, a.width)
-      out = new_temp(1)
-      add_op(op, [a.name, b.name], [out.name])
-      out
+      emit_op(Uge.new(a.width), [a.name, b.name], 1)
     end
 
     def eq(a, b)
       check_width_match(a, b)
-      op = get_or_create_op(Eq, a.width)
-      out = new_temp(1)
-      add_op(op, [a.name, b.name], [out.name])
-      out
+      emit_op(Eq.new(a.width), [a.name, b.name], 1)
     end
 
     def ne(a, b)
       check_width_match(a, b)
-      op = get_or_create_op(Ne, a.width)
-      out = new_temp(1)
-      add_op(op, [a.name, b.name], [out.name])
-      out
-    end
-
-    def not_(a)
-      op = get_or_create_op(Not, a.width)
-      out = new_temp(a.width)
-      add_op(op, [a.name], [out.name])
-      out
-    end
-
-    def neg(a)
-      op = get_or_create_op(Neg, a.width)
-      out = new_temp(a.width)
-      add_op(op, [a.name], [out.name])
-      out
-    end
-
-    def extend_sign(a, to_width)
-      raise "extend_sign: input width #{a.width} >= output width #{to_width}" if a.width >= to_width
-      op = get_or_create_op(ExtendSign, a.width, to_width)
-      out = new_temp(to_width)
-      add_op(op, [a.name], [out.name])
-      out
-    end
-
-    def extend_zero(a, to_width)
-      raise "extend_zero: input width #{a.width} >= output width #{to_width}" if a.width >= to_width
-      op = get_or_create_op(ExtendZero, a.width, to_width)
-      out = new_temp(to_width)
-      add_op(op, [a.name], [out.name])
-      out
-    end
-
-    def popcnt(a)
-      op = get_or_create_op(Popcnt, a.width)
-      out = new_temp(a.width)
-      add_op(op, [a.name], [out.name])
-      out
-    end
-
-    def ctz(a)
-      op = get_or_create_op(Ctz, a.width)
-      out = new_temp(a.width)
-      add_op(op, [a.name], [out.name])
-      out
-    end
-
-    def clz(a)
-      op = get_or_create_op(Clz, a.width)
-      out = new_temp(a.width)
-      add_op(op, [a.name], [out.name])
-      out
-    end
-
-    def reverse(a)
-      op = get_or_create_op(Reverse, a.width)
-      out = new_temp(a.width)
-      add_op(op, [a.name], [out.name])
-      out
+      emit_op(Ne.new(a.width), [a.name, b.name], 1)
     end
 
     def rem_u(a, b)
       check_width_match(a, b)
-      op = get_or_create_op(RemU, a.width)
-      out = new_temp(a.width)
-      add_op(op, [a.name, b.name], [out.name])
-      out
+      emit_op(RemU.new(a.width), [a.name, b.name], a.width)
     end
 
     def rem_s(a, b)
       check_width_match(a, b)
-      op = get_or_create_op(RemS, a.width)
-      out = new_temp(a.width)
-      add_op(op, [a.name, b.name], [out.name])
-      out
+      emit_op(RemS.new(a.width), [a.name, b.name], a.width)
     end
 
     def ror(a, b)
       check_width_match(a, b)
-      op = get_or_create_op(Ror, a.width)
-      out = new_temp(a.width)
-      add_op(op, [a.name, b.name], [out.name])
-      out
+      emit_op(Ror.new(a.width), [a.name, b.name], a.width)
     end
 
     def rol(a, b)
       check_width_match(a, b)
-      op = get_or_create_op(Rol, a.width)
-      out = new_temp(a.width)
-      add_op(op, [a.name, b.name], [out.name])
-      out
+      emit_op(Rol.new(a.width), [a.name, b.name], a.width)
     end
 
     def add_overflow(a, b)
       check_width_match(a, b)
-      op = get_or_create_op(AddOverflow, a.width)
-      out = new_temp(1)
-      add_op(op, [a.name, b.name], [out.name])
-      out
+      emit_op(AddOverflow.new(a.width), [a.name, b.name], 1)
     end
 
     def sub_overflow(a, b)
       check_width_match(a, b)
-      op = get_or_create_op(SubOverflow, a.width)
-      out = new_temp(1)
-      add_op(op, [a.name, b.name], [out.name])
-      out
+      emit_op(SubOverflow.new(a.width), [a.name, b.name], 1)
+    end
+
+    def not_(a)
+      emit_op(Not.new(a.width), [a.name], a.width)
+    end
+
+    def neg(a)
+      emit_op(Neg.new(a.width), [a.name], a.width)
+    end
+
+    def popcnt(a)
+      emit_op(Popcnt.new(a.width), [a.name], a.width)
+    end
+
+    def ctz(a)
+      emit_op(Ctz.new(a.width), [a.name], a.width)
+    end
+
+    def clz(a)
+      emit_op(Clz.new(a.width), [a.name], a.width)
+    end
+
+    def reverse(a)
+      emit_op(Reverse.new(a.width), [a.name], a.width)
+    end
+
+    def extend_sign(a, to_width)
+      raise "extend_sign: input width #{a.width} >= output width #{to_width}" if a.width >= to_width
+      emit_op(ExtendSign.new(a.width, to_width), [a.name], to_width)
+    end
+
+    def extend_zero(a, to_width)
+      raise "extend_zero: input width #{a.width} >= output width #{to_width}" if a.width >= to_width
+      emit_op(ExtendZero.new(a.width, to_width), [a.name], to_width)
+    end
+
+    def extract_low(a, out_width)
+      raise "extract_low: output width #{out_width} > input width #{a.width}" if out_width > a.width
+      emit_op(ExtractLow.new(a.width, out_width), [a.name], out_width)
     end
 
     def div_u(a, b, default)
       check_width_match(a, b)
       raise "div_u: default width mismatch" if a.width != default.width
-      op = get_or_create_op(DivU, a.width)
-      out = new_temp(a.width)
-      add_op(op, [a.name, b.name, default.name], [out.name])
-      out
+      emit_op(DivU.new(a.width), [a.name, b.name, default.name], a.width)
     end
 
     def div_s(a, b, default)
       check_width_match(a, b)
       raise "div_s: default width mismatch" if a.width != default.width
-      op = get_or_create_op(DivS, a.width)
-      out = new_temp(a.width)
-      add_op(op, [a.name, b.name, default.name], [out.name])
-      out
+      emit_op(DivS.new(a.width), [a.name, b.name, default.name], a.width)
     end
 
     def select(cond, true_val, false_val)
       raise "select: condition must be 1-bit" unless cond.width == 1
       raise "select: true/false widths mismatch" unless true_val.width == false_val.width
-      op = get_or_create_op(Select, true_val.width)
-      out = new_temp(true_val.width)
-      add_op(op, [cond.name, true_val.name, false_val.name], [out.name])
-      out
+      emit_op(
+        Select.new(true_val.width),
+        [cond.name, true_val.name, false_val.name],
+        true_val.width
+      )
     end
 
     def concat(low, high)
@@ -342,14 +251,6 @@ module Lira
       orr(low_ext, high_shifted)
     end
 
-    def extract_low(a, out_width)
-      raise "extract_low: output width #{out_width} > input width #{a.width}" if out_width > a.width
-      op = get_or_create_op(ExtractLow, a.width, out_width)
-      out = new_temp(out_width)
-      add_op(op, [a.name], [out.name])
-      out
-    end
-
     def extract(value, start, out_width)
       start = extend_zero(start, value.width) if start.width != value.width
       shifted = lsr(value, start)
@@ -361,17 +262,19 @@ module Lira
       val.width < width ? extend_zero(val, width) : extract_low(val, width)
     end
 
-    # Register & memory
+    # ------------------------------------------------------------------
+    # NOTE: Building ruby/lira/ir_std.rb objects
+    # ------------------------------------------------------------------
     def read(rf, rsi, shape = Shape.new(1, nil))
       width = rf.reg_size.lanes_base
       out = new_temp(width)
-      stmt = Statement.new(shape, [out.name], [width], 'read', rf.name, [rsi.to_s])
+      stmt = Statement.new(shape, [out.name], [width], 'read', rf.name, [rsi.name])
       @stmts << stmt
       out
     end
 
     def write(rf, rsi, value, shape = Shape.new(1, nil))
-      stmt = Statement.new(shape, [], [], 'write', rf.name, [rsi.to_s, value.to_s])
+      stmt = Statement.new(shape, [], [], 'write', rf.name, [rsi.name, value.name])
       @stmts << stmt
     end
 
@@ -397,7 +300,7 @@ module Lira
         env_func.outputs,
         'env',
         env_func.name,
-        inputs.map(&:to_s)
+        inputs.map(&:name)
       )
       @stmts << stmt
       outputs
@@ -405,7 +308,7 @@ module Lira
 
     def cond_env(env_func, cond, inputs, on_false)
       outputs = env_func.outputs.map { |w| new_temp(w) }
-      all_inputs = [cond.to_s] + inputs.map(&:to_s) + on_false.map(&:to_s)
+      all_inputs = [cond.name] + inputs.map(&:name) + on_false.map(&:name)
       stmt = Statement.new(
         Shape.new(1, nil),
         outputs.map(&:name),
@@ -426,7 +329,7 @@ module Lira
     end
 
     def output(value, idx)
-      stmt = Statement.new(Shape.new(1, nil), [], [], 'output', idx.to_s, [value.to_s])
+      stmt = Statement.new(Shape.new(1, nil), [], [], 'output', idx.to_s, [value.name])
       @stmts << stmt
     end
 
@@ -437,14 +340,12 @@ module Lira
 
     def op(operation, inputs)
       raise "Operation #{operation.name} has #{operation.outputs.size} outputs, use op_multi" if operation.outputs.size != 1
-      out = new_temp(operation.outputs.first)
-      add_op(operation, inputs.map(&:to_s), [out.name])
-      out
+      emit_op(operation, inputs.map(&:name), operation.outputs.first)
     end
 
     def op_multi(operation, inputs)
       outputs = operation.outputs.map { |w| new_temp(w) }
-      add_op(operation, inputs.map(&:to_s), outputs.map(&:name))
+      add_op(operation, inputs.map(&:name), outputs.map(&:name))
       outputs
     end
 
@@ -457,16 +358,6 @@ module Lira
       @temp_counter = [@temp_counter, other.temp_counter].max
       self
     end
-
-    def operations_map
-      @op_cache.each_value.to_h { |op| [op.name, op] }
-    end
-
-    private
-
-    def check_width_match(a, b)
-      raise "width mismatch: #{a.width} vs #{b.width}" if a.width != b.width
-    end
   end
 
   class BaseBuilder
@@ -474,61 +365,260 @@ module Lira
 
     def initialize
       @seq = SeqBuilder.new
+      @op_cache = {}
     end
 
-    def add(a, b) = @seq.add(a, b)
-    def sub(a, b) = @seq.sub(a, b)
-    def mul(a, b) = @seq.mul(a, b)
-    def and_(a, b) = @seq.and_(a, b)
-    def orr(a, b) = @seq.orr(a, b)
-    def xor(a, b) = @seq.xor(a, b)
-    def lsl(a, b) = @seq.lsl(a, b)
-    def lsr(a, b) = @seq.lsr(a, b)
-    def asr(a, b) = @seq.asr(a, b)
-    def slt(a, b) = @seq.slt(a, b)
-    def sle(a, b) = @seq.sle(a, b)
-    def sgt(a, b) = @seq.sgt(a, b)
-    def sge(a, b) = @seq.sge(a, b)
-    def ult(a, b) = @seq.ult(a, b)
-    def ule(a, b) = @seq.ule(a, b)
-    def ugt(a, b) = @seq.ugt(a, b)
-    def uge(a, b) = @seq.uge(a, b)
-    def eq(a, b) = @seq.eq(a, b)
-    def ne(a, b) = @seq.ne(a, b)
-    def not_(a) = @seq.not_(a)
-    def neg(a) = @seq.neg(a)
-    def extend_sign(a, to_width) = @seq.extend_sign(a, to_width)
-    def extend_zero(a, to_width) = @seq.extend_zero(a, to_width)
-    def popcnt(a) = @seq.popcnt(a)
-    def ctz(a) = @seq.ctz(a)
-    def clz(a) = @seq.clz(a)
-    def reverse(a) = @seq.reverse(a)
-    def rem_u(a, b) = @seq.rem_u(a, b)
-    def rem_s(a, b) = @seq.rem_s(a, b)
-    def ror(a, b) = @seq.ror(a, b)
-    def rol(a, b) = @seq.rol(a, b)
-    def add_overflow(a, b) = @seq.add_overflow(a, b)
-    def sub_overflow(a, b) = @seq.sub_overflow(a, b)
-    def div_u(a, b, default) = @seq.div_u(a, b, default)
-    def div_s(a, b, default) = @seq.div_s(a, b, default)
-    def select(cond, true_val, false_val) = @seq.select(cond, true_val, false_val)
-    def concat(low, high) = @seq.concat(low, high)
-    def extract_low(a, out_width) = @seq.extract_low(a, out_width)
-    def extract(value, start, out_width) = @seq.extract(value, start, out_width)
-    def ensure_width(val, width) = @seq.ensure_width(val, width)
+    def get_or_create_op(op_class, *args)
+      key = [op_class, args]
+      @op_cache[key] ||= op_class.new(*args)
+    end
 
-    def read(rf, rsi, shape = Shape.new(1, nil)) = @seq.read(rf, rsi, shape)
-    def write(rf, rsi, value, shape = Shape.new(1, nil)) = @seq.write(rf, rsi, value, shape)
-    def const(value, width = 32) = @seq.const(value, width)
-    def dyn_const(name, width = 32) = @seq.dyn_const(name, width)
-    def env(env_func, inputs) = @seq.env(env_func, inputs)
-    def cond_env(env_func, cond, inputs, on_false) = @seq.cond_env(env_func, cond, inputs, on_false)
-    def input(idx, width = 32) = @seq.input(idx, width)
-    def output(value, idx) = @seq.output(value, idx)
-    def op(operation, inputs) = @seq.op(operation, inputs)
-    def op_multi(operation, inputs) = @seq.op_multi(operation, inputs)
-    def operations_map = @seq.operations_map
-    def get_or_create_op(op_class, *args) = @seq.get_or_create_op(op_class, *args)
+    def operations_map
+      @op_cache.each_value.to_h { |op| [op.name, op] }
+    end
+
+    # ------------------------------------------------------------------
+    # NOTE: Building ruby/lira/ir_ops.rb objects
+    # ------------------------------------------------------------------
+    def add(a, b)
+      get_or_create_op(Add, a.width)
+      @seq.add(a, b)
+    end
+
+    def sub(a, b)
+      get_or_create_op(Sub, a.width)
+      @seq.sub(a, b)
+    end
+
+    def mul(a, b)
+      get_or_create_op(Mul, a.width)
+      @seq.mul(a, b)
+    end
+
+    def and_(a, b)
+      get_or_create_op(And, a.width)
+      @seq.and_(a, b)
+    end
+
+    def orr(a, b)
+      get_or_create_op(Orr, a.width)
+      @seq.orr(a, b)
+    end
+
+    def xor(a, b)
+      get_or_create_op(Xor, a.width)
+      @seq.xor(a, b)
+    end
+
+    def lsl(a, b)
+      get_or_create_op(Lsl, a.width)
+      @seq.lsl(a, b)
+    end
+
+    def lsr(a, b)
+      get_or_create_op(Lsr, a.width)
+      @seq.lsr(a, b)
+    end
+
+    def asr(a, b)
+      get_or_create_op(Asr, a.width)
+      @seq.asr(a, b)
+    end
+
+    def slt(a, b)
+      get_or_create_op(Slt, a.width)
+      @seq.slt(a, b)
+    end
+
+    def sle(a, b)
+      get_or_create_op(Sle, a.width)
+      @seq.sle(a, b)
+    end
+
+    def sgt(a, b)
+      get_or_create_op(Sgt, a.width)
+      @seq.sgt(a, b)
+    end
+
+    def sge(a, b)
+      get_or_create_op(Sge, a.width)
+      @seq.sge(a, b)
+    end
+
+    def ult(a, b)
+      get_or_create_op(Ult, a.width)
+      @seq.ult(a, b)
+    end
+
+    def ule(a, b)
+      get_or_create_op(Ule, a.width)
+      @seq.ule(a, b)
+    end
+
+    def ugt(a, b)
+      get_or_create_op(Ugt, a.width)
+      @seq.ugt(a, b)
+    end
+
+    def uge(a, b)
+      get_or_create_op(Uge, a.width)
+      @seq.uge(a, b)
+    end
+
+    def eq(a, b)
+      get_or_create_op(Eq, a.width)
+      @seq.eq(a, b)
+    end
+
+    def ne(a, b)
+      get_or_create_op(Ne, a.width)
+      @seq.ne(a, b)
+    end
+
+    def rem_u(a, b)
+      get_or_create_op(RemU, a.width)
+      @seq.rem_u(a, b)
+    end
+
+    def rem_s(a, b)
+      get_or_create_op(RemS, a.width)
+      @seq.rem_s(a, b)
+    end
+
+    def ror(a, b)
+      get_or_create_op(Ror, a.width)
+      @seq.ror(a, b)
+    end
+
+    def rol(a, b)
+      get_or_create_op(Rol, a.width)
+      @seq.rol(a, b)
+    end
+
+    def add_overflow(a, b)
+      get_or_create_op(AddOverflow, a.width)
+      @seq.add_overflow(a, b)
+    end
+
+    def sub_overflow(a, b)
+      get_or_create_op(SubOverflow, a.width)
+      @seq.sub_overflow(a, b)
+    end
+
+    def not_(a)
+      get_or_create_op(Not, a.width)
+      @seq.not_(a)
+    end
+
+    def neg(a)
+      get_or_create_op(Neg, a.width)
+      @seq.neg(a)
+    end
+
+    def popcnt(a)
+      get_or_create_op(Popcnt, a.width)
+      @seq.popcnt(a)
+    end
+
+    def ctz(a)
+      get_or_create_op(Ctz, a.width)
+      @seq.ctz(a)
+    end
+
+    def clz(a)
+      get_or_create_op(Clz, a.width)
+      @seq.clz(a)
+    end
+
+    def reverse(a)
+      get_or_create_op(Reverse, a.width)
+      @seq.reverse(a)
+    end
+
+    def extend_sign(a, to_width)
+      get_or_create_op(ExtendSign, a.width, to_width)
+      @seq.extend_sign(a, to_width)
+    end
+
+    def extend_zero(a, to_width)
+      get_or_create_op(ExtendZero, a.width, to_width)
+      @seq.extend_zero(a, to_width)
+    end
+
+    def extract_low(a, out_width)
+      get_or_create_op(ExtractLow, a.width, out_width)
+      @seq.extract_low(a, out_width)
+    end
+
+    def div_u(a, b, default)
+      get_or_create_op(DivU, a.width)
+      @seq.div_u(a, b, default)
+    end
+
+    def div_s(a, b, default)
+      get_or_create_op(DivS, a.width)
+      @seq.div_s(a, b, default)
+    end
+
+    def select(cond, true_val, false_val)
+      get_or_create_op(Select, true_val.width)
+      @seq.select(cond, true_val, false_val)
+    end
+
+    def concat(low, high)
+      @seq.concat(low, high)
+    end
+
+    def extract(value, start, out_width)
+      @seq.extract(value, start, out_width)
+    end
+
+    def ensure_width(val, width)
+      @seq.ensure_width(val, width)
+    end
+
+    # ------------------------------------------------------------------
+    # NOTE: Building ruby/lira/ir_std.rb objects
+    # ------------------------------------------------------------------
+    def read(rf, rsi, shape = Shape.new(1, nil))
+      @seq.read(rf, rsi, shape)
+    end
+
+    def write(rf, rsi, value, shape = Shape.new(1, nil))
+      @seq.write(rf, rsi, value, shape)
+    end
+
+    def const(value, width = 32)
+      @seq.const(value, width)
+    end
+
+    def dyn_const(name, width = 32)
+      @seq.dyn_const(name, width)
+    end
+
+    def env(env_func, inputs)
+      @seq.env(env_func, inputs)
+    end
+
+    def cond_env(env_func, cond, inputs, on_false)
+      @seq.cond_env(env_func, cond, inputs, on_false)
+    end
+
+    def input(idx, width = 32)
+      @seq.input(idx, width)
+    end
+
+    def output(value, idx)
+      @seq.output(value, idx)
+    end
+
+    def op(operation, inputs)
+      @seq.op(operation, inputs)
+    end
+
+    def op_multi(operation, inputs)
+      @seq.op_multi(operation, inputs)
+    end
   end
 
   class SnippetBuilder < BaseBuilder

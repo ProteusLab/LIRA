@@ -99,13 +99,13 @@ class TestSeqBuilder < Minitest::Test
   end
 
   def test_operations_map
-    seq = SeqBuilder.new
-    a = seq.const(1, 32)
-    b = seq.const(2, 32)
-    seq.add(a, b)
-    seq.sub(a, b)
-    seq.slt(a, b)
-    omap = seq.operations_map
+    snip = SnippetBuilder.new('test')
+    a = snip.const(1, 32)
+    b = snip.const(2, 32)
+    snip.add(a, b)
+    snip.sub(a, b)
+    snip.slt(a, b)
+    omap = snip.operations_map
     assert omap.key?('add_32')
     assert omap.key?('slt_32')
   end
