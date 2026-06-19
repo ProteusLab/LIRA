@@ -6,7 +6,6 @@ class TypeCheckError(Exception):
 
 
 class BaseOp:
-    """Standard LIRA operation names — mirrors Rust `base_op` module."""
     NOT = "not"
     NEG = "neg"
     ADD = "add"
@@ -45,35 +44,16 @@ class BaseOp:
     ADD_OVERFLOW = "add_overflow"
     SUB_OVERFLOW = "sub_overflow"
 
-    def __str__(self) -> str:
-        return self.value
-
 
 def check_bits(value: int, name: str):
     if not isinstance(value, int) or value <= 0:
         raise TypeCheckError(f"{name} must be positive integer, got {value}")
 
 
-class StdOperation(Operation):
-    def _base_name(self) -> str:
-        name = type(self).__name__.lower()
-        if name.endswith("_op"):
-            name = name[:-3]
-        return name
-
-    def _generate_name(self) -> str:
-        if len(self.outputs) == 1:
-            bits = self.outputs[0]
-            return f"{self._base_name()}_{bits}"
-        return f"{self._base_name()}_{'_'.join(str(b) for b in self.outputs)}"
-
-
-class UnaryOp(StdOperation):
-    def __init__(self, out_bits: int, name: str = "", semantic_base: str = ""):
+class UnaryOp(Operation):
+    def __init__(self, out_bits: int, semantic_base: str, name: str = ""):
         if not name:
-            name = f"{self._base_name()}_{out_bits}"
-        if not semantic_base:
-            semantic_base = self._base_name()
+            name = f"{semantic_base}_{out_bits}"
         super().__init__(
             name=name,
             attributes=[],
@@ -94,12 +74,10 @@ class UnaryOp(StdOperation):
             )
 
 
-class BinaryOp(StdOperation):
-    def __init__(self, bits: int, name: str = "", semantic_base: str = ""):
+class BinaryOp(Operation):
+    def __init__(self, bits: int, semantic_base: str, name: str = ""):
         if not name:
-            name = f"{self._base_name()}_{bits}"
-        if not semantic_base:
-            semantic_base = self._base_name()
+            name = f"{semantic_base}_{bits}"
         super().__init__(
             name=name,
             attributes=[],
@@ -117,18 +95,16 @@ class BinaryOp(StdOperation):
         check_bits(self.outputs[0], "output")
         if not (self.inputs[0] == self.inputs[1] == self.outputs[0]):
             raise TypeCheckError(
-                f"BinaryOp: inputs {self.inputs} vs output {self.outputs[0]}"
+                f"BinaryOp: inputs {self.inputs} != output {self.outputs[0]}"
             )
 
 
-class CmpOp(StdOperation):
+class CmpOp(Operation):
     def __init__(
-        self, bits: int, out_bits: int = 1, name: str = "", semantic_base: str = ""
+        self, bits: int, semantic_base: str, out_bits: int = 1, name: str = ""
     ):
         if not name:
-            name = f"{self._base_name()}_{bits}"
-        if not semantic_base:
-            semantic_base = self._base_name()
+            name = f"{semantic_base}_{bits}"
         super().__init__(
             name=name,
             attributes=[],
@@ -146,16 +122,14 @@ class CmpOp(StdOperation):
         check_bits(self.outputs[0], "output")
         if self.inputs[0] != self.inputs[1]:
             raise TypeCheckError(
-                f"CmpOp: input widths differ {self.inputs[0]} vs {self.inputs[1]}"
+                f"CmpOp: input widths differ {self.inputs[0]} != {self.inputs[1]}"
             )
 
 
-class TernaryOp(StdOperation):
-    def __init__(self, bits: int, name: str = "", semantic_base: str = ""):
+class TernaryOp(Operation):
+    def __init__(self, bits: int, semantic_base: str, name: str = ""):
         if not name:
-            name = f"{self._base_name()}_{bits}"
-        if not semantic_base:
-            semantic_base = self._base_name()
+            name = f"{semantic_base}_{bits}"
         super().__init__(
             name=name,
             attributes=[],
@@ -177,16 +151,16 @@ class TernaryOp(StdOperation):
             )
 
 
-class ExtendOp(StdOperation):
-    def __init__(self, in_bits: int, out_bits: int, kind: str, name: str = ""):
+class ExtendOp(Operation):
+    def __init__(self, in_bits: int, out_bits: int, semantic_base: str, name: str = ""):
         if not name:
-            name = f"{kind}_{in_bits}_to_{out_bits}"
+            name = f"{semantic_base}_{in_bits}_to_{out_bits}"
         super().__init__(
             name=name,
             attributes=[],
             inputs=[in_bits],
             outputs=[out_bits],
-            semantic_base=kind,
+            semantic_base=semantic_base,
             semantic_func=None,
             semantic_table=None,
         )
@@ -201,16 +175,16 @@ class ExtendOp(StdOperation):
             )
 
 
-class ExtractLowOp(StdOperation):
-    def __init__(self, in_bits: int, out_bits: int, name: str = ""):
+class ExtractLowOp(Operation):
+    def __init__(self, in_bits: int, out_bits: int, semantic_base: str, name: str = ""):
         if not name:
-            name = f"extract_low_{in_bits}_to_{out_bits}"
+            name = f"{semantic_base}_{in_bits}_to_{out_bits}"
         super().__init__(
             name=name,
             attributes=[],
             inputs=[in_bits],
             outputs=[out_bits],
-            semantic_base=BaseOp.EXTRACT_LOW,
+            semantic_base=semantic_base,
             semantic_func=None,
             semantic_table=None,
         )
@@ -227,185 +201,185 @@ class ExtractLowOp(StdOperation):
 
 class Not(UnaryOp):
     def __init__(self, bits: int):
-        super().__init__(bits, semantic_base=BaseOp.NOT)
+        super().__init__(bits, BaseOp.NOT)
 
 
 class Neg(UnaryOp):
     def __init__(self, bits: int):
-        super().__init__(bits, semantic_base=BaseOp.NEG)
+        super().__init__(bits, BaseOp.NEG)
 
 
 class Add(BinaryOp):
     def __init__(self, bits: int):
-        super().__init__(bits, semantic_base=BaseOp.ADD)
+        super().__init__(bits, BaseOp.ADD)
 
 
 class Sub(BinaryOp):
     def __init__(self, bits: int):
-        super().__init__(bits, semantic_base=BaseOp.SUB)
+        super().__init__(bits, BaseOp.SUB)
 
 
 class Mul(BinaryOp):
     def __init__(self, bits: int):
-        super().__init__(bits, semantic_base=BaseOp.MUL)
+        super().__init__(bits, BaseOp.MUL)
 
 
 class And(BinaryOp):
     def __init__(self, bits: int):
-        super().__init__(bits, semantic_base=BaseOp.AND)
+        super().__init__(bits, BaseOp.AND)
 
 
 class Orr(BinaryOp):
     def __init__(self, bits: int):
-        super().__init__(bits, semantic_base=BaseOp.ORR)
+        super().__init__(bits, BaseOp.ORR)
 
 
 class Xor(BinaryOp):
     def __init__(self, bits: int):
-        super().__init__(bits, semantic_base=BaseOp.XOR)
+        super().__init__(bits, BaseOp.XOR)
 
 
 class Lsl(BinaryOp):
     def __init__(self, bits: int):
-        super().__init__(bits, semantic_base=BaseOp.LSL)
+        super().__init__(bits, BaseOp.LSL)
 
 
 class Lsr(BinaryOp):
     def __init__(self, bits: int):
-        super().__init__(bits, semantic_base=BaseOp.LSR)
+        super().__init__(bits, BaseOp.LSR)
 
 
 class Asr(BinaryOp):
     def __init__(self, bits: int):
-        super().__init__(bits, semantic_base=BaseOp.ASR)
+        super().__init__(bits, BaseOp.ASR)
 
 
 class Eq(CmpOp):
     def __init__(self, bits: int):
-        super().__init__(bits, semantic_base=BaseOp.EQ)
+        super().__init__(bits, BaseOp.EQ)
 
 
 class Ne(CmpOp):
     def __init__(self, bits: int):
-        super().__init__(bits, semantic_base=BaseOp.NE)
+        super().__init__(bits, BaseOp.NE)
 
 
 class Slt(CmpOp):
     def __init__(self, bits: int):
-        super().__init__(bits, semantic_base=BaseOp.SLT)
+        super().__init__(bits, BaseOp.SLT)
 
 
 class Sle(CmpOp):
     def __init__(self, bits: int):
-        super().__init__(bits, semantic_base=BaseOp.SLE)
+        super().__init__(bits, BaseOp.SLE)
 
 
 class Sgt(CmpOp):
     def __init__(self, bits: int):
-        super().__init__(bits, semantic_base=BaseOp.SGT)
+        super().__init__(bits, BaseOp.SGT)
 
 
 class Sge(CmpOp):
     def __init__(self, bits: int):
-        super().__init__(bits, semantic_base=BaseOp.SGE)
+        super().__init__(bits, BaseOp.SGE)
 
 
 class Ult(CmpOp):
     def __init__(self, bits: int):
-        super().__init__(bits, semantic_base=BaseOp.ULT)
+        super().__init__(bits, BaseOp.ULT)
 
 
 class Ule(CmpOp):
     def __init__(self, bits: int):
-        super().__init__(bits, semantic_base=BaseOp.ULE)
+        super().__init__(bits, BaseOp.ULE)
 
 
 class Ugt(CmpOp):
     def __init__(self, bits: int):
-        super().__init__(bits, semantic_base=BaseOp.UGT)
+        super().__init__(bits, BaseOp.UGT)
 
 
 class Uge(CmpOp):
     def __init__(self, bits: int):
-        super().__init__(bits, semantic_base=BaseOp.UGE)
+        super().__init__(bits, BaseOp.UGE)
 
 
 class ExtendSign(ExtendOp):
     def __init__(self, in_bits: int, out_bits: int):
-        super().__init__(in_bits, out_bits, "extend_sign")
+        super().__init__(in_bits, out_bits, BaseOp.EXTEND_SIGN)
 
 
 class ExtendZero(ExtendOp):
     def __init__(self, in_bits: int, out_bits: int):
-        super().__init__(in_bits, out_bits, "extend_zero")
+        super().__init__(in_bits, out_bits, BaseOp.EXTEND_ZERO)
 
 
 class ExtractLow(ExtractLowOp):
     def __init__(self, in_bits: int, out_bits: int):
-        super().__init__(in_bits, out_bits)
+        super().__init__(in_bits, out_bits, BaseOp.EXTRACT_LOW)
 
 
 class Popcnt(UnaryOp):
     def __init__(self, bits: int):
-        super().__init__(bits, semantic_base=BaseOp.POPCNT)
+        super().__init__(bits, BaseOp.POPCNT)
 
 
 class Ctz(UnaryOp):
     def __init__(self, bits: int):
-        super().__init__(bits, semantic_base=BaseOp.CTZ)
+        super().__init__(bits, BaseOp.CTZ)
 
 
 class Clz(UnaryOp):
     def __init__(self, bits: int):
-        super().__init__(bits, semantic_base=BaseOp.CLZ)
+        super().__init__(bits, BaseOp.CLZ)
 
 
 class Reverse(UnaryOp):
     def __init__(self, bits: int):
-        super().__init__(bits, semantic_base=BaseOp.REVERSE)
+        super().__init__(bits, BaseOp.REVERSE)
 
 
 class RemU(BinaryOp):
     def __init__(self, bits: int):
-        super().__init__(bits, semantic_base=BaseOp.REM_U)
+        super().__init__(bits, BaseOp.REM_U)
 
 
 class RemS(BinaryOp):
     def __init__(self, bits: int):
-        super().__init__(bits, semantic_base=BaseOp.REM_S)
+        super().__init__(bits, BaseOp.REM_S)
 
 
 class Ror(BinaryOp):
     def __init__(self, bits: int):
-        super().__init__(bits, semantic_base=BaseOp.ROR)
+        super().__init__(bits, BaseOp.ROR)
 
 
 class Rol(BinaryOp):
     def __init__(self, bits: int):
-        super().__init__(bits, semantic_base=BaseOp.ROL)
+        super().__init__(bits, BaseOp.ROL)
 
 
 class AddOverflow(CmpOp):
     def __init__(self, bits: int):
-        super().__init__(bits, out_bits=1, semantic_base=BaseOp.ADD_OVERFLOW)
+        super().__init__(bits, BaseOp.ADD_OVERFLOW, out_bits=1)
 
 
 class SubOverflow(CmpOp):
     def __init__(self, bits: int):
-        super().__init__(bits, out_bits=1, semantic_base=BaseOp.SUB_OVERFLOW)
+        super().__init__(bits, BaseOp.SUB_OVERFLOW, out_bits=1)
 
 
 class DivU(TernaryOp):
     def __init__(self, bits: int):
-        super().__init__(bits, semantic_base=BaseOp.DIV_U)
+        super().__init__(bits, BaseOp.DIV_U)
 
 
 class DivS(TernaryOp):
     def __init__(self, bits: int):
-        super().__init__(bits, semantic_base=BaseOp.DIV_S)
+        super().__init__(bits, BaseOp.DIV_S)
 
 
-class Select(StdOperation):
+class Select(Operation):
     def __init__(self, bits: int):
         name = f"select_{bits}"
         super().__init__(

@@ -125,13 +125,13 @@ class TestSeqBuilder:
         assert r.name == a.name
 
     def test_operations_map(self):
-        seq = SeqBuilder()
-        a = seq.const(1, 32)
-        b = seq.const(2, 32)
-        seq.add(a, b)
-        seq.sub(a, b)
-        seq.slt(a, b)
-        omap = seq.operations_map
+        snip = SnippetBuilder("test")
+        a = snip.const(1, 32)
+        b = snip.const(2, 32)
+        snip.add(a, b)
+        snip.sub(a, b)
+        snip.slt(a, b)
+        omap = snip.operations_map
         assert "add_32" in omap
         assert "slt_32" in omap
 
