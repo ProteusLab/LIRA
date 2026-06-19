@@ -1,24 +1,19 @@
-import sys
-from pathlib import Path
-
 import pytest
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
-from lira.ir import Shape
-from lira.arch import (
+from python.lira.ir import Shape
+from python.lira.arch import (
     Register,
     RegisterFile,
     EnvironmentFunction,
     InstructionEncoding,
 )
-from lira.ir_builder import (
+from python.lira.ir_builder import (
     SeqBuilder,
     SnippetBuilder,
     InstructionBuilder,
     ArchBuilder,
 )
-from lira.ir_ops import Add
+from python.lira.ir_ops import Add
 
 
 @pytest.fixture(scope="module")

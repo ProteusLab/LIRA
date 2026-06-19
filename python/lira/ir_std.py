@@ -1,5 +1,5 @@
-from lira.ir import *
-from lira.arch import *
+from .ir import *
+from .arch import *
 
 from dataclasses import dataclass
 

@@ -1,7 +1,7 @@
 from typing import Optional
 from dataclasses import dataclass, field
 
-from lira.ir import *
+from .ir import *
 
 @dataclass
 class Component:

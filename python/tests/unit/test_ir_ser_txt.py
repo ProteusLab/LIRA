@@ -1,12 +1,7 @@
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
-from lira.ir import Shape
-from lira.arch import Register, RegisterFile, EnvironmentFunction
-from lira.ir_ser_txt import serialize_statement_seq, deserialize_statement_seq
-from lira.ir_builder import SeqBuilder, SnippetBuilder
+from python.lira.ir import Shape
+from python.lira.arch import Register, RegisterFile, EnvironmentFunction
+from python.lira.ir_ser_txt import serialize_statement_seq, deserialize_statement_seq
+from python.lira.ir_builder import SeqBuilder, SnippetBuilder
 
 
 class TestIrSerTxt:

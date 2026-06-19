@@ -5,9 +5,9 @@ from dataclasses import is_dataclass, fields
 from ruamel.yaml import YAML
 from ruamel.yaml.scalarstring import LiteralScalarString
 
-from lira.arch import *
-from lira.ir import StatementSeq
-from lira.ir_ser_txt import serialize_statement_seq, deserialize_statement_seq
+from .arch import *
+from .ir import StatementSeq
+from .ir_ser_txt import serialize_statement_seq, deserialize_statement_seq
 
 def to_serializable(obj: Any) -> Any:
     if isinstance(obj, StatementSeq):

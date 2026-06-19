@@ -5,19 +5,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+from python.lira.ir import Shape
+from python.lira.arch import Register, RegisterFile, EnvironmentFunction, InstructionEncoding, Operation
+from python.lira.ir_builder import ArchBuilder, SnippetBuilder, InstructionBuilder
 
-def _setup_imports():
-    root_dir = Path(__file__).parent.parent
-    if str(root_dir) not in sys.path:
-        sys.path.insert(0, str(root_dir))
-
-_setup_imports()
-
-from lira.ir import Shape
-from lira.arch import Register, RegisterFile, EnvironmentFunction, InstructionEncoding, Operation
-from lira.ir_builder import ArchBuilder, SnippetBuilder, InstructionBuilder
-
-from lira import arch_ser_yaml
+from python.lira import arch_ser_yaml
 
 def build_test_arch() -> ArchBuilder:
     registers = [Register(f"x{i}") for i in range(32)]

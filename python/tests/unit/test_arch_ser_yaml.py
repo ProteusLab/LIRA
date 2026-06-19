@@ -3,10 +3,8 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
-from lira.ir import Shape
-from lira.arch import (
+from python.lira.ir import Shape
+from python.lira.arch import (
     Register,
     RegisterFile,
     EnvironmentFunction,
@@ -15,8 +13,8 @@ from lira.arch import (
     SystemRegisterField,
     TableInt,
 )
-from lira.ir_builder import ArchBuilder, SnippetBuilder, InstructionBuilder
-from lira.ir_ops import (
+from python.lira.ir_builder import ArchBuilder, SnippetBuilder, InstructionBuilder
+from python.lira.ir_ops import (
     Add,
     Lsl,
     Lsr,
@@ -28,7 +26,7 @@ from lira.ir_ops import (
     ExtendZero,
     ExtendSign,
 )
-from lira import arch_ser_yaml
+from python.lira import arch_ser_yaml
 
 
 @pytest.fixture

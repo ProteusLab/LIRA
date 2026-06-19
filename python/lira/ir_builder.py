@@ -1,8 +1,8 @@
 # lira/builder.py
 from typing import List, Optional, Dict, Tuple
-from lira.ir import *
-from lira.arch import *
-from lira.ir_ops import *
+from .ir import *
+from .arch import *
+from .ir_ops import *
 
 
 class Value:

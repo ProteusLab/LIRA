@@ -1,9 +1,7 @@
 import subprocess, sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
-from lira import arch_ser_yaml
+from python.lira import arch_ser_yaml
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 REFERENCE = PROJECT_ROOT / "tests" / "integration" / "reference.yaml"

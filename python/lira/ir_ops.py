@@ -1,4 +1,4 @@
-from lira.arch import Operation
+from .arch import Operation
 
 
 class TypeCheckError(Exception):
