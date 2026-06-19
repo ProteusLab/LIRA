@@ -4,12 +4,20 @@ use lira::*;
 
 fn cross_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent().unwrap().parent().unwrap()
-        .join("tests").join("cross_language")
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("tests")
+        .join("cross_language")
 }
 
 fn reference() -> PathBuf {
-    cross_dir().parent().unwrap().join("integration").join("reference.yaml")
+    cross_dir()
+        .parent()
+        .unwrap()
+        .join("integration")
+        .join("reference.yaml")
 }
 
 #[test]

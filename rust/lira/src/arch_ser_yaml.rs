@@ -2,8 +2,8 @@ use std::path::Path;
 
 use regex::Regex;
 use serde::Deserialize;
-use yaml_rust::{Yaml, YamlEmitter};
 use yaml_rust::yaml::Hash;
+use yaml_rust::{Yaml, YamlEmitter};
 
 use crate::*;
 
@@ -57,14 +57,32 @@ fn arch_to_yaml(arch: &Arch) -> anyhow::Result<String> {
         .map(|i| {
             let mut map = Hash::new();
             map.insert(Yaml::String("name".into()), Yaml::String(i.name.clone()));
-            map.insert(Yaml::String("attributes".into()), Yaml::Array(i.attributes.iter().map(|a| Yaml::String(a.clone())).collect()));
+            map.insert(
+                Yaml::String("attributes".into()),
+                Yaml::Array(
+                    i.attributes
+                        .iter()
+                        .map(|a| Yaml::String(a.clone()))
+                        .collect(),
+                ),
+            );
             map.insert(
                 Yaml::String("operand_sizes".into()),
-                Yaml::Array(i.operand_sizes.iter().map(|&sz| Yaml::Integer(sz as i64)).collect()),
+                Yaml::Array(
+                    i.operand_sizes
+                        .iter()
+                        .map(|&sz| Yaml::Integer(sz as i64))
+                        .collect(),
+                ),
             );
             map.insert(
                 Yaml::String("operand_names".into()),
-                Yaml::Array(i.operand_names.iter().map(|n| Yaml::String(n.clone())).collect()),
+                Yaml::Array(
+                    i.operand_names
+                        .iter()
+                        .map(|n| Yaml::String(n.clone()))
+                        .collect(),
+                ),
             );
             {
                 let mut enc_map = Hash::new();
@@ -83,10 +101,17 @@ fn arch_to_yaml(arch: &Arch) -> anyhow::Result<String> {
                 enc_map.insert(
                     Yaml::String("decode".into()),
                     Yaml::Array(
-                        i.encoding.decode.iter().map(|d| Yaml::String(d.clone())).collect(),
+                        i.encoding
+                            .decode
+                            .iter()
+                            .map(|d| Yaml::String(d.clone()))
+                            .collect(),
                     ),
                 );
-                enc_map.insert(Yaml::String("encode".into()), Yaml::String(i.encoding.encode.clone()));
+                enc_map.insert(
+                    Yaml::String("encode".into()),
+                    Yaml::String(i.encoding.encode.clone()),
+                );
                 enc_map.insert(
                     Yaml::String("constraint_decode".into()),
                     Yaml::String(i.encoding.constraint_decode.clone()),
@@ -111,7 +136,15 @@ fn arch_to_yaml(arch: &Arch) -> anyhow::Result<String> {
         .map(|rf| {
             let mut map = Hash::new();
             map.insert(Yaml::String("name".into()), Yaml::String(rf.name.clone()));
-            map.insert(Yaml::String("attributes".into()), Yaml::Array(rf.attributes.iter().map(|a| Yaml::String(a.clone())).collect()));
+            map.insert(
+                Yaml::String("attributes".into()),
+                Yaml::Array(
+                    rf.attributes
+                        .iter()
+                        .map(|a| Yaml::String(a.clone()))
+                        .collect(),
+                ),
+            );
             {
                 let mut shape = Hash::new();
                 shape.insert(
@@ -135,7 +168,15 @@ fn arch_to_yaml(arch: &Arch) -> anyhow::Result<String> {
                         .map(|r| {
                             let mut rm = Hash::new();
                             rm.insert(Yaml::String("name".into()), Yaml::String(r.name.clone()));
-                            rm.insert(Yaml::String("attributes".into()), Yaml::Array(r.attributes.iter().map(|a| Yaml::String(a.clone())).collect()));
+                            rm.insert(
+                                Yaml::String("attributes".into()),
+                                Yaml::Array(
+                                    r.attributes
+                                        .iter()
+                                        .map(|a| Yaml::String(a.clone()))
+                                        .collect(),
+                                ),
+                            );
                             Yaml::Hash(rm)
                         })
                         .collect(),
@@ -153,15 +194,30 @@ fn arch_to_yaml(arch: &Arch) -> anyhow::Result<String> {
             map.insert(Yaml::String("name".into()), Yaml::String(ef.name.clone()));
             map.insert(
                 Yaml::String("attributes".into()),
-                Yaml::Array(ef.attributes.iter().map(|a| Yaml::String(a.clone())).collect()),
+                Yaml::Array(
+                    ef.attributes
+                        .iter()
+                        .map(|a| Yaml::String(a.clone()))
+                        .collect(),
+                ),
             );
             map.insert(
                 Yaml::String("inputs".into()),
-                Yaml::Array(ef.inputs.iter().map(|&sz| Yaml::Integer(sz as i64)).collect()),
+                Yaml::Array(
+                    ef.inputs
+                        .iter()
+                        .map(|&sz| Yaml::Integer(sz as i64))
+                        .collect(),
+                ),
             );
             map.insert(
                 Yaml::String("outputs".into()),
-                Yaml::Array(ef.outputs.iter().map(|&sz| Yaml::Integer(sz as i64)).collect()),
+                Yaml::Array(
+                    ef.outputs
+                        .iter()
+                        .map(|&sz| Yaml::Integer(sz as i64))
+                        .collect(),
+                ),
             );
             Yaml::Hash(map)
         })
@@ -173,22 +229,46 @@ fn arch_to_yaml(arch: &Arch) -> anyhow::Result<String> {
         .map(|op| {
             let mut map = Hash::new();
             map.insert(Yaml::String("name".into()), Yaml::String(op.name.clone()));
-            map.insert(Yaml::String("attributes".into()), Yaml::Array(op.attributes.iter().map(|a| Yaml::String(a.clone())).collect()));
+            map.insert(
+                Yaml::String("attributes".into()),
+                Yaml::Array(
+                    op.attributes
+                        .iter()
+                        .map(|a| Yaml::String(a.clone()))
+                        .collect(),
+                ),
+            );
             map.insert(
                 Yaml::String("inputs".into()),
-                Yaml::Array(op.inputs.iter().map(|&sz| Yaml::Integer(sz as i64)).collect()),
+                Yaml::Array(
+                    op.inputs
+                        .iter()
+                        .map(|&sz| Yaml::Integer(sz as i64))
+                        .collect(),
+                ),
             );
             map.insert(
                 Yaml::String("outputs".into()),
-                Yaml::Array(op.outputs.iter().map(|&sz| Yaml::Integer(sz as i64)).collect()),
+                Yaml::Array(
+                    op.outputs
+                        .iter()
+                        .map(|&sz| Yaml::Integer(sz as i64))
+                        .collect(),
+                ),
             );
             if let Some(ref base) = op.semantic_base {
-                map.insert(Yaml::String("semantic_base".into()), Yaml::String(base.clone()));
+                map.insert(
+                    Yaml::String("semantic_base".into()),
+                    Yaml::String(base.clone()),
+                );
             } else {
                 map.insert(Yaml::String("semantic_base".into()), Yaml::Null);
             }
             if let Some(ref func) = op.semantic_func {
-                map.insert(Yaml::String("semantic_func".into()), Yaml::String(func.clone()));
+                map.insert(
+                    Yaml::String("semantic_func".into()),
+                    Yaml::String(func.clone()),
+                );
             } else {
                 map.insert(Yaml::String("semantic_func".into()), Yaml::Null);
             }
@@ -204,7 +284,15 @@ fn arch_to_yaml(arch: &Arch) -> anyhow::Result<String> {
         .map(|sr| {
             let mut map = Hash::new();
             map.insert(Yaml::String("name".into()), Yaml::String(sr.name.clone()));
-            map.insert(Yaml::String("attributes".into()), Yaml::Array(sr.attributes.iter().map(|a| Yaml::String(a.clone())).collect()));
+            map.insert(
+                Yaml::String("attributes".into()),
+                Yaml::Array(
+                    sr.attributes
+                        .iter()
+                        .map(|a| Yaml::String(a.clone()))
+                        .collect(),
+                ),
+            );
             map.insert(Yaml::String("size".into()), Yaml::Integer(sr.size as i64));
             map.insert(
                 Yaml::String("fields".into()),
@@ -214,7 +302,15 @@ fn arch_to_yaml(arch: &Arch) -> anyhow::Result<String> {
                         .map(|f| {
                             let mut fm = Hash::new();
                             fm.insert(Yaml::String("name".into()), Yaml::String(f.name.clone()));
-                            fm.insert(Yaml::String("attributes".into()), Yaml::Array(f.attributes.iter().map(|a| Yaml::String(a.clone())).collect()));
+                            fm.insert(
+                                Yaml::String("attributes".into()),
+                                Yaml::Array(
+                                    f.attributes
+                                        .iter()
+                                        .map(|a| Yaml::String(a.clone()))
+                                        .collect(),
+                                ),
+                            );
                             fm.insert(Yaml::String("lsb".into()), Yaml::Integer(f.lsb as i64));
                             fm.insert(Yaml::String("msb".into()), Yaml::Integer(f.msb as i64));
                             Yaml::Hash(fm)
@@ -232,7 +328,15 @@ fn arch_to_yaml(arch: &Arch) -> anyhow::Result<String> {
         .map(|t| {
             let mut map = Hash::new();
             map.insert(Yaml::String("name".into()), Yaml::String(t.name.clone()));
-            map.insert(Yaml::String("attributes".into()), Yaml::Array(t.attributes.iter().map(|a| Yaml::String(a.clone())).collect()));
+            map.insert(
+                Yaml::String("attributes".into()),
+                Yaml::Array(
+                    t.attributes
+                        .iter()
+                        .map(|a| Yaml::String(a.clone()))
+                        .collect(),
+                ),
+            );
             map.insert(
                 Yaml::String("values".into()),
                 Yaml::Array(t.values.iter().map(|&v| Yaml::Integer(v as i64)).collect()),
@@ -245,15 +349,32 @@ fn arch_to_yaml(arch: &Arch) -> anyhow::Result<String> {
     root.insert(Yaml::String("name".into()), Yaml::String(arch.name.clone()));
     root.insert(
         Yaml::String("attributes".into()),
-        Yaml::Array(arch.attributes.iter().map(|a| Yaml::String(a.clone())).collect()),
+        Yaml::Array(
+            arch.attributes
+                .iter()
+                .map(|a| Yaml::String(a.clone()))
+                .collect(),
+        ),
     );
-    root.insert(Yaml::String("register_files".into()), Yaml::Array(register_files));
-    root.insert(Yaml::String("system_registers".into()), Yaml::Array(system_registers));
-    root.insert(Yaml::String("environment_functions".into()), Yaml::Array(env_funcs));
+    root.insert(
+        Yaml::String("register_files".into()),
+        Yaml::Array(register_files),
+    );
+    root.insert(
+        Yaml::String("system_registers".into()),
+        Yaml::Array(system_registers),
+    );
+    root.insert(
+        Yaml::String("environment_functions".into()),
+        Yaml::Array(env_funcs),
+    );
     root.insert(Yaml::String("tables_int".into()), Yaml::Array(tables_int));
     root.insert(Yaml::String("operations".into()), Yaml::Array(operations));
     root.insert(Yaml::String("snippets".into()), Yaml::Array(snippets));
-    root.insert(Yaml::String("instructions".into()), Yaml::Array(instructions));
+    root.insert(
+        Yaml::String("instructions".into()),
+        Yaml::Array(instructions),
+    );
 
     let doc = Yaml::Hash(root);
     let mut out = String::new();
