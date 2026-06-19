@@ -238,29 +238,6 @@ module Lira
       )
     end
 
-    def concat(low, high)
-      low_width = low.width
-      high_width = high.width
-      total_width = low_width + high_width
-
-      high_ext = extend_zero(high, total_width)
-      shift_width = (low_width.bit_length + 1) rescue 1
-      shift_amount = const(low_width, shift_width)
-      high_shifted = lsl(high_ext, shift_amount)
-      low_ext = extend_zero(low, total_width)
-      orr(low_ext, high_shifted)
-    end
-
-    def extract(value, start, out_width)
-      start = extend_zero(start, value.width) if start.width != value.width
-      shifted = lsr(value, start)
-      extract_low(shifted, out_width)
-    end
-
-    def ensure_width(val, width)
-      return val if val.width == width
-      val.width < width ? extend_zero(val, width) : extract_low(val, width)
-    end
 
     # ------------------------------------------------------------------
     # NOTE: Building ruby/lira/ir_std.rb objects
@@ -563,18 +540,6 @@ module Lira
     def select(cond, true_val, false_val)
       get_or_create_op(Select, true_val.width)
       @seq.select(cond, true_val, false_val)
-    end
-
-    def concat(low, high)
-      @seq.concat(low, high)
-    end
-
-    def extract(value, start, out_width)
-      @seq.extract(value, start, out_width)
-    end
-
-    def ensure_width(val, width)
-      @seq.ensure_width(val, width)
     end
 
     # ------------------------------------------------------------------
