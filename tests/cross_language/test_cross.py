@@ -1,11 +1,7 @@
-import sys
+import pytest
 from pathlib import Path
 
-import pytest
-
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "python"))
-
-from lira import arch_ser_yaml
+from python.lira import arch_ser_yaml
 
 CROSS_DIR = Path(__file__).parent
 REFERENCE = Path(__file__).parent.parent / "integration" / "reference.yaml"
