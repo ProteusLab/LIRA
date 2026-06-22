@@ -5,7 +5,7 @@ build-backend = "setuptools.backends._legacy:_Backend"
 [project]
 name = "lira-ir"
 version = "0.1.0"
-description = "LIRA IR — simulator intermediate representation with data-flow IR"
+description = "LIRA is a framework that provides a data-flow Intermediate Representation."
 readme = "../README.md"
 requires-python = ">=3.10"
 dependencies = [
