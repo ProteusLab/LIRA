@@ -1,0 +1,10 @@
+[package]
+name = "lira_trs"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+lira = { path = "../lira" }
+log = { workspace = true }
+anyhow = { workspace = true }
+ahash = { workspace = true }
