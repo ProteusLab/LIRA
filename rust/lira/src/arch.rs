@@ -21,16 +21,27 @@ pub struct Operation {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct Register {
+    pub name: String,
+    #[serde(default)]
+    pub attributes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct RegisterFile {
     pub name: String,
     pub attributes: Vec<String>,
     pub reg_size: Shape,
-    pub reg_names: Vec<String>,
+    pub regs: Vec<Register>,
 }
 
 impl RegisterFile {
+    pub fn reg_names(&self) -> Vec<&str> {
+        self.regs.iter().map(|r| r.name.as_str()).collect()
+    }
+
     pub fn regs_num(&self) -> usize {
-        self.reg_names.len()
+        self.regs.len()
     }
 }
 
@@ -69,6 +80,7 @@ pub struct TableInt {
 pub struct InstructionEncoding {
     pub encoded_size: usize,
     pub const_encoding_part: usize,
+    pub const_mask: usize,
     /// Names of snippets
     ///
     /// `[encoding_size -> operand_size]`

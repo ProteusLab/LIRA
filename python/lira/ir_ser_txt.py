@@ -1,4 +1,4 @@
-from lira.ir import *
+from .ir import *
 
 import re
 

@@ -1,4 +1,4 @@
-from lira.arch import *
+from .arch import *
 
 from typing import Dict
 

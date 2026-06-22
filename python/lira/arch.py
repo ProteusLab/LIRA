@@ -1,7 +1,7 @@
 from typing import Optional
 from dataclasses import dataclass, field
 
-from lira.ir import *
+from .ir import *
 
 @dataclass
 class Component:
@@ -24,13 +24,32 @@ class Operation(Component):
     semantic_func_128: Optional[str] = None # Snippet
     semantic_table: Optional[str] = None # TableInt
 
+    def __eq__(self, other):
+        if not isinstance(other, Operation):
+            return NotImplemented
+        return (self.name, self.attributes, self.inputs, self.outputs,
+                self.semantic_base, self.semantic_func,
+                self.semantic_func_128, self.semantic_table) == \
+               (other.name, other.attributes, other.inputs, other.outputs,
+                other.semantic_base, other.semantic_func,
+                other.semantic_func_128, other.semantic_table)
+
+
+@dataclass
+class Register(Component):
+    def __init__(self, name, attributes: list[str] = []):
+        super().__init__(name=name, attributes=attributes)
+
 @dataclass
 class RegisterFile(Component):
     reg_size: Shape
-    reg_names: list[str]
+    regs: list[Register]
+
+    def reg_names(self) -> list[str]:
+        return [r.name for r in self.regs]
 
     def regs_num(self) -> int:
-        return len(self.reg_names)
+        return len(self.regs)
 
 @dataclass
 class EnvironmentFunction(Component):
@@ -55,6 +74,7 @@ class InstructionEncoding:
     encoded_size: int
     # Used to reuse same encode/constraint_decode for multiple instructions
     const_encoding_part: int
+    const_mask: int
     # `[encoding_size -> operand_size]`
     decode: list[str] # Snippet
     # `[operand_size] -> encoding_size`

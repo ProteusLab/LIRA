@@ -1,0 +1,16 @@
+[package]
+name = "lira-tests"
+version = "0.1.0"
+edition = "2024"
+
+[[test]]
+name = "cross_language"
+path = "../../tests/cross_language/test_cross.rs"
+
+[[test]]
+name = "integration"
+path = "integration/main.rs"
+
+[dependencies]
+lira = { path = "../lira" }
+anyhow = { workspace = true }

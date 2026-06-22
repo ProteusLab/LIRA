@@ -1,5 +1,5 @@
 mod arch;
-mod arch_ser_txt;
+mod arch_ser_yaml;
 mod arch_utils;
 mod ir;
 mod ir_ser_txt;
