@@ -1,12 +1,11 @@
 [build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.backends._legacy:_Backend"
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "lira-ir"
 version = "0.1.0"
 description = "LIRA is a framework that provides a data-flow Intermediate Representation."
-readme = "../README.md"
 requires-python = ">=3.10"
 dependencies = [
     "ruamel.yaml",
