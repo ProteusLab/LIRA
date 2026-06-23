@@ -15,9 +15,9 @@ impl std::fmt::Display for Shape {
 
 impl Shape {
     pub fn parse(s: &str) -> anyhow::Result<Self> {
-        let re = Regex::new(r"^(\d+)(.*)$").unwrap();
+        static RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^(\d+)(.*)$").unwrap());
         let err = || anyhow::anyhow!("failed to parse {s}");
-        let caps = re.captures(s).ok_or_else(err)?;
+        let caps = RE.captures(s).ok_or_else(err)?;
         Ok(Self {
             lanes_base: caps[1].parse()?,
             lanes_mult: (!caps[2].is_empty()).then(|| caps[2].to_string()),
