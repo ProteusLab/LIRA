@@ -1,6 +1,40 @@
-__pycache__
-target
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+*.sdist/
+*.whl
 
+# Rust
+target/
+
+# Ruby
+*.gem
+.bundle/
+
+# Testing & Coverage
+htmlcov/
+.coverage
 *coverage
+*.prof
 
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Misc
+*.log
+.env
 build/
