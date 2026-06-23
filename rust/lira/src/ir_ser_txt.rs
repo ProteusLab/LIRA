@@ -42,7 +42,7 @@ impl std::fmt::Display for Statement {
 impl Statement {
     pub fn parse(s: &str) -> anyhow::Result<Self> {
         static RE: LazyLock<Regex> =
-            LazyLock::new(|| Regex::new(r"^(\w+)\s+(.*?)\s*=\s*(\w+)\s+(\S+)\s*(.*)$").unwrap());
+            LazyLock::new(|| Regex::new(r"^(\S+)\s+(.*?)\s*=\s*(\S+)\s+(\S+)\s*(.*)$").unwrap());
         let err = || anyhow::anyhow!("failed to parse {s}");
         let caps = RE.captures(s).ok_or_else(err)?;
 
