@@ -1,0 +1,4 @@
+(ruleset replace)
+
+(rewrite (stmt h o k "a" i m) (stmt h o k "b" i m) :ruleset replace)
+(rewrite (stmt h o k "b" i m) (stmt h o k "c" i m) :ruleset replace)
