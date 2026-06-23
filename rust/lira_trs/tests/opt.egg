@@ -1,0 +1,13 @@
+(ruleset opt)
+
+; Commutativity
+(rule
+    ((= e (stmt h o "op" "add.64" (in2 a b) (pure))))
+    ((union e (stmt h o "op" "add.64" (in2 b a) (pure))))
+:ruleset opt)
+
+; (add (sub a b) b) -> a
+(rule
+    ((= v (sel 0 (stmt h o "op" "add.64" (in2 (sel 0 (stmt h o "op" "sub.64" (in2 a b) (pure))) b) (pure)))))
+    ((union v a))
+:ruleset opt)

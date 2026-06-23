@@ -1,0 +1,12 @@
+[package]
+name = "lira_trs"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+lira = { path = "../lira" }
+egglog = "2.0.0"
+du_utils_slist = { git = "https://github.com/belovdv/du_utils.git", rev = "7813f1156c67ceb806682e18a61ce805982388a7" }
+log = { workspace = true }
+anyhow = { workspace = true }
+ahash = { workspace = true }

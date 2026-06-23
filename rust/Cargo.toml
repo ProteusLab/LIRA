@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 
-members = ["lira", "tests"]
+members = ["lira", "lira_trs", "tests"]
 
 [workspace.dependencies]
 anyhow = "1.0.102"
