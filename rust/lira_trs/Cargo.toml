@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 lira = { path = "../lira" }
-egglog = "2.0.0"
+egglog = { git = "https://github.com/egraphs-good/egglog.git", rev = "b27cd225ba3d646ff4327d076c7def665eadb232" }
 du_utils_slist = { git = "https://github.com/belovdv/du_utils.git", rev = "7813f1156c67ceb806682e18a61ce805982388a7" }
 log = { workspace = true }
 anyhow = { workspace = true }
