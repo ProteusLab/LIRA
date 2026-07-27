@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use ahash::AHashMap;
-use lira::{Shape, StatementSeq};
+use lira::Shape;
 
 pub struct Statement {
     pub shape: Shape,
@@ -9,7 +9,20 @@ pub struct Statement {
     pub kind: String,
     pub spec: String,
     pub inputs: Vec<Selector>,
-    pub implicit: Option<State>,
+    pub implicit: Implicit,
+}
+
+pub enum ImplicitKind {
+    Pure,
+    Implicit,
+    ImplicitRead,
+}
+#[derive(Default)]
+pub enum Implicit {
+    #[default]
+    Pure,
+    Implicit(State),
+    ImplicitRead(State),
 }
 
 #[derive(Clone)]
@@ -31,122 +44,62 @@ impl Selector {
     }
 }
 
-impl Statement {
-    pub fn from_stmt(
-        stmt: &lira::Statement,
-        inputs: Vec<Selector>,
-        implicit: Option<State>,
-    ) -> Self {
-        Self {
-            shape: stmt.shape.clone(),
-            outputs: stmt.outputs_types.clone(),
-            kind: stmt.kind.clone(),
-            spec: stmt.specifier.clone(),
-            inputs,
-            implicit,
+impl State {
+    pub fn _dbg_print(&self) {
+        #[derive(Default)]
+        struct Ser {
+            counter: usize,
+            cache: AHashMap<*const Statement, String>,
         }
-    }
-
-    pub fn to_stmt(&self, outputs: Vec<String>, inputs: Vec<String>) -> lira::Statement {
-        lira::Statement {
-            shape: self.shape.clone(),
-            outputs,
-            outputs_types: self.outputs.clone(),
-            kind: self.kind.clone(),
-            specifier: self.spec.clone(),
-            inputs,
-        }
-    }
-}
-
-pub fn lira2dfg(seq: &StatementSeq, is_pure: impl Fn(&str) -> bool) -> State {
-    let mut state = State::Initial;
-    let mut name2sel: AHashMap<String, Selector> = AHashMap::new();
-    for stmt in seq.iter() {
-        let is_dirty = !is_pure(&stmt.kind);
-        let inputs = stmt.inputs.iter().map(|i| name2sel[i].clone()).collect();
-        let implicit = is_dirty.then(|| std::mem::take(&mut state));
-        let s = Rc::new(Statement::from_stmt(stmt, inputs, implicit));
-        if is_dirty {
-            state = State::After(s.clone())
-        }
-        for o in 0..stmt.outputs.len() {
-            name2sel.insert(stmt.outputs[o].to_string(), Selector::new(s.clone(), o));
-        }
-    }
-    state
-}
-
-pub fn dfg2lira(state: &State) -> StatementSeq {
-    #[derive(Default)]
-    struct Ser {
-        seq: StatementSeq,
-        counter: usize,
-        cache: AHashMap<*const Statement, usize>,
-    }
-    impl Ser {
-        fn gen_temp_name(&mut self) -> String {
-            let name = format!("t{}", self.counter);
-            self.counter += 1;
-            name
-        }
-        fn state(&mut self, state: &State) {
-            let State::After(source) = state else { return };
-            self.stmt(source);
-        }
-        fn sel(&mut self, sel: &Selector) -> String {
-            let id = self.stmt(&sel.stmt);
-            self.seq[id].outputs[sel.output].clone()
-        }
-        fn stmt(&mut self, stmt: &Rc<Statement>) -> usize {
-            if let Some(outputs) = self.cache.get(&Rc::as_ptr(stmt)) {
-                return *outputs;
+        impl Ser {
+            fn gen_temp_name(&mut self) -> String {
+                let name = format!("t{}", self.counter);
+                self.counter += 1;
+                name
             }
-            if let Some(implicit) = &stmt.implicit {
-                self.state(implicit);
+            fn state(&mut self, state: &State) -> String {
+                match state {
+                    State::Initial => "initial".to_string(),
+                    State::After(statement) => format!("after {}", self.stmt(statement)),
+                }
             }
-            let inputs = stmt.inputs.iter().map(|input| self.sel(input)).collect();
-            let outputs = stmt.outputs.iter().map(|_| self.gen_temp_name()).collect();
-            let s = stmt.to_stmt(outputs, inputs);
-            let id = self.seq.len();
-            self.cache.insert(Rc::as_ptr(stmt), id);
-            self.seq.try_push(s).unwrap();
-            id
-        }
-    }
-    let mut ser = Ser::default();
-    ser.state(state);
-    ser.seq
-}
+            fn sel(&mut self, sel: &Selector) -> String {
+                let idx = match sel.output {
+                    0 => "".to_string(),
+                    n => format!(".{n}"),
+                };
+                format!("{}{idx}", self.stmt(&sel.stmt))
+            }
+            fn stmt(&mut self, stmt: &Rc<Statement>) -> String {
+                let key = Rc::as_ptr(stmt);
+                if let Some(name) = self.cache.get(&key) {
+                    return name.to_string();
+                }
 
-#[test]
-fn dfg_round_trip() {
-    let text = "\
-1 5 ra = input 0;
-1 64 delta = input 1;
-1 5 rd = input 2;
-1 0 unused = const 0;
-1 64 base = read X ra;
-1 64 addr = op add_64 base delta;
-1 64 val = env load64 addr;
-1 = write X rd val;
-";
-    // Reorder basing on dataflow, remove unused pure statement.
-    let text_expected = "\
-1 5 t0 = input 0;
-1 64 t1 = read X t0;
-1 64 t2 = input 1;
-1 64 t3 = op add_64 t1 t2;
-1 64 t4 = env load64 t3;
-1 5 t5 = input 2;
-1 = write X t5 t4;
-";
-    let ir = StatementSeq::parse(text).unwrap();
-    let dfg = lira2dfg(&ir, |kind| ["input", "op", "const"].contains(&kind));
-    let ir = dfg2lira(&dfg);
-    let text2 = ir.to_string();
-    for stmt in ir.iter() {
-        eprintln!("{stmt}");
+                let inputs: Vec<_> = stmt.inputs.iter().map(|sel| self.sel(sel)).collect();
+                let inputs = inputs.join(" ");
+                let inputs = format!("[{inputs}]");
+                let implicit = match &stmt.implicit {
+                    Implicit::Pure => "(pure)".to_string(),
+                    Implicit::Implicit(state) => format!("(implicit {})", self.state(state)),
+                    Implicit::ImplicitRead(state) => {
+                        format!("(implicit_read {})", self.state(state))
+                    }
+                };
+                let name = self.gen_temp_name();
+                let outputs = format!("{:?}", stmt.outputs);
+                eprintln!(
+                    "statement {name:>3} = {} {:<4}  {:<8} {:<4}  {inputs:<20} {implicit}",
+                    stmt.shape, outputs, stmt.kind, stmt.spec
+                );
+
+                self.cache.insert(key, name.clone());
+                name
+            }
+        }
+        let mut ser = Ser::default();
+        eprintln!("_dbg_print");
+        ser.state(self);
+        eprintln!();
     }
-    assert_eq!(text2, text_expected);
 }

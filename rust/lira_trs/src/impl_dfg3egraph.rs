@@ -1,330 +1,200 @@
 use std::rc::Rc;
 
 use ahash::AHashMap;
-use du_utils_slist::{SList, slist};
-use egglog::*;
-use egglog::{extract::DefaultCost, prelude::*};
+use dateg::{ContainerVec, TokenOpaque};
+use dateg_extractors::dag::IndexFor;
 
 use crate::{
-    dfg::{self, Statement},
-    egraph::{EGraph, Quoted},
+    dfg::{self, Implicit},
+    theory,
 };
 
-impl EGraph {
-    pub fn new_dfg() -> Self {
-        let mut r = Self::default();
-
-        // Add sorts
-        r.execute_many(&slist![(
-            (sort Statement)
-            (datatype State (state_initial) (state_after Statement))
-            (datatype Selector (sel i64 Statement))
-            (datatype Shape (shape i64) (shape_dynamic i64 String))
-            (sort Outputs)
-            (sort Inputs)
-            (datatype Implicit (pure) (implicit State))
-            (constructor stmt (Shape Outputs String String Inputs Implicit) Statement)
-        )]);
-        for i in 0..4 {
-            r.add_constructor(format!("out{i}"), &vec!["i64"; i], "Outputs");
+impl dfg::State {
+    pub fn to_egraph(&self, lira: &mut theory::Lira) -> TokenOpaque<theory::State> {
+        struct Ser<'a> {
+            lira: &'a mut theory::Lira,
+            cache: AHashMap<*const dfg::Statement, TokenOpaque<theory::Stmt>>,
         }
-        for i in 0..10 {
-            r.add_constructor(format!("in{i}"), &vec!["Selector"; i], "Inputs");
+        impl Ser<'_> {
+            fn state(&mut self, state: &dfg::State) -> TokenOpaque<theory::State> {
+                match state {
+                    dfg::State::Initial => self.lira.state_initial(),
+                    dfg::State::After(statement) => {
+                        let stmt = self.stmt(statement);
+                        let state_after = self.lira.state_after;
+                        self.lira.row_add(state_after, (stmt,))
+                    }
+                }
+            }
+            fn sel(&mut self, sel: &dfg::Selector) -> TokenOpaque<theory::Value> {
+                let stmt = self.stmt(&sel.stmt);
+                let output = self.lira.add_primitive_value(sel.output);
+                let sel = self.lira.sel;
+                let r = self.lira.row_add(sel, (output, stmt));
+                r
+            }
+            fn stmt(&mut self, stmt: &Rc<dfg::Statement>) -> TokenOpaque<theory::Stmt> {
+                if let Some(token) = self.cache.get(&Rc::as_ptr(stmt)) {
+                    return *token;
+                }
+
+                let shape = self
+                    .lira
+                    .add_primitive_value(theory::Shape(stmt.shape.clone()));
+
+                let outputs = theory::OutputsMany(stmt.outputs.clone());
+                let outputs = self.lira.add_primitive_value(outputs);
+                let out_many = self.lira.out_many;
+                let outputs = self.lira.row_add(out_many, (outputs,));
+
+                let inputs =
+                    ContainerVec(stmt.inputs.iter().map(|input| self.sel(input)).collect());
+                let inputs = self.lira.add_container_value(inputs);
+                let in_many = self.lira.in_many;
+                let inputs = self.lira.row_add(in_many, (inputs,));
+
+                let kind = self.lira.add_primitive_value(stmt.kind.to_string());
+                let spec = self.lira.add_primitive_value(stmt.spec.to_string());
+
+                let token = match &stmt.implicit {
+                    dfg::Implicit::Pure => {
+                        let stmt = self.lira.stmt_p;
+                        self.lira
+                            .row_add(stmt, (shape, outputs, kind, spec, inputs))
+                    }
+                    dfg::Implicit::ImplicitRead(state) => {
+                        let state = self.state(state);
+                        let stmt = self.lira.stmt_r;
+                        self.lira
+                            .row_add(stmt, (shape, outputs, kind, spec, inputs, state))
+                    }
+                    dfg::Implicit::Implicit(state) => {
+                        let state = self.state(state);
+                        let stmt = self.lira.stmt_w;
+                        self.lira
+                            .row_add(stmt, (shape, outputs, kind, spec, inputs, state))
+                    }
+                };
+
+                self.cache.insert(Rc::as_ptr(stmt), token);
+                token
+            }
         }
-
-        // Add global variables namespaces
-        r.add_function("universe_state", &["String"], "State", None);
-        r.add_function("universe_stmt", &["String"], "Statement", None);
-
+        let mut ser = Ser {
+            lira,
+            cache: Default::default(),
+        };
+        let r = ser.state(self);
         r
     }
 
-    pub fn add_dfg(&mut self, state: &dfg::State, name: &str) {
-        let mut ser = Ser {
-            eg: self,
-            cache: Default::default(),
-        };
-        let finish = ser.state(state);
-        self.execute(slist![(set(universe_state {Quoted(name)})[[finish]])]);
-    }
+    pub fn from_egraph(lira: &theory::Lira, state: TokenOpaque<theory::State>) -> Self {
+        let index = lira.extract(state);
 
-    // Note: it's very inefficient to call this function many times.
-    pub fn get_dfg(&mut self, name: &str) -> dfg::State {
-        self.extract(|_| 1).get_dfg(name)
-    }
-    // Note: it's very inefficient to call this function many times.
-    pub fn get_dfg_with(&mut self, name: &str, f: impl Fn(&str) -> u64 + 'static) -> dfg::State {
-        self.extract(f).get_dfg(name)
-    }
-
-    pub fn extract(&mut self, f: impl Fn(&str) -> u64 + 'static) -> Extracted {
-        let extractor = egglog::extract::Extractor::compute_costs_from_rootsorts(
-            None,
-            self._inner(),
-            CostModel(f),
-        );
-
-        let rel = "universe_state";
-        let func = self._inner().get_function(rel).unwrap();
-        assert_eq!(func.schema().input.len(), 1);
-        let sort_input = func.schema().input[0].clone();
-        let sort_output = func.schema().output.clone();
-
-        let results = query(
-            self._inner_mut(),
-            &[("k", sort_input.clone()), ("v", sort_output.clone())],
-            facts![(= (universe_state k) v)],
-        )
-        .unwrap();
-
-        let mut td = egglog::TermDag::default();
-        let mut index = AHashMap::new();
-        for row in results.iter() {
-            let [key, value] = row.try_into().unwrap();
-            let (_, tid) = extractor
-                .extract_best_with_sort(self._inner(), &mut td, value, sort_output.clone())
-                .unwrap();
-            let key = self
-                ._inner()
-                .value_to_base::<egglog::sort::S>(key)
-                .to_string();
-            index.insert(key, tid);
+        struct Des<'a> {
+            lira: &'a theory::Lira,
+            index: theory::Index,
+            cache: AHashMap<TokenOpaque<theory::Stmt>, Rc<dfg::Statement>>,
         }
-
-        Extracted { td, index }
-    }
-}
-
-pub struct Extracted {
-    td: TermDag,
-    index: AHashMap<String, TermId>,
-}
-
-impl Extracted {
-    pub fn get_dfg(&self, name: &str) -> dfg::State {
-        let &term_id = self.index.get(name).unwrap_or_else(|| panic!("no {name}"));
-        let mut des = Des {
-            td: &self.td,
-            stmt_cache: AHashMap::new(),
-        };
-        des.state(term_id)
-    }
-}
-
-struct CostModel<F: Fn(&str) -> u64>(F);
-impl<F: Fn(&str) -> u64> egglog::extract::CostModel<DefaultCost> for CostModel<F> {
-    fn fold(&self, _: &str, children_cost: &[DefaultCost], head_cost: DefaultCost) -> DefaultCost {
-        use egglog::extract::Cost as _;
-        children_cost.iter().fold(head_cost, |a, b| a.combine(b))
-    }
-    fn enode_cost(
-        &self,
-        _: &prelude::EGraph,
-        func: &Function,
-        _: &egglog::FunctionRow,
-    ) -> DefaultCost {
-        (self.0)(func.name())
-    }
-    fn base_value_cost(
-        &self,
-        egraph: &prelude::EGraph,
-        sort: &ArcSort,
-        value: Value,
-    ) -> DefaultCost {
-        use egglog::extract::Cost as _;
-        if sort.name() == "String" {
-            let s: egglog::sort::S = egraph.value_to_base(value);
-            return (self.0)(s.as_str());
-        }
-        DefaultCost::unit()
-    }
-}
-
-struct Ser<'a> {
-    eg: &'a mut EGraph,
-    cache: AHashMap<*const Statement, String>,
-}
-
-impl Ser<'_> {
-    fn state(&mut self, state: &dfg::State) -> SList {
-        match state {
-            dfg::State::Initial => slist![(state_initial)],
-            dfg::State::After(statement) => {
-                let bound = self.stmt(statement);
-                slist![(state_after (universe_stmt {Quoted(bound)}))]
+        impl Des<'_> {
+            fn state(&mut self, state: TokenOpaque<theory::State>) -> dfg::State {
+                match self.index.value(state) {
+                    theory::EState::Initial() => dfg::State::Initial,
+                    theory::EState::StateAfter(stmt) => dfg::State::After(self.stmt(stmt)),
+                }
             }
-        }
-    }
-    fn sel(&mut self, sel: &dfg::Selector) -> SList {
-        let name = self.stmt(&sel.stmt);
-        slist![(sel {sel.output} (universe_stmt {Quoted(name)}))]
-    }
-    fn stmt(&mut self, stmt: &Rc<Statement>) -> String {
-        if let Some(name) = self.cache.get(&Rc::as_ptr(stmt)) {
-            return name.to_string();
-        }
-        let shape = match &stmt.shape.lanes_mult {
-            Some(mult) => slist![(shape_dynamic {stmt.shape.lanes_base} {Quoted(mult)})],
-            None => slist![(shape {stmt.shape.lanes_base})],
-        };
-        let outputs = slist![
-            ({ format!("out{}", stmt.outputs.len()) }[stmt.outputs.iter().map(|o| slist![{ o }])])
-        ];
-        let inputs: Vec<_> = stmt.inputs.iter().map(|sel| self.sel(sel)).collect();
-        let inputs = slist![({ format!("in{}", inputs.len()) }[inputs])];
-        let implicit = match &stmt.implicit {
-            Some(imp) => slist![(implicit {self.state(imp)})],
-            None => slist![(pure)],
-        };
-
-        let name = self.eg.gen_temp_name("add_dfg_stmt");
-        self.eg.execute(slist![
-            (set (universe_stmt {Quoted(&name)})
-                (stmt
-                    [[shape, outputs]]
-                    {Quoted(&stmt.kind)} {Quoted(&stmt.spec)}
-                    [[inputs, implicit]]
-                )
-            )
-        ]);
-        self.cache.insert(Rc::as_ptr(stmt), name.clone());
-        name
-    }
-}
-
-struct Des<'a> {
-    td: &'a TermDag,
-    stmt_cache: AHashMap<TermId, Rc<dfg::Statement>>,
-}
-
-impl<'a> Des<'a> {
-    fn state(&mut self, t: TermId) -> dfg::State {
-        match self.td.get(t) {
-            Term::App(sym, children) if sym.as_str() == "state_initial" => dfg::State::Initial,
-            Term::App(sym, children) if sym.as_str() == "state_after" => {
-                let stmt = self.stmt(children[0]);
-                dfg::State::After(stmt)
-            }
-            other => panic!("expected state, got {:?}", other),
-        }
-    }
-
-    fn stmt(&mut self, t: TermId) -> Rc<dfg::Statement> {
-        if let Some(stmt) = self.stmt_cache.get(&t) {
-            return stmt.clone();
-        }
-
-        match self.td.get(t) {
-            Term::App(sym, children) if sym.as_str() == "stmt" => {
-                let shape = self.shape(children[0]);
-                let outputs = self.outputs(children[1]);
-                let kind = self.lit_string(children[2]);
-                let spec = self.lit_string(children[3]);
-                let inputs = self.inputs(children[4]);
-                let implicit = self.implicit(children[5]);
-
+            fn stmt(&mut self, stmt: TokenOpaque<theory::Stmt>) -> Rc<dfg::Statement> {
+                if let Some(stmt) = self.cache.get(&stmt) {
+                    return stmt.clone();
+                }
+                let (shape, outputs, kind, spec, inputs, implicit) = match self.index.value(stmt) {
+                    theory::EStmt::StmtP(h, o, k, s, i) => (h, o, k, s, i, dfg::Implicit::Pure),
+                    theory::EStmt::StmtR(h, o, k, s, i, state) => {
+                        (h, o, k, s, i, Implicit::ImplicitRead(self.state(state)))
+                    }
+                    theory::EStmt::StmtW(h, o, k, s, i, state) => {
+                        (h, o, k, s, i, dfg::Implicit::Implicit(self.state(state)))
+                    }
+                };
                 let statement = Rc::new(dfg::Statement {
-                    shape,
-                    outputs,
-                    kind,
-                    spec,
-                    inputs,
+                    shape: shape.get(self.lira).0,
+                    outputs: self.index.value(outputs).0.get(self.lira).0,
+                    kind: kind.get(self.lira),
+                    spec: spec.get(self.lira),
+                    inputs: {
+                        let inputs = self.index.value(inputs).0.get(self.lira);
+                        inputs.0.iter().map(|&value| self.value(value)).collect()
+                    },
                     implicit,
                 });
-                self.stmt_cache.insert(t, statement.clone());
+                self.cache.insert(stmt, statement.clone());
                 statement
             }
-            other => panic!("expected stmt, got {:?}", other),
-        }
-    }
-
-    fn shape(&mut self, t: TermId) -> lira::Shape {
-        match self.td.get(t) {
-            Term::App(sym, children) if sym.as_str() == "shape" => {
-                let lanes_base = self.lit_usize(children[0]);
-                lira::Shape {
-                    lanes_base,
-                    lanes_mult: None,
-                }
+            fn value(&mut self, value: TokenOpaque<theory::Value>) -> dfg::Selector {
+                let theory::EValue(idx, stmt) = self.index.value(value);
+                let output = idx.get(self.lira);
+                let stmt = self.stmt(stmt);
+                dfg::Selector { stmt, output }
             }
-            Term::App(sym, children) if sym.as_str() == "shape_dynamic" => {
-                let lanes_base = self.lit_usize(children[0]);
-                let lanes_mult = Some(self.lit_string(children[1]));
-                lira::Shape {
-                    lanes_base,
-                    lanes_mult,
-                }
-            }
-            other => panic!("expected shape, got {:?}", other),
         }
-    }
 
-    fn outputs(&mut self, t: TermId) -> Vec<usize> {
-        match self.td.get(t) {
-            Term::App(sym, children) if sym.as_str().starts_with("out") => {
-                let mut out = Vec::new();
-                for &child in children {
-                    out.push(self.lit_usize(child));
-                }
-                out
-            }
-            other => panic!("expected outputs, got {:?}", other),
+        Des {
+            lira,
+            index,
+            cache: Default::default(),
         }
+        .state(state)
     }
+}
 
-    fn inputs(&mut self, t: TermId) -> Vec<dfg::Selector> {
-        match self.td.get(t) {
-            Term::App(sym, children) if sym.as_str().starts_with("in") => {
-                let mut inputs = Vec::new();
-                for &child in children {
-                    inputs.push(self.selector(child));
-                }
-                inputs
-            }
-            other => panic!("expected inputs, got {:?}", other),
-        }
-    }
+#[cfg(test)]
+fn optimize(
+    ir: &lira::StatementSeq,
+    post_init: impl FnOnce(&mut theory::Lira),
+) -> lira::StatementSeq {
+    let dfg = dfg::State::from_lira(&ir, |kind| match kind {
+        "input" | "op" | "const" => dfg::ImplicitKind::Pure,
+        _ => dfg::ImplicitKind::Implicit,
+    });
 
-    fn implicit(&mut self, t: TermId) -> Option<dfg::State> {
-        match self.td.get(t) {
-            Term::App(sym, children) if sym.as_str() == "pure" => None,
-            Term::App(sym, children) if sym.as_str() == "implicit" => {
-                let state = self.state(children[0]);
-                Some(state)
-            }
-            other => panic!("expected implicit, got {:?}", other),
-        }
-    }
+    let mut lira = theory::Lira::default();
+    let state = dfg.to_egraph(&mut lira);
+    post_init(&mut lira);
+    let dfg = dfg::State::from_egraph(&lira, state);
 
-    fn selector(&mut self, t: TermId) -> dfg::Selector {
-        match self.td.get(t) {
-            Term::App(sym, children) if sym.as_str() == "sel" => {
-                let output = self.lit_usize(children[0]);
-                let stmt = self.stmt(children[1]);
-                dfg::Selector { output, stmt }
-            }
-            other => panic!("expected sel, got {:?}", other),
-        }
-    }
+    dfg._dbg_print();
 
-    fn lit_usize(&self, t: TermId) -> usize {
-        match self.td.get(t) {
-            Term::Lit(ast::Literal::Int(n)) => *n as usize,
-            other => panic!("expected i64 literal, got {:?}", other),
-        }
+    let ir = dfg.to_lira();
+    for stmt in ir.iter() {
+        eprintln!("{stmt};");
     }
+    ir
+}
 
-    fn lit_string(&self, t: TermId) -> String {
-        match self.td.get(t) {
-            Term::Lit(ast::Literal::String(s)) => s.to_string(),
-            other => panic!("expected string literal, got {:?}", other),
-        }
-    }
+#[test]
+fn dfg3egraph_simple() {
+    let input = "\
+1 64 a = get a;
+1 64 b = get b;
+1 64 val = op add_64 a b;
+1 = output _ val;
+";
+    // Variable renaming
+    let expected = "\
+1 64 t0 = get a;
+1 64 t1 = get b;
+1 64 t2 = op add_64 t0 t1;
+1 = output _ t2;
+";
+
+    let ir = lira::StatementSeq::parse(input).unwrap();
+    let output = optimize(&ir, |_| {}).to_string();
+    assert_eq!(output, expected);
 }
 
 #[test]
 fn dfg3egraph() {
-    let text = "\
+    let input = "\
 1 64 a = get a;
 1 64 b = get b;
 1 64 add_a_b = op add_64 a b;
@@ -333,41 +203,39 @@ fn dfg3egraph() {
 1 = output _ val;
 ";
     // Optimize. Note, that commutativity is necessary
-    let text_expected = "\
+    let expected = "\
 1 64 t0 = get a;
 1 64 t1 = get b;
 1 = output _ t0;
 ";
-    let ir = lira::StatementSeq::parse(text).unwrap();
-    let dfg = dfg::lira2dfg(&ir, |kind| ["input", "op", "const"].contains(&kind));
 
-    let mut eg = EGraph::new_dfg();
-    eg.add_dfg(&dfg, "test");
+    let ir = lira::StatementSeq::parse(input).unwrap();
+    let output = optimize(&ir, |lira| {
+        let stmt_pure = lira.stmt_p;
+        let sel = lira.sel;
+        let in2 = lira.in2;
+        let s_op = lira.s_op;
+        let c0 = lira.c0;
 
-    eg.add_ruleset("opt");
-    // Add commutativity
-    eg.add_rule(
-        "opt",
-        slist![(("=" e (stmt h o {Quoted("op")} {Quoted("add_64")} (in2 a b) m)))],
-        slist![(("union" e (stmt h o {Quoted("op")} {Quoted("add_64")} (in2 b a) m)))],
-    );
-    // (add (sub a b) b) -> a
-    eg.add_rule(
-        "opt",
-        slist![(("=" e (sel 0 (stmt h o {Quoted("op")} {Quoted("add_64")} (in2
-            (sel 0 (stmt h o {Quoted("op")} {Quoted("sub_64")} (in2 a b) (pure)))
-            b
-        ) (pure)))))],
-        slist![(("union" e a))],
-    );
-    eg.run_ruleset_saturate("opt");
+        dateg::execute! {lira;
+            (val add (String) {"add_64".to_string()})
+            (val sub (String) {"sub_64".to_string()})
 
-    let dfg = eg.get_dfg("test");
-
-    let ir = dfg::dfg2lira(&dfg);
-    let text2 = ir.to_string();
-    for stmt in ir.iter() {
-        eprintln!("{stmt}");
-    }
-    assert_eq!(text2, text_expected);
+            (set_ruleset_active "opt")
+            (rewrite
+                (stmt_pure h o {s_op} {add} (in2 a b))
+                (stmt_pure h o {s_op} {add} (in2 b a))
+            )
+            (rewrite
+                (sel {c0} (stmt_pure h o {s_op} {add} (in2
+                    (sel {c0} (stmt_pure h o {s_op} {sub} (in2 a b))) b
+                )))
+                a
+            )
+        }
+        while lira.run_ruleset("factorize vector arguments") {}
+        while lira.run_ruleset("opt") {}
+    })
+    .to_string();
+    assert_eq!(output, expected);
 }
