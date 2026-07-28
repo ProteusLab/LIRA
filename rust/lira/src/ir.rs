@@ -3,13 +3,13 @@ use std::ops::Deref;
 use ahash::AHashMap;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Shape {
     pub lanes_base: usize,
     pub lanes_mult: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Statement {
     pub shape: Shape,
     pub outputs: Vec<String>,
@@ -19,10 +19,22 @@ pub struct Statement {
     pub inputs: Vec<String>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct StatementSeq {
     stmts: Vec<Statement>,
     stmts_index: AHashMap<String, usize>,
+}
+
+impl Shape {
+    pub fn new(lanes_base: usize, lanes_mult: Option<String>) -> Self {
+        Self {
+            lanes_base,
+            lanes_mult,
+        }
+    }
+    pub fn new_scalar() -> Self {
+        Self::new(1, None)
+    }
 }
 
 impl Statement {

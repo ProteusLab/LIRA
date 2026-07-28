@@ -5,8 +5,8 @@ edition = "2024"
 
 [dependencies]
 lira = { path = "../lira" }
-egglog = { git = "https://github.com/egraphs-good/egglog.git", rev = "b27cd225ba3d646ff4327d076c7def665eadb232" }
-du_utils_slist = { git = "https://github.com/belovdv/du_utils.git", rev = "7813f1156c67ceb806682e18a61ce805982388a7" }
+dateg = { git = "https://github.com/belovdv/dateg.git", rev = "7abed4601dc5987263f3517bd829f6f1afd833e6" }
+dateg_extractors = { git = "https://github.com/belovdv/dateg.git", rev = "7abed4601dc5987263f3517bd829f6f1afd833e6" }
 log = { workspace = true }
 anyhow = { workspace = true }
 ahash = { workspace = true }
