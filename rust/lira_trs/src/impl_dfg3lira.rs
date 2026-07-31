@@ -47,11 +47,11 @@ impl State {
             let implicit = match implicit(&stmt.kind) {
                 ImplicitKind::Pure => Implicit::Pure,
                 ImplicitKind::Implicit => Implicit::Implicit(std::mem::take(&mut state)),
-                ImplicitKind::ImplicitRead => Implicit::ImplicitRead(std::mem::take(&mut state)),
+                ImplicitKind::ImplicitRead => Implicit::ImplicitRead(state.clone()),
             };
-            let is_pure = matches!(implicit, Implicit::Pure);
+            let is_write = matches!(implicit, Implicit::Implicit(_));
             let s = Rc::new(Statement::from_lira(stmt, inputs, implicit));
-            if !is_pure {
+            if is_write {
                 state = State::After(s.clone())
             }
             for o in 0..stmt.outputs.len() {
@@ -129,12 +129,12 @@ impl State {
                 if let Some(outputs) = self.cache.get(&Rc::as_ptr(stmt)) {
                     return *outputs;
                 }
+                let inputs = stmt.inputs.iter().map(|input| self.sel(input)).collect();
                 match &stmt.implicit {
                     Implicit::Pure => {}
                     Implicit::Implicit(state) => self.state(state),
                     Implicit::ImplicitRead(_) => {}
                 }
-                let inputs = stmt.inputs.iter().map(|input| self.sel(input)).collect();
                 let outputs = stmt.outputs.iter().map(|_| self.gen_temp_name()).collect();
                 let s = stmt.to_lira(outputs, inputs);
                 let id = self.seq.len();
@@ -172,13 +172,13 @@ fn dfg_round_trip() {
 ";
     // Reorder basing on dataflow, remove unused pure statement.
     let text_expected = "\
-1 5 t0 = input 0;
-1 64 t1 = read X t0;
-1 64 t2 = input 1;
-1 64 t3 = op add_64 t1 t2;
-1 64 t4 = env load64 t3;
-1 5 t5 = input 2;
-1 = write X t5 t4;
+1 5 t0 = input 2;
+1 5 t1 = input 0;
+1 64 t2 = read X t1;
+1 64 t3 = input 1;
+1 64 t4 = op add_64 t2 t3;
+1 64 t5 = env load64 t4;
+1 = write X t0 t5;
 ";
     let ir = StatementSeq::parse(text).unwrap();
     let dfg = State::from_lira(&ir, |kind| match kind {

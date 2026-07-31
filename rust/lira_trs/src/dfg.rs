@@ -12,6 +12,7 @@ pub struct Statement {
     pub implicit: Implicit,
 }
 
+#[derive(Debug, Clone, Copy)]
 pub enum ImplicitKind {
     Pure,
     Implicit,
@@ -31,7 +32,7 @@ pub struct Selector {
     pub output: usize,
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub enum State {
     #[default]
     Initial,
@@ -45,11 +46,13 @@ impl Selector {
 }
 
 impl State {
-    pub fn _dbg_print(&self) {
+    pub fn _dbg_print(&self, align_kind: usize, align_spec: usize) {
         #[derive(Default)]
         struct Ser {
             counter: usize,
             cache: AHashMap<*const Statement, String>,
+            align_kind: usize,
+            align_spec: usize,
         }
         impl Ser {
             fn gen_temp_name(&mut self) -> String {
@@ -88,9 +91,10 @@ impl State {
                 };
                 let name = self.gen_temp_name();
                 let outputs = format!("{:?}", stmt.outputs);
+                let shape = format!("{}", stmt.shape);
                 eprintln!(
-                    "statement {name:>3} = {} {:<4}  {:<8} {:<4}  {inputs:<20} {implicit}",
-                    stmt.shape, outputs, stmt.kind, stmt.spec
+                    "statement {name:>3} = {:<4} {:<4}  {:<4$} {:<5$}  {inputs:<20} {implicit}",
+                    shape, outputs, stmt.kind, stmt.spec, self.align_kind, self.align_spec,
                 );
 
                 self.cache.insert(key, name.clone());
@@ -98,6 +102,8 @@ impl State {
             }
         }
         let mut ser = Ser::default();
+        ser.align_kind = align_kind;
+        ser.align_spec = align_spec;
         eprintln!("_dbg_print");
         ser.state(self);
         eprintln!();

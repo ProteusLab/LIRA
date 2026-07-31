@@ -35,6 +35,12 @@ impl Shape {
     pub fn new_scalar() -> Self {
         Self::new(1, None)
     }
+    pub fn new_dyn(base: usize, mult: impl ToString) -> Self {
+        Self::new(base, Some(mult.to_string()))
+    }
+    pub fn is_scalar(&self) -> bool {
+        self.lanes_base == 1 && self.lanes_mult.is_none()
+    }
 }
 
 impl Statement {
