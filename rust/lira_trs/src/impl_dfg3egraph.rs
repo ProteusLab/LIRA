@@ -90,10 +90,16 @@ impl dfg::State {
 
     pub fn from_egraph(lira: &theory::Lira, state: TokenOpaque<theory::State>) -> Self {
         let index = lira.extract(state);
-
+        Self::from_egraph_index(lira, &index, state)
+    }
+    pub fn from_egraph_index(
+        lira: &theory::Lira,
+        index: &theory::Index,
+        state: TokenOpaque<theory::State>,
+    ) -> Self {
         struct Des<'a> {
             lira: &'a theory::Lira,
-            index: theory::Index,
+            index: &'a theory::Index,
             cache: AHashMap<TokenOpaque<theory::Stmt>, Rc<dfg::Statement>>,
         }
         impl Des<'_> {
@@ -154,6 +160,7 @@ fn optimize(
 ) -> lira::StatementSeq {
     let dfg = dfg::State::from_lira(&ir, |kind| match kind {
         "input" | "op" | "const" => dfg::ImplicitKind::Pure,
+        "read" => dfg::ImplicitKind::ImplicitRead,
         _ => dfg::ImplicitKind::Implicit,
     });
 
@@ -162,7 +169,7 @@ fn optimize(
     post_init(&mut lira);
     let dfg = dfg::State::from_egraph(&lira, state);
 
-    dfg._dbg_print();
+    dfg._dbg_print(8, 4);
 
     let ir = dfg.to_lira();
     for stmt in ir.iter() {

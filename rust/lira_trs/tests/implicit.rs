@@ -7,7 +7,7 @@ fn optimize(ir: &lira::StatementSeq) -> lira::StatementSeq {
         "read" => dfg::ImplicitKind::ImplicitRead,
         _ => dfg::ImplicitKind::Implicit,
     });
-    dfg._dbg_print();
+    dfg._dbg_print(8, 4);
 
     let mut lira = Lira::default();
     let state = dfg.to_egraph(&mut lira);
@@ -55,7 +55,7 @@ fn optimize(ir: &lira::StatementSeq) -> lira::StatementSeq {
     while lira.run_ruleset("de factorize vector arguments") {}
 
     let dfg = dfg::State::from_egraph(&lira, state);
-    dfg._dbg_print();
+    dfg._dbg_print(8, 4);
 
     let ir = dfg.to_lira();
     for stmt in ir.iter() {
@@ -102,12 +102,12 @@ fn implicit2() {
 1 = write gpr rb va;
 ";
     let expected = "\
-1 5 t0 = input ra;
-1 64 t1 = input v;
-1 = write gpr t0 t1;
-1 5 t2 = input rb;
-1 64 t3 = input u;
+1 5 t0 = input rb;
+1 64 t1 = input u;
+1 5 t2 = input ra;
+1 64 t3 = input v;
 1 = write gpr t2 t3;
+1 = write gpr t0 t1;
 ";
 
     let ir = lira::StatementSeq::parse(input).unwrap();
