@@ -19,7 +19,7 @@ pub struct Statement {
     pub inputs: Vec<String>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct StatementSeq {
     stmts: Vec<Statement>,
     stmts_index: AHashMap<String, usize>,
@@ -74,5 +74,24 @@ impl Deref for StatementSeq {
 
     fn deref(&self) -> &Self::Target {
         &self.stmts
+    }
+}
+
+impl Serialize for StatementSeq {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for StatementSeq {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        StatementSeq::parse(&s).map_err(serde::de::Error::custom)
     }
 }

@@ -23,7 +23,6 @@ pub struct Operation {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct Register {
     pub name: String,
-    #[serde(default)]
     pub attributes: Vec<String>,
 }
 
@@ -106,7 +105,6 @@ pub struct Instruction {
     pub operand_sizes: Vec<usize>,
     pub operand_names: Vec<String>,
     pub encoding: InstructionEncoding,
-    #[serde(skip)]
     pub semantic: StatementSeq,
 }
 
