@@ -72,7 +72,7 @@ operations:
       - 32
     outputs:
       - 32
-    semantic_base: :add
+    semantic_base: add
     semantic_func:
     semantic_func_128:
     semantic_table:
@@ -83,7 +83,7 @@ operations:
       - 32
     outputs:
       - 32
-    semantic_base: :lsr
+    semantic_base: lsr
     semantic_func:
     semantic_func_128:
     semantic_table:
@@ -93,7 +93,7 @@ operations:
       - 32
     outputs:
       - 5
-    semantic_base: :extract_low
+    semantic_base: extract_low
     semantic_func:
     semantic_func_128:
     semantic_table:
@@ -103,7 +103,7 @@ operations:
       - 5
     outputs:
       - 32
-    semantic_base: :extend_zero
+    semantic_base: extend_zero
     semantic_func:
     semantic_func_128:
     semantic_table:
@@ -113,7 +113,7 @@ operations:
       - 1
     outputs:
       - 32
-    semantic_base: :extend_zero
+    semantic_base: extend_zero
     semantic_func:
     semantic_func_128:
     semantic_table:
@@ -124,7 +124,7 @@ operations:
       - 32
     outputs:
       - 32
-    semantic_base: :lsl
+    semantic_base: lsl
     semantic_func:
     semantic_func_128:
     semantic_table:
@@ -135,7 +135,7 @@ operations:
       - 32
     outputs:
       - 32
-    semantic_base: :orr
+    semantic_base: orr
     semantic_func:
     semantic_func_128:
     semantic_table:
@@ -146,7 +146,7 @@ operations:
       - 32
     outputs:
       - 32
-    semantic_base: :and
+    semantic_base: and
     semantic_func:
     semantic_func_128:
     semantic_table:
@@ -157,7 +157,7 @@ operations:
       - 32
     outputs:
       - 1
-    semantic_base: :eq
+    semantic_base: eq
     semantic_func:
     semantic_func_128:
     semantic_table:
@@ -169,7 +169,7 @@ operations:
       - 32
     outputs:
       - 32
-    semantic_base: :select
+    semantic_base: select
     semantic_func:
     semantic_func_128:
     semantic_table:
@@ -179,7 +179,7 @@ operations:
       - 32
     outputs:
       - 1
-    semantic_base: :extract_low
+    semantic_base: extract_low
     semantic_func:
     semantic_func_128:
     semantic_table:
@@ -189,7 +189,7 @@ operations:
       - 1
     outputs:
       - 13
-    semantic_base: :extend_zero
+    semantic_base: extend_zero
     semantic_func:
     semantic_func_128:
     semantic_table:
@@ -199,7 +199,7 @@ operations:
       - 13
     outputs:
       - 32
-    semantic_base: :extend_zero
+    semantic_base: extend_zero
     semantic_func:
     semantic_func_128:
     semantic_table:
@@ -209,7 +209,7 @@ operations:
       - 32
     outputs:
       - 6
-    semantic_base: :extract_low
+    semantic_base: extract_low
     semantic_func:
     semantic_func_128:
     semantic_table:
@@ -219,7 +219,7 @@ operations:
       - 6
     outputs:
       - 13
-    semantic_base: :extend_zero
+    semantic_base: extend_zero
     semantic_func:
     semantic_func_128:
     semantic_table:
@@ -229,7 +229,7 @@ operations:
       - 32
     outputs:
       - 4
-    semantic_base: :extract_low
+    semantic_base: extract_low
     semantic_func:
     semantic_func_128:
     semantic_table:
@@ -239,7 +239,7 @@ operations:
       - 4
     outputs:
       - 13
-    semantic_base: :extend_zero
+    semantic_base: extend_zero
     semantic_func:
     semantic_func_128:
     semantic_table:
@@ -249,7 +249,7 @@ operations:
       - 32
     outputs:
       - 13
-    semantic_base: :extract_low
+    semantic_base: extract_low
     semantic_func:
     semantic_func_128:
     semantic_table:
@@ -259,7 +259,7 @@ operations:
       - 13
     outputs:
       - 32
-    semantic_base: :extend_sign
+    semantic_base: extend_sign
     semantic_func:
     semantic_func_128:
     semantic_table:
@@ -269,7 +269,7 @@ operations:
       - 32
     outputs:
       - 12
-    semantic_base: :extract_low
+    semantic_base: extract_low
     semantic_func:
     semantic_func_128:
     semantic_table:
@@ -279,7 +279,7 @@ operations:
       - 12
     outputs:
       - 32
-    semantic_base: :extend_sign
+    semantic_base: extend_sign
     semantic_func:
     semantic_func_128:
     semantic_table:
@@ -289,7 +289,7 @@ operations:
       - 32
     outputs:
       - 16
-    semantic_base: :extract_low
+    semantic_base: extract_low
     semantic_func:
     semantic_func_128:
     semantic_table:
@@ -299,7 +299,7 @@ operations:
       - 32
     outputs:
       - 7
-    semantic_base: :extract_low
+    semantic_base: extract_low
     semantic_func:
     semantic_func_128:
     semantic_table:
@@ -309,7 +309,7 @@ operations:
       - 7
     outputs:
       - 12
-    semantic_base: :extend_zero
+    semantic_base: extend_zero
     semantic_func:
     semantic_func_128:
     semantic_table:
@@ -319,7 +319,7 @@ operations:
       - 12
     outputs:
       - 32
-    semantic_base: :extend_zero
+    semantic_base: extend_zero
     semantic_func:
     semantic_func_128:
     semantic_table:
@@ -329,7 +329,7 @@ operations:
       - 5
     outputs:
       - 12
-    semantic_base: :extend_zero
+    semantic_base: extend_zero
     semantic_func:
     semantic_func_128:
     semantic_table:
@@ -339,7 +339,7 @@ operations:
       - 16
     outputs:
       - 32
-    semantic_base: :extend_sign
+    semantic_base: extend_sign
     semantic_func:
     semantic_func_128:
     semantic_table:
@@ -349,7 +349,7 @@ operations:
       - 16
     outputs:
       - 32
-    semantic_base: :extend_zero
+    semantic_base: extend_zero
     semantic_func:
     semantic_func_128:
     semantic_table:
