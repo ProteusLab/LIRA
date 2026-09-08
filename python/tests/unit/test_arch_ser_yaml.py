@@ -238,3 +238,29 @@ class TestArchSerYaml:
         assert arch2.instructions[1].name == "lhu"
         assert arch2.instructions[2].name == "beq"
         assert arch2.instructions[3].name == "ecall"
+
+    def test_typed_operation_reconstruction(self, rv32i_arch_lite, tmp_yaml):
+        arch_ser_yaml.write_arch(rv32i_arch_lite, tmp_yaml)
+        arch2 = arch_ser_yaml.read_arch(tmp_yaml)
+
+        ops = {op.name: op for op in arch2.operations}
+        assert isinstance(ops["lsr_32"], Lsr)
+        assert isinstance(ops["extract_low_32_to_5"], ExtractLow)
+        assert isinstance(ops["extend_sign_12_to_32"], ExtendSign)
+        assert isinstance(ops["extend_zero_5_to_32"], ExtendZero)
+        assert isinstance(ops["add_32"], Add)
+
+    def test_typed_ops_registry(self):
+        from python.lira.arch import Operation
+        from python.lira.ir_ops import BaseOp
+
+        assert Operation.typed_ops[BaseOp.ADD] is Add
+        assert Operation.typed_ops[BaseOp.LSR] is Lsr
+        assert Operation.typed_ops[BaseOp.SELECT] is Select
+        assert Operation.typed_ops[BaseOp.EXTEND_SIGN] is ExtendSign
+        # Every registered class declares the matching op_base ClassVar.
+        for op_base, cls in Operation.typed_ops.items():
+            assert issubclass(cls, Operation)
+            assert getattr(cls, "op_base", None) == op_base
+        # Every BaseOp member is registered (and vice versa).
+        assert {member for member in BaseOp} == set(Operation.typed_ops)

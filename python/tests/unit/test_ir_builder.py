@@ -246,3 +246,31 @@ class TestArchBuilder:
         assert len(arch.environment_functions) == 1
         assert len(arch.operations) == 1
         assert len(arch.snippets) == 1
+
+
+def test_stmt_kinds():
+    from python.lira.ir_std import (
+        CondEnv,
+        StmtConst,
+        StmtDynConst,
+        StmtEnv,
+        StmtInput,
+        StmtOp,
+        StmtOutput,
+        StmtRead,
+        StmtWrite,
+        StmtKind,
+    )
+
+    assert StmtInput.kind is StmtKind.INPUT
+    assert StmtOutput.kind is StmtKind.OUTPUT
+    assert StmtConst.kind is StmtKind.CONST
+    assert StmtOp.kind is StmtKind.OP
+    assert StmtRead.kind is StmtKind.READ
+    assert StmtWrite.kind is StmtKind.WRITE
+    assert StmtEnv.kind is StmtKind.ENV
+    assert CondEnv.kind is StmtKind.COND_ENV
+    assert StmtDynConst.kind is StmtKind.DYN_CONST
+
+    for member in StmtKind:
+        assert member == member.value
