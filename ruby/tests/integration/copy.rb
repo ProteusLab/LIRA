@@ -7,5 +7,4 @@ if ARGV.length != 2
   exit 1
 end
 
-arch = ArchSerYaml.read_arch(ARGV[0])
-ArchSerYaml.write_arch(arch, ARGV[1])
+ArchSerYaml.copy_arch(ARGV[0], ARGV[1])

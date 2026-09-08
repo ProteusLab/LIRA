@@ -17,7 +17,7 @@ class TestIntegration < Minitest::Test
 
     raw = "#{OUTPUT}.raw"
     begin
-      ArchSerYaml.write_arch(ref_arch, raw)
+      ArchSerYaml.copy_arch(REFERENCE, raw)
       system('python3', CANONICALIZE, raw, OUTPUT)
       File.delete(raw)
 

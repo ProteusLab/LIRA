@@ -19,7 +19,7 @@ RS_OUT = File.join(TMP_DIR, 'rs_native.yaml')
 class TestCrossLanguage < Minitest::Test
   def test_ruby_write_and_self_read
     arch = ArchSerYaml.read_arch(REFERENCE)
-    ArchSerYaml.write_arch(arch, RB_OUT)
+    ArchSerYaml.copy_arch(REFERENCE, RB_OUT)
     arch2 = ArchSerYaml.read_arch(RB_OUT)
     assert_equal arch, arch2
   end
@@ -27,7 +27,7 @@ class TestCrossLanguage < Minitest::Test
   def test_ruby_reads_python
     skip('py_native.yaml not found') unless File.exist?(PY_OUT)
     arch = ArchSerYaml.read_arch(PY_OUT)
-    ArchSerYaml.write_arch(arch, File.join(TMP_DIR, 'rb_from_py.yaml'))
+    ArchSerYaml.copy_arch(PY_OUT, File.join(TMP_DIR, 'rb_from_py.yaml'))
     arch2 = ArchSerYaml.read_arch(File.join(TMP_DIR, 'rb_from_py.yaml'))
     assert_equal arch, arch2
   end
@@ -35,7 +35,7 @@ class TestCrossLanguage < Minitest::Test
   def test_ruby_reads_rust
     skip('rs_native.yaml not found') unless File.exist?(RS_OUT)
     arch = ArchSerYaml.read_arch(RS_OUT)
-    ArchSerYaml.write_arch(arch, File.join(TMP_DIR, 'rb_from_rs.yaml'))
+    ArchSerYaml.copy_arch(RS_OUT, File.join(TMP_DIR, 'rb_from_rs.yaml'))
     arch2 = ArchSerYaml.read_arch(File.join(TMP_DIR, 'rb_from_rs.yaml'))
     assert_equal arch, arch2
   end
