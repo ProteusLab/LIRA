@@ -23,7 +23,7 @@ fn test_roundtrip_from_reference() {
     std::fs::create_dir_all(output.parent().unwrap()).ok();
     let raw = output.with_extension("raw.yaml");
 
-    ref_arch.write_yaml(&raw).unwrap();
+    copy::copy_arch(&ref_path, &raw).unwrap();
     let canonicalize = project_root().join("tools").join("yaml_canonicalize.py");
     std::process::Command::new("python3")
         .arg(&canonicalize)

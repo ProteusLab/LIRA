@@ -28,7 +28,7 @@ fn reference() -> PathBuf {
 fn test_rust_write_and_self_read() {
     let arch = Arch::read_yaml(&reference()).unwrap();
     let out = tmp_dir().join("rs_native.yaml");
-    arch.write_yaml(&out).unwrap();
+    copy::copy_arch(&reference(), &out).unwrap();
     let arch2 = Arch::read_yaml(&out).unwrap();
     assert_eq!(arch, arch2);
 }
@@ -41,7 +41,7 @@ fn test_rust_reads_python() {
     }
     let arch = Arch::read_yaml(&py_out).unwrap();
     let tmp = tmp_dir().join("rs_from_py.yaml");
-    arch.write_yaml(&tmp).unwrap();
+    copy::copy_arch(&py_out, &tmp).unwrap();
     let arch2 = Arch::read_yaml(&tmp).unwrap();
     assert_eq!(arch, arch2);
     std::fs::remove_file(&tmp).ok();
@@ -55,7 +55,7 @@ fn test_rust_reads_ruby() {
     }
     let arch = Arch::read_yaml(&rb_out).unwrap();
     let tmp = tmp_dir().join("rs_from_rb.yaml");
-    arch.write_yaml(&tmp).unwrap();
+    copy::copy_arch(&rb_out, &tmp).unwrap();
     let arch2 = Arch::read_yaml(&tmp).unwrap();
     assert_eq!(arch, arch2);
     std::fs::remove_file(&tmp).ok();

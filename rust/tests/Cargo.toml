@@ -13,4 +13,5 @@ path = "integration/main.rs"
 
 [dependencies]
 lira = { path = "../lira" }
+copy = { path = "../copy" }
 anyhow = { workspace = true }
