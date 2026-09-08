@@ -519,6 +519,7 @@ def from_operation(op: Operation) -> Operation:
         return op
 
     typed = cls.from_operation(op)
+    typed.semantic_base = op.semantic_base
     typed.attributes = op.attributes
     typed.semantic_func = op.semantic_func
     typed.semantic_func_128 = op.semantic_func_128

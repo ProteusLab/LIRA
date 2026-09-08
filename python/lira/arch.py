@@ -103,8 +103,6 @@ class Instruction(Component):
 
     semantic: StatementSeq
 
-    asm_str: str = ""
-    feature: str = ""
 
 @dataclass
 class Arch(Component):

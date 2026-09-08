@@ -249,6 +249,8 @@ class TestArchSerYaml:
         assert isinstance(ops["extend_sign_12_to_32"], ExtendSign)
         assert isinstance(ops["extend_zero_5_to_32"], ExtendZero)
         assert isinstance(ops["add_32"], Add)
+        assert ops["add_32"].semantic_base == "add"
+        assert ops["lsr_32"].semantic_base == "lsr"
 
     def test_typed_ops_registry(self):
         from python.lira.arch import Operation
