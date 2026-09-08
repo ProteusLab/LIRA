@@ -15,7 +15,7 @@ def test_integration():
     output.parent.mkdir(exist_ok=True)
     raw = output.with_suffix(".raw.yaml")
     try:
-        arch_ser_yaml.write_arch(ref_arch, raw)
+        arch_ser_yaml.copy_arch(REFERENCE, raw)
         subprocess.run(
             [sys.executable, str(CANONICALIZE), str(raw), str(output)], check=True
         )
