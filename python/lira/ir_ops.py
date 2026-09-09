@@ -497,7 +497,7 @@ class Select(Operation):
 def from_operation(op: Operation) -> Operation:
     sb = op.semantic_base
 
-    if not isinstance(sb, str):
+    if sb is None:
         return op
 
     cls = Operation.typed_ops.get(sb)

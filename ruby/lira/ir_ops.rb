@@ -403,7 +403,7 @@ module Lira
 
   def self.from_operation(op)
     sb = op.semantic_base
-    return op unless sb.is_a?(String)
+    return op if sb.nil?
 
     cls = Operation.typed_ops[sb]
     raise "Unexpected operation with semantic #{sb}" if cls.nil?
