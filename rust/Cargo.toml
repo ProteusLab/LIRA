@@ -12,7 +12,6 @@ ahash = "0.8.12"
 regex = "1.12.3"
 serde = "1.0.228"
 serde_yaml = "0.8"
-yaml-rust = "0.4"
 
 [profile.work]
 inherits = "dev"

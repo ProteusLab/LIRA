@@ -10,4 +10,3 @@ ahash = { workspace = true, features = ["serde"] }
 regex = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_yaml = { workspace = true }
-yaml-rust = { workspace = true }
