@@ -54,11 +54,9 @@ def check_bits(value: int, name: str):
 
 
 class UnaryOp(Operation):
-    def __init__(self, out_bits: int, name: str = ""):
-        if not name:
-            name = f"{self.op_base.value}_{out_bits}"
+    def __init__(self, out_bits: int):
         super().__init__(
-            name=name,
+            name=f"{self.op_base.value}_{out_bits}",
             attributes=[],
             inputs=[out_bits],
             outputs=[out_bits],
@@ -82,11 +80,9 @@ class UnaryOp(Operation):
 
 
 class BinaryOp(Operation):
-    def __init__(self, bits: int, name: str = ""):
-        if not name:
-            name = f"{self.op_base.value}_{bits}"
+    def __init__(self, bits: int):
         super().__init__(
-            name=name,
+            name=f"{self.op_base.value}_{bits}",
             attributes=[],
             inputs=[bits, bits],
             outputs=[bits],
@@ -111,11 +107,9 @@ class BinaryOp(Operation):
 
 
 class CmpOp(Operation):
-    def __init__(self, bits: int, out_bits: int = 1, name: str = ""):
-        if not name:
-            name = f"{self.op_base.value}_{bits}"
+    def __init__(self, bits: int, out_bits: int = 1):
         super().__init__(
-            name=name,
+            name=f"{self.op_base.value}_{bits}",
             attributes=[],
             inputs=[bits, bits],
             outputs=[out_bits],
@@ -140,11 +134,9 @@ class CmpOp(Operation):
 
 
 class TernaryOp(Operation):
-    def __init__(self, bits: int, name: str = ""):
-        if not name:
-            name = f"{self.op_base.value}_{bits}"
+    def __init__(self, bits: int):
         super().__init__(
-            name=name,
+            name=f"{self.op_base.value}_{bits}",
             attributes=[],
             inputs=[bits, bits, bits],
             outputs=[bits],
@@ -169,11 +161,9 @@ class TernaryOp(Operation):
 
 
 class ExtendOp(Operation):
-    def __init__(self, in_bits: int, out_bits: int, name: str = ""):
-        if not name:
-            name = f"{self.op_base.value}_{in_bits}_to_{out_bits}"
+    def __init__(self, in_bits: int, out_bits: int):
         super().__init__(
-            name=name,
+            name=f"{self.op_base.value}_{in_bits}_to_{out_bits}",
             attributes=[],
             inputs=[in_bits],
             outputs=[out_bits],
@@ -197,11 +187,9 @@ class ExtendOp(Operation):
 
 
 class ExtractLowOp(Operation):
-    def __init__(self, in_bits: int, out_bits: int, name: str = ""):
-        if not name:
-            name = f"{self.op_base.value}_{in_bits}_to_{out_bits}"
+    def __init__(self, in_bits: int, out_bits: int):
         super().__init__(
-            name=name,
+            name=f"{self.op_base.value}_{in_bits}_to_{out_bits}",
             attributes=[],
             inputs=[in_bits],
             outputs=[out_bits],
@@ -514,9 +502,10 @@ def from_operation(op: Operation) -> Operation:
 
     cls = Operation.typed_ops.get(sb)
     if cls is None:
-        return op
+        assert False, f"Unexpected operation with semantic {sb}"
 
     typed = cls.from_operation(op)
+
     typed.semantic_base = op.semantic_base
     typed.attributes = op.attributes
     typed.semantic_func = op.semantic_func

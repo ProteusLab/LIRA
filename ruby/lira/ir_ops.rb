@@ -45,10 +45,9 @@ module Lira
   end
 
   class UnaryOp < Operation
-    def initialize(out_bits, name: nil)
+    def initialize(out_bits)
       semantic_base = self.class.op_base
-      name ||= "#{semantic_base}_#{out_bits}"
-      super(name, [], [out_bits], [out_bits],
+      super("#{semantic_base}_#{out_bits}", [], [out_bits], [out_bits],
             semantic_base: semantic_base, semantic_func: nil, semantic_table: nil)
       check_signature
     end
@@ -65,10 +64,9 @@ module Lira
   end
 
   class BinaryOp < Operation
-    def initialize(bits, name: nil)
+    def initialize(bits)
       semantic_base = self.class.op_base
-      name ||= "#{semantic_base}_#{bits}"
-      super(name, [], [bits, bits], [bits],
+      super("#{semantic_base}_#{bits}", [], [bits, bits], [bits],
             semantic_base: semantic_base, semantic_func: nil, semantic_table: nil)
       check_signature
     end
@@ -88,10 +86,9 @@ module Lira
   end
 
   class CmpOp < Operation
-    def initialize(bits, out_bits = 1, name: nil)
+    def initialize(bits, out_bits = 1)
       semantic_base = self.class.op_base
-      name ||= "#{semantic_base}_#{bits}"
-      super(name, [], [bits, bits], [out_bits],
+      super("#{semantic_base}_#{bits}", [], [bits, bits], [out_bits],
             semantic_base: semantic_base, semantic_func: nil, semantic_table: nil)
       check_signature
     end
@@ -109,10 +106,9 @@ module Lira
   end
 
   class TernaryOp < Operation
-    def initialize(bits, name: nil)
+    def initialize(bits)
       semantic_base = self.class.op_base
-      name ||= "#{semantic_base}_#{bits}"
-      super(name, [], [bits, bits, bits], [bits],
+      super("#{semantic_base}_#{bits}", [], [bits, bits, bits], [bits],
             semantic_base: semantic_base, semantic_func: nil, semantic_table: nil)
       check_signature
     end
@@ -133,10 +129,9 @@ module Lira
   end
 
   class ExtendOp < Operation
-    def initialize(in_bits, out_bits, name: nil)
+    def initialize(in_bits, out_bits)
       semantic_base = self.class.op_base
-      name ||= "#{semantic_base}_#{in_bits}_to_#{out_bits}"
-      super(name, [], [in_bits], [out_bits],
+      super("#{semantic_base}_#{in_bits}_to_#{out_bits}", [], [in_bits], [out_bits],
             semantic_base: semantic_base, semantic_func: nil, semantic_table: nil)
       check_signature
     end
@@ -153,10 +148,9 @@ module Lira
   end
 
   class ExtractLowOp < Operation
-    def initialize(in_bits, out_bits, name: nil)
+    def initialize(in_bits, out_bits)
       semantic_base = self.class.op_base
-      name ||= "#{semantic_base}_#{in_bits}_to_#{out_bits}"
-      super(name, [], [in_bits], [out_bits],
+      super("#{semantic_base}_#{in_bits}_to_#{out_bits}", [], [in_bits], [out_bits],
             semantic_base: semantic_base, semantic_func: nil, semantic_table: nil)
       check_signature
     end
@@ -412,7 +406,7 @@ module Lira
     return op unless sb.is_a?(String)
 
     cls = Operation.typed_ops[sb]
-    return op if cls.nil?
+    raise "Unexpected operation with semantic #{sb}" if cls.nil?
 
     typed = cls.from_operation(op)
     typed.semantic_base = op.semantic_base
