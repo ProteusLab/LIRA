@@ -2,9 +2,10 @@
     "scopeName" : "source.dsl_lira",
     "fileTypes" : ["dsl_lira"],
     "name"      : "dsl_lira",
-    "patterns"  : [ {"include": "#line"} ],
+    "patterns"  : [ {"include": "#comment"}, {"include": "#line"} ],
     "repository": {
-        "line": {
+        "comment": {"name": "comment.line.number-sign.dsl_lira", "match": "^\\s*#.*$"},
+        "line"   : {
             "begin"        : "^(\\d+)([A-Za-z]*)\\s+",
             "beginCaptures": { "1": {"name": "entity.name.type"}, "2": {"name": "keyword.other"} },
             "end"          : ";?$",
@@ -19,7 +20,7 @@
                     ]
                 },
                 {
-                    "match"   : "=\\s+(\\S+)\\s+(\\S+)",
+                    "match"   : "=\\s+(\\S+)\\s+([^\\s;]+)",
                     "captures": { "1": {"name": "keyword.other"}, "2": {"name": "entity.name.type"} }
                 },
                 {"match": "\\w+", "name": "variable.other"}
