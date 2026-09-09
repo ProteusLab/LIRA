@@ -511,8 +511,6 @@ def from_operation(op: Operation) -> Operation:
 
     if not isinstance(sb, str):
         return op
-    if sb.startswith(":"):
-        sb = sb[1:]
 
     cls = Operation.typed_ops.get(sb)
     if cls is None:
