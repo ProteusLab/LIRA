@@ -140,4 +140,40 @@ class TestArchSerYaml < Minitest::Test
     arch2 = ArchSerYaml.read_arch(@tmp.path)
     assert_equal arch, arch2
   end
+
+  def test_typed_operation_reconstruction
+    ab = ArchBuilder.new('typed_ops', [])
+    ab.add_operation(Lsr.new(32))
+    ab.add_operation(ExtractLow.new(32, 5))
+    ab.add_operation(ExtendSign.new(12, 32))
+    ab.add_operation(ExtendZero.new(5, 32))
+    ab.add_operation(Add.new(32))
+    arch = ab.build
+    ArchSerYaml.write_arch(arch, @tmp.path)
+    arch2 = ArchSerYaml.read_arch(@tmp.path)
+
+    ops = arch2.operations.to_h { |op| [op.name, op] }
+    assert_instance_of Lsr, ops['lsr_32']
+    assert_instance_of ExtractLow, ops['extract_low_32_to_5']
+    assert_instance_of ExtendSign, ops['extend_sign_12_to_32']
+    assert_instance_of ExtendZero, ops['extend_zero_5_to_32']
+    assert_instance_of Add, ops['add_32']
+    assert_equal 'add', ops['add_32'].semantic_base
+    assert_equal 'lsr', ops['lsr_32'].semantic_base
+  end
+
+  def test_typed_ops_registry
+    assert_same Add, Operation.typed_ops[BaseOp::ADD]
+    assert_same Lsr, Operation.typed_ops[BaseOp::LSR]
+    assert_same Select, Operation.typed_ops[BaseOp::SELECT]
+    assert_same ExtendSign, Operation.typed_ops[BaseOp::EXTEND_SIGN]
+
+    Operation.typed_ops.each do |op_base, cls|
+      assert_operator cls, :<, Operation
+      assert_equal op_base, cls.op_base
+    end
+
+    expected = BaseOp.constants.map { |c| BaseOp.const_get(c) }.sort
+    assert_equal expected, Operation.typed_ops.keys.sort
+  end
 end
