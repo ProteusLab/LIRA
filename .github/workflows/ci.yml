@@ -16,7 +16,7 @@ jobs:
       - run: pip install ruamel.yaml pytest pytest-cov
       - run: pip install -e python/
       - name: Run Python tests (unit, integration, coverage)
-        run: bash scripts/python.sh
+        run: bash tests/scripts/python.sh
 
   ruby-tests:
     runs-on: ubuntu-latest
@@ -31,7 +31,7 @@ jobs:
       - run: pip install ruamel.yaml
       - run: gem install minitest simplecov
       - name: Run Ruby tests (unit, integration, coverage)
-        run: bash scripts/ruby.sh
+        run: bash tests/scripts/ruby.sh
 
   rust-tests:
     runs-on: ubuntu-latest
@@ -44,7 +44,7 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y z3
       - run: pip install ruamel.yaml
       - name: Run Rust tests (integration, with coverage)
-        run: bash scripts/rust.sh
+        run: bash tests/scripts/rust.sh
 
   cross-language:
     runs-on: ubuntu-latest
