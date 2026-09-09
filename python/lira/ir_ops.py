@@ -107,12 +107,12 @@ class BinaryOp(Operation):
 
 
 class CmpOp(Operation):
-    def __init__(self, bits: int, out_bits: int = 1):
+    def __init__(self, bits: int):
         super().__init__(
             name=f"{self.op_base.value}_{bits}",
             attributes=[],
             inputs=[bits, bits],
-            outputs=[out_bits],
+            outputs=[1],
             semantic_base=self.op_base.value,
             semantic_func=None,
             semantic_table=None,
@@ -126,7 +126,6 @@ class CmpOp(Operation):
     def _check_signature(self):
         check_bits(self.inputs[0], "input[0]")
         check_bits(self.inputs[1], "input[1]")
-        check_bits(self.outputs[0], "output")
         if self.inputs[0] != self.inputs[1]:
             raise TypeCheckError(
                 f"CmpOp: input widths differ {self.inputs[0]} != {self.inputs[1]}"
@@ -440,14 +439,14 @@ class AddOverflow(CmpOp):
     op_base: ClassVar[BaseOp] = BaseOp.ADD_OVERFLOW
 
     def __init__(self, bits: int):
-        super().__init__(bits, out_bits=1)
+        super().__init__(bits)
 
 
 class SubOverflow(CmpOp):
     op_base: ClassVar[BaseOp] = BaseOp.SUB_OVERFLOW
 
     def __init__(self, bits: int):
-        super().__init__(bits, out_bits=1)
+        super().__init__(bits)
 
 
 class DivU(TernaryOp):

@@ -86,9 +86,9 @@ module Lira
   end
 
   class CmpOp < Operation
-    def initialize(bits, out_bits = 1)
+    def initialize(bits)
       semantic_base = self.class.op_base
-      super("#{semantic_base}_#{bits}", [], [bits, bits], [out_bits],
+      super("#{semantic_base}_#{bits}", [], [bits, bits], [1],
             semantic_base: semantic_base, semantic_func: nil, semantic_table: nil)
       check_signature
     end
@@ -100,7 +100,6 @@ module Lira
     def check_signature
       raise TypeCheckError, 'input[0] must be positive' unless inputs[0] > 0
       raise TypeCheckError, 'input[1] must be positive' unless inputs[1] > 0
-      raise TypeCheckError, 'output must be positive' unless outputs[0] > 0
       raise TypeCheckError, 'input widths differ' unless inputs[0] == inputs[1]
     end
   end
@@ -361,13 +360,13 @@ module Lira
   class AddOverflow < CmpOp
     self.op_base = BaseOp::ADD_OVERFLOW
 
-    def initialize(bits); super(bits, out_bits: 1); end
+    def initialize(bits); super(bits); end
   end
 
   class SubOverflow < CmpOp
     self.op_base = BaseOp::SUB_OVERFLOW
 
-    def initialize(bits); super(bits, out_bits: 1); end
+    def initialize(bits); super(bits); end
   end
 
   class DivU < TernaryOp
