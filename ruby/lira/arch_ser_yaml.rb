@@ -56,5 +56,9 @@ module Lira
       data = YAML.load_file(filepath)
       from_serializable(Arch, data)
     end
+
+    def copy_arch(src, dst)
+      write_arch(read_arch(src), dst)
+    end
   end
 end

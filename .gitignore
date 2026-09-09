@@ -38,3 +38,4 @@ htmlcov/
 *.log
 .env
 build/
+tmp/

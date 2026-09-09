@@ -55,3 +55,7 @@ def read_arch(filepath: Path) -> Arch:
     with open(filepath, 'r', encoding='utf-8') as f:
         data = yaml.load(f)
     return from_serializable(Arch, data)
+
+
+def copy_arch(path_input: Path, path_output: Path) -> None:
+    write_arch(read_arch(path_input), path_output)
