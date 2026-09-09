@@ -1,5 +1,6 @@
 $LOAD_PATH.unshift(File.expand_path('../..', __dir__))
 require 'lira'
+require 'lira/ir_std'
 require 'minitest/autorun'
 
 include Lira
@@ -213,5 +214,21 @@ class TestArchBuilder < Minitest::Test
     assert_equal 1, arch.environment_functions.length
     assert_equal 1, arch.operations.length
     assert_equal 1, arch.snippets.length
+  end
+
+  def test_stmt_kinds
+    assert_equal StmtKind::INPUT, StmtInput.kind
+    assert_equal StmtKind::OUTPUT, StmtOutput.kind
+    assert_equal StmtKind::CONST, StmtConst.kind
+    assert_equal StmtKind::OP, StmtOp.kind
+    assert_equal StmtKind::READ, StmtRead.kind
+    assert_equal StmtKind::WRITE, StmtWrite.kind
+    assert_equal StmtKind::ENV, StmtEnv.kind
+    assert_equal StmtKind::COND_ENV, CondEnv.kind
+    assert_equal StmtKind::DYN_CONST, StmtDynConst.kind
+
+    StmtKind.constants.each do |c|
+      assert_equal StmtKind.const_get(c), c.to_s.downcase
+    end
   end
 end

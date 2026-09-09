@@ -1,7 +1,9 @@
-from typing import Optional
+from typing import ClassVar, Dict, Optional, TypeVar
 from dataclasses import dataclass, field
 
 from .ir import *
+
+OperationT = TypeVar("OperationT", bound="Operation")
 
 @dataclass
 class Component:
@@ -23,6 +25,22 @@ class Operation(Component):
     semantic_func: Optional[str] = None # Snippet
     semantic_func_128: Optional[str] = None # Snippet
     semantic_table: Optional[str] = None # TableInt
+
+    typed_ops: ClassVar[Dict[str, type]] = {}
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        sb = getattr(cls, "op_base", None)
+        if sb is not None:
+            Operation.typed_ops[sb] = cls
+
+    def _restore_from(self: "OperationT", other: "Operation") -> "OperationT":
+        self.name = other.name
+        self.attributes = other.attributes
+        self.semantic_func = other.semantic_func
+        self.semantic_func_128 = other.semantic_func_128
+        self.semantic_table = other.semantic_table
+        return self
 
     def __eq__(self, other):
         if not isinstance(other, Operation):
@@ -94,6 +112,7 @@ class Instruction(Component):
     # syntax: InstructionSyntax
 
     semantic: StatementSeq
+
 
 @dataclass
 class Arch(Component):
