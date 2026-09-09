@@ -11,10 +11,11 @@ CANONICALIZE = PROJECT_ROOT / "tools" / "yaml_canonicalize.py"
 def test_integration():
     ref_arch = arch_ser_yaml.read_arch(REFERENCE)
 
-    output = PROJECT_ROOT / "python" / "tests" / "integration" / "integration.yaml"
+    output = PROJECT_ROOT / "tmp" / "integration.yaml"
+    output.parent.mkdir(exist_ok=True)
     raw = output.with_suffix(".raw.yaml")
     try:
-        arch_ser_yaml.write_arch(ref_arch, raw)
+        arch_ser_yaml.copy_arch(REFERENCE, raw)
         subprocess.run(
             [sys.executable, str(CANONICALIZE), str(raw), str(output)], check=True
         )

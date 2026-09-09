@@ -6,5 +6,5 @@ from .arch import (
     Instruction, InstructionEncoding, Snippet,
     SystemRegister, SystemRegisterField, TableInt,
 )
-from .arch_ser_yaml import write_arch, read_arch
+from .arch_ser_yaml import write_arch, read_arch, copy_arch
 from .ir_ops import BaseOp
