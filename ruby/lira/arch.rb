@@ -59,6 +59,15 @@ module Lira
       end
     end
 
+    def restore_from(other)
+      self.name = other.name
+      self.attributes = other.attributes
+      self.semantic_func = other.semantic_func
+      self.semantic_func_128 = other.semantic_func_128
+      self.semantic_table = other.semantic_table
+      self
+    end
+
     def initialize(name, attributes, inputs, outputs,
                    semantic_base: nil, semantic_func: nil, semantic_func_128: nil, semantic_table: nil)
       super(name, attributes)

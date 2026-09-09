@@ -68,7 +68,7 @@ class UnaryOp(Operation):
 
     @classmethod
     def from_operation(cls, op: Operation) -> "UnaryOp":
-        return cls(op.inputs[0])
+        return cls(op.inputs[0])._restore_from(op)
 
     def _check_signature(self):
         check_bits(self.inputs[0], "input width")
@@ -94,7 +94,7 @@ class BinaryOp(Operation):
 
     @classmethod
     def from_operation(cls, op: Operation) -> "BinaryOp":
-        return cls(op.inputs[0])
+        return cls(op.inputs[0])._restore_from(op)
 
     def _check_signature(self):
         for i, inp in enumerate(self.inputs):
@@ -121,7 +121,7 @@ class CmpOp(Operation):
 
     @classmethod
     def from_operation(cls, op: Operation) -> "CmpOp":
-        return cls(op.inputs[0])
+        return cls(op.inputs[0])._restore_from(op)
 
     def _check_signature(self):
         check_bits(self.inputs[0], "input[0]")
@@ -148,7 +148,7 @@ class TernaryOp(Operation):
 
     @classmethod
     def from_operation(cls, op: Operation) -> "TernaryOp":
-        return cls(op.inputs[0])
+        return cls(op.inputs[0])._restore_from(op)
 
     def _check_signature(self):
         for i, inp in enumerate(self.inputs):
@@ -175,7 +175,7 @@ class ExtendOp(Operation):
 
     @classmethod
     def from_operation(cls, op: Operation) -> "ExtendOp":
-        return cls(op.inputs[0], op.outputs[0])
+        return cls(op.inputs[0], op.outputs[0])._restore_from(op)
 
     def _check_signature(self):
         check_bits(self.inputs[0], "input")
@@ -201,7 +201,7 @@ class ExtractLowOp(Operation):
 
     @classmethod
     def from_operation(cls, op: Operation) -> "ExtractLowOp":
-        return cls(op.inputs[0], op.outputs[0])
+        return cls(op.inputs[0], op.outputs[0])._restore_from(op)
 
     def _check_signature(self):
         check_bits(self.inputs[0], "input")
@@ -491,7 +491,7 @@ class Select(Operation):
 
     @classmethod
     def from_operation(cls, op: Operation) -> "Select":
-        return cls(op.inputs[1])
+        return cls(op.inputs[1])._restore_from(op)
 
 
 def from_operation(op: Operation) -> Operation:
@@ -504,12 +504,4 @@ def from_operation(op: Operation) -> Operation:
     if cls is None:
         assert False, f"Unexpected operation with semantic {sb}"
 
-    typed = cls.from_operation(op)
-
-    typed.semantic_base = op.semantic_base
-    typed.attributes = op.attributes
-    typed.semantic_func = op.semantic_func
-    typed.semantic_func_128 = op.semantic_func_128
-    typed.semantic_table = op.semantic_table
-
-    return typed
+    return cls.from_operation(op)

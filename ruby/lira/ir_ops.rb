@@ -53,7 +53,7 @@ module Lira
     end
 
     def self.from_operation(op)
-      new(op.inputs[0])
+      new(op.inputs[0]).restore_from(op)
     end
 
     def check_signature
@@ -72,7 +72,7 @@ module Lira
     end
 
     def self.from_operation(op)
-      new(op.inputs[0])
+      new(op.inputs[0]).restore_from(op)
     end
 
     def check_signature
@@ -94,7 +94,7 @@ module Lira
     end
 
     def self.from_operation(op)
-      new(op.inputs[0])
+      new(op.inputs[0]).restore_from(op)
     end
 
     def check_signature
@@ -114,7 +114,7 @@ module Lira
     end
 
     def self.from_operation(op)
-      new(op.inputs[0])
+      new(op.inputs[0]).restore_from(op)
     end
 
     def check_signature
@@ -137,7 +137,7 @@ module Lira
     end
 
     def self.from_operation(op)
-      new(op.inputs[0], op.outputs[0])
+      new(op.inputs[0], op.outputs[0]).restore_from(op)
     end
 
     def check_signature
@@ -156,7 +156,7 @@ module Lira
     end
 
     def self.from_operation(op)
-      new(op.inputs[0], op.outputs[0])
+      new(op.inputs[0], op.outputs[0]).restore_from(op)
     end
 
     def check_signature
@@ -393,7 +393,7 @@ module Lira
     end
 
     def self.from_operation(op)
-      new(op.inputs[1])
+      new(op.inputs[1]).restore_from(op)
     end
 
     def check_signature
@@ -408,12 +408,6 @@ module Lira
     cls = Operation.typed_ops[sb]
     raise "Unexpected operation with semantic #{sb}" if cls.nil?
 
-    typed = cls.from_operation(op)
-    typed.semantic_base = op.semantic_base
-    typed.attributes = op.attributes
-    typed.semantic_func = op.semantic_func
-    typed.semantic_func_128 = op.semantic_func_128
-    typed.semantic_table = op.semantic_table
-    typed
+    cls.from_operation(op)
   end
 end

@@ -176,4 +176,35 @@ class TestArchSerYaml < Minitest::Test
     expected = BaseOp.constants.map { |c| BaseOp.const_get(c) }.sort
     assert_equal expected, Operation.typed_ops.keys.sort
   end
+
+  def test_from_operation_restores_fields
+    op = Operation.new('custom_add', ['volatile'], [32, 32], [32],
+                       semantic_base: 'add', semantic_func: 'add_func',
+                       semantic_func_128: 'add_func_128', semantic_table: 'add_table')
+    typed = Add.from_operation(op)
+    assert_instance_of Add, typed
+    assert_equal 'custom_add', typed.name
+    assert_equal ['volatile'], typed.attributes
+    assert_equal 'add', typed.semantic_base
+    assert_equal 'add_func', typed.semantic_func
+    assert_equal 'add_func_128', typed.semantic_func_128
+    assert_equal 'add_table', typed.semantic_table
+  end
+
+  def test_typed_operation_roundtrip_preserves_fields
+    op = Operation.new('custom_add', ['volatile'], [32, 32], [32],
+                       semantic_base: 'add', semantic_func: 'add_func',
+                       semantic_table: 'add_table')
+    ab = ArchBuilder.new('fields', [])
+    ab.add_operation(op)
+    ArchSerYaml.write_arch(ab.build, @tmp.path)
+    arch2 = ArchSerYaml.read_arch(@tmp.path)
+
+    op2 = arch2.operations[0]
+    assert_instance_of Add, op2
+    assert_equal 'custom_add', op2.name
+    assert_equal ['volatile'], op2.attributes
+    assert_equal 'add_func', op2.semantic_func
+    assert_equal 'add_table', op2.semantic_table
+  end
 end

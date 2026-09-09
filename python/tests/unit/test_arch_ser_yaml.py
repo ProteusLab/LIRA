@@ -5,6 +5,7 @@ import pytest
 
 from python.lira.ir import Shape
 from python.lira.arch import (
+    Operation,
     Register,
     RegisterFile,
     EnvironmentFunction,
@@ -266,3 +267,45 @@ class TestArchSerYaml:
             assert getattr(cls, "op_base", None) == op_base
         # Every BaseOp member is registered (and vice versa).
         assert {member for member in BaseOp} == set(Operation.typed_ops)
+
+    def test_from_operation_restores_fields(self):
+        op = Operation(
+            name="custom_add",
+            attributes=["volatile"],
+            inputs=[32, 32],
+            outputs=[32],
+            semantic_base="add",
+            semantic_func="add_func",
+            semantic_func_128="add_func_128",
+            semantic_table="add_table",
+        )
+        typed = Add.from_operation(op)
+        assert isinstance(typed, Add)
+        assert typed.name == "custom_add"
+        assert typed.attributes == ["volatile"]
+        assert typed.semantic_base == "add"
+        assert typed.semantic_func == "add_func"
+        assert typed.semantic_func_128 == "add_func_128"
+        assert typed.semantic_table == "add_table"
+
+    def test_typed_operation_roundtrip_preserves_fields(self, tmp_yaml):
+        op = Operation(
+            name="custom_add",
+            attributes=["volatile"],
+            inputs=[32, 32],
+            outputs=[32],
+            semantic_base="add",
+            semantic_func="add_func",
+            semantic_table="add_table",
+        )
+        ab = ArchBuilder("fields", [])
+        ab.add_operation(op)
+        arch_ser_yaml.write_arch(ab.build(), tmp_yaml)
+        arch2 = arch_ser_yaml.read_arch(tmp_yaml)
+
+        op2 = arch2.operations[0]
+        assert isinstance(op2, Add)
+        assert op2.name == "custom_add"
+        assert op2.attributes == ["volatile"]
+        assert op2.semantic_func == "add_func"
+        assert op2.semantic_table == "add_table"

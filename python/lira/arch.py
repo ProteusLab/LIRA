@@ -1,7 +1,9 @@
-from typing import ClassVar, Dict, Optional
+from typing import ClassVar, Dict, Optional, TypeVar
 from dataclasses import dataclass, field
 
 from .ir import *
+
+OperationT = TypeVar("OperationT", bound="Operation")
 
 @dataclass
 class Component:
@@ -31,6 +33,14 @@ class Operation(Component):
         sb = getattr(cls, "op_base", None)
         if sb is not None:
             Operation.typed_ops[sb] = cls
+
+    def _restore_from(self: "OperationT", other: "Operation") -> "OperationT":
+        self.name = other.name
+        self.attributes = other.attributes
+        self.semantic_func = other.semantic_func
+        self.semantic_func_128 = other.semantic_func_128
+        self.semantic_table = other.semantic_table
+        return self
 
     def __eq__(self, other):
         if not isinstance(other, Operation):
