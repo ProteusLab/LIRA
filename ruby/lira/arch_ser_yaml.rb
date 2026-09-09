@@ -2,6 +2,7 @@
 require 'yaml'
 require_relative 'ir'
 require_relative 'arch'
+require_relative 'ir_ops'
 
 module Lira
   module ArchSerYaml

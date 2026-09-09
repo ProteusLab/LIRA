@@ -48,6 +48,17 @@ module Lira
   class Operation < Component
     attr_accessor :inputs, :outputs, :semantic_base, :semantic_func, :semantic_func_128, :semantic_table
 
+    @typed_ops = {}
+
+    class << self
+      attr_reader :typed_ops, :op_base
+
+      def op_base=(value)
+        Operation.typed_ops[value] = self
+        @op_base = value
+      end
+    end
+
     def initialize(name, attributes, inputs, outputs,
                    semantic_base: nil, semantic_func: nil, semantic_func_128: nil, semantic_table: nil)
       super(name, attributes)
@@ -84,11 +95,15 @@ module Lira
       semantic_table = hash[:semantic_table] || hash['semantic_table']
       semantic_table = nil if semantic_table == {}
 
-      new(name, attributes, inputs, outputs,
-          semantic_base: semantic_base,
-          semantic_func: semantic_func,
-          semantic_func_128: semantic_func_128,
-          semantic_table: semantic_table)
+      op = new(name, attributes, inputs, outputs,
+               semantic_base: semantic_base,
+               semantic_func: semantic_func,
+               semantic_func_128: semantic_func_128,
+               semantic_table: semantic_table)
+
+      return op unless Lira.respond_to?(:from_operation)
+
+      Lira.from_operation(op)
     end
 
     def ==(other)
