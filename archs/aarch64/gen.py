@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
-"""Generate the LIRA description of the A64 base integer instructions.
+"""Generate the LIRA description of the A64 instructions.
 
 Usage (from the repository root):
     python -m archs.aarch64.gen [--xml <ISA_A64_xml dir>] [--output aarch64.yaml]
+                                [--simgen <subset.yaml>]
+
+`--simgen` also writes the subset that lira-simgen-lib can simulate (see
+`simgen_subset`).
 """
 import argparse
 import subprocess
@@ -187,21 +191,95 @@ def build_arch(xml_dir: Path) -> Arch:
     )
 
 
+# What lira-simgen-lib supports: scalar statements without `fop`, these
+# register files and environment functions, and operations defined by a base
+# or a snippet
+SIMGEN_KINDS = {'input', 'output', 'const', 'dyn_const', 'read', 'write', 'op', 'env', 'cond_env'}
+SIMGEN_RFS = ('X', 'NZCV', 'FPCR', 'FPSR')
+SIMGEN_ENVS = {'pc_read', 'pc_write', 'supervisor_call'} | \
+    {f'mem_{d}_{n}' for d in ('read', 'write') for n in (8, 16, 32, 64, 128)}
+
+
+def simgen_subset(arch: Arch) -> Arch:
+    """The instructions (with the operations and snippets they reach) that
+    lira-simgen-lib can generate a simulator for."""
+    ops = {o.name: o for o in arch.operations}
+    snippets = {s.name: s for s in arch.snippets}
+
+    def seq_ok(seq, used_ops, used_snippets):
+        for st in seq.stmts:
+            if st.kind not in SIMGEN_KINDS or st.shape.lanes_base != 1 or st.shape.lanes_mult:
+                return False
+            if st.kind in ('read', 'write') and st.specifier not in SIMGEN_RFS:
+                return False
+            if st.kind in ('env', 'cond_env') and st.specifier not in SIMGEN_ENVS:
+                return False
+            if st.kind == 'op' and not op_ok(ops[st.specifier], used_ops, used_snippets):
+                return False
+        return True
+
+    def snippet_ok(name, used_ops, used_snippets):
+        if name in used_snippets:
+            return True
+        used_snippets.add(name)
+        return seq_ok(snippets[name].seq, used_ops, used_snippets)
+
+    def op_ok(op, used_ops, used_snippets):
+        if op.name in used_ops:
+            return True
+        used_ops.add(op.name)
+        if op.semantic_table:
+            return False
+        return all(snippet_ok(s, used_ops, used_snippets)
+                   for s in (op.semantic_func, op.semantic_func_128) if s)
+
+    keep, all_ops, all_snippets = [], set(), set()
+    for ins in arch.instructions:
+        used_ops, used_snippets = set(), set()
+        e = ins.encoding
+        refs = [*e.decode, e.encode, e.constraint_decode, e.constraint_encode]
+        if seq_ok(ins.semantic, used_ops, used_snippets) and \
+                all(snippet_ok(r, used_ops, used_snippets) for r in refs if r):
+            keep.append(ins)
+            all_ops |= used_ops
+            all_snippets |= used_snippets
+    used_rfs = {st.specifier for ins in keep for st in ins.semantic.stmts if st.kind in ('read', 'write')}
+    used_envs = {st.specifier for ins in keep for st in ins.semantic.stmts if st.kind in ('env', 'cond_env')}
+    return Arch(
+        name=arch.name,
+        attributes=arch.attributes,
+        register_files=[rf for rf in arch.register_files if rf.name in used_rfs],
+        system_registers=arch.system_registers,
+        environment_functions=[f for f in arch.environment_functions if f.name in used_envs],
+        tables_int=[],
+        operations=[o for o in arch.operations if o.name in all_ops],
+        snippets=[s for s in arch.snippets if s.name in all_snippets],
+        instructions=keep,
+    )
+
+
+def write_yaml(arch: Arch, path: Path):
+    raw = path.with_suffix('.raw.yaml')
+    arch_ser_yaml.write_arch(arch, raw)
+    subprocess.run([sys.executable, str(ROOT / 'tools' / 'yaml_canonicalize.py'),
+                    str(raw), str(path)], check=True)
+    raw.unlink()
+    assert arch_ser_yaml.read_arch(path) == arch, 'YAML round trip mismatch'
+    print(f'{path}: {len(arch.instructions)} instructions, '
+          f'{len(arch.operations)} operations, {len(arch.snippets)} snippets')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[1])
     parser.add_argument('--xml', type=Path, default=DEFAULT_XML)
     parser.add_argument('--output', type=Path, default=HERE / 'aarch64.yaml')
+    parser.add_argument('--simgen', type=Path, help='also write the lira-simgen-lib subset here')
     args = parser.parse_args()
 
     arch = build_arch(args.xml)
-    raw = args.output.with_suffix('.raw.yaml')
-    arch_ser_yaml.write_arch(arch, raw)
-    subprocess.run([sys.executable, str(ROOT / 'tools' / 'yaml_canonicalize.py'),
-                    str(raw), str(args.output)], check=True)
-    raw.unlink()
-    assert arch_ser_yaml.read_arch(args.output) == arch, 'YAML round trip mismatch'
-    print(f'{args.output}: {len(arch.instructions)} instructions, '
-          f'{len(arch.operations)} operations, {len(arch.snippets)} snippets')
+    write_yaml(arch, args.output)
+    if args.simgen:
+        write_yaml(simgen_subset(arch), args.simgen)
 
 
 if __name__ == '__main__':

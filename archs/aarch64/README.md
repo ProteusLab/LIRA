@@ -292,22 +292,29 @@ The other SIMD statements are used as follows:
 
 ### Generated simulator ([lira-simgen-lib](https://github.com/ProteusLab/lira-simgen-lib), `ARCH_TARGET=AArch64`)
 
-Copy `aarch64.yaml` to `lira-simgen-lib/data/AArch64/`, then build the
-`build-interp` and `a64-capi` targets. By default the tests look in
-`../lira-simgen-lib/build/a64/interpreter/`; `$LIRA_A64_SIM` and
-`$LIRA_A64_CAPI` override that.
+simgen does not support `fop` or vector shapes yet, so the simulator is
+generated from a subset of the description. `gen.py --simgen <file>` writes
+the instructions whose semantics use only scalar statements without `fop`, the
+register files `X`, `NZCV`, `FPCR`, `FPSR` and the PC/memory/SVC environment
+functions (currently 287 instructions: base integer, MRS/MSR for NZCV, FPCR and
+FPSR, CRC32, CSSC, FlagM, BC.cond, LDTR/STTR, LDNP/STNP, PRFM):
 
-The simulator is checked against the description it was generated from
-(`lira-simgen-lib/data/AArch64/aarch64.yaml`, or `$LIRA_A64_SIM_YAML`).
-simgen does not support `fop` or vector shapes yet, so it still uses the
-integer description.
+```bash
+python -m archs.aarch64.gen --simgen ../lira-simgen-lib/data/AArch64/aarch64.yaml
+```
+
+Then build the `build-interp` and `a64-capi` targets. By default the tests
+look in `../lira-simgen-lib/build/a64/interpreter/`; `$LIRA_A64_SIM` and
+`$LIRA_A64_CAPI` override that. The simulator is checked against the
+description it was generated from (`lira-simgen-lib/data/AArch64/aarch64.yaml`,
+or `$LIRA_A64_SIM_YAML`).
 
 * `test_simgen.py` loads `liba64-capi` (the generated C++ decoder and
   interpreter, one instruction at a time):
   * The decoder maps every sampled valid word to its own opcode and rejects
     invalid words.
   * The generated C++ matches the host CPU on the same cases as
-    `test_semantics_hw.py`.
+    `test_semantics_hw.py` (X registers, NZCV, FPCR, FPSR and memory).
   * The generated C++ matches the reference interpreter on all encodings,
     with random fields including register 31, branches and literal loads.
 * `test_programs.py` cross-compiles `programs/*.c` (integer algorithms,
