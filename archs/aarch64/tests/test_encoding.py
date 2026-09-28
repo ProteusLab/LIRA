@@ -32,7 +32,7 @@ def _llvm_disasm(words):
     if mc is None:
         pytest.skip('llvm-mc not found')
     text = '\n'.join(' '.join(f'0x{(w >> (8 * i)) & 0xff:02x}' for i in range(4)) for w in words)
-    p = subprocess.run([mc, '--disassemble', '-triple=aarch64', '-M', 'no-aliases'],
+    p = subprocess.run([mc, '--disassemble', '-triple=aarch64', '-mattr=+v8.9a,+fullfp16,+fp16fml,+aes,+sha2', '-M', 'no-aliases'],
                        input=text, capture_output=True, text=True)
     lines = [l.strip() for l in p.stdout.splitlines() if l.strip() and not l.strip().startswith('.')]
     # invalid words produce a warning on stderr and no output line
@@ -45,8 +45,15 @@ LLVM_FORCED_ALIASES = {
     'sbfm': {'sbfx', 'sbfiz', 'asr', 'sxtb', 'sxth', 'sxtw'},
     'ubfm': {'ubfx', 'ubfiz', 'lsl', 'lsr', 'uxtb', 'uxth'},
     'bfm': {'bfi', 'bfxil', 'bfc'},
+    'sys': {'tlbi', 'dc', 'ic', 'at', 'cfp', 'dvp', 'cpp', 'cosp', 'brb', 'trcit', 'gcspushx',
+            'gcspopcx', 'gcspopx', 'gcspushm', 'gcsss1', 'mlbi', 'plbi', 'gic', 'gsb'},
+    'sysl': {'gcspopm', 'gcsss2', 'gicr'},
+    'dup': {'mov'}, 'ins': {'mov'}, 'umov': {'mov'}, 'orr': {'mov'}, 'not': {'mvn'},
     'lslv': {'lsl'}, 'lsrv': {'lsr'}, 'asrv': {'asr'}, 'rorv': {'ror'}, 'nop': {'hint'},
 }
+
+
+OPTIONAL_MNEMONICS = {'rprfm'}      # FEAT_RPRFM
 
 
 def _mnemonic(ins):
@@ -66,7 +73,12 @@ def test_valid_encodings_match_llvm(arch, machine):
     bad = []
     for (name, mn), line, w in zip(expected, lines, words):
         got = line.split()[0].lower()
-        if not (got == mn or got.startswith(mn + '.') or got in LLVM_FORCED_ALIASES.get(mn, ())):
+        # `2` suffix: upper-half forms (e.g. XTN2) of the same encoding
+        # LLVM prints hint-space ops as HINT #n, and names hints of optional
+        # features that the generic HINT (a NOP here) covers
+        hint_space = '_hints' in name and (got == 'hint' or name.startswith('HINT_'))
+        if not (hint_space or got in (mn, mn + '2') or got.startswith(mn + '.')
+                or got in LLVM_FORCED_ALIASES.get(mn, ())):
             bad.append((name, hex(w), line))
     assert not bad
 
@@ -89,4 +101,10 @@ def test_constraint_rejects_match_llvm(arch, machine):
                     break
     assert words
     lines, invalid = _llvm_disasm(words)
-    assert invalid == len(words), lines
+    # LLVM's v8.9 profile also decodes some optional features the description
+    # leaves unallocated
+    decoded = [l for l in lines if l.split()[0] not in OPTIONAL_MNEMONICS
+               # MOPS with Xn = XZR: CONSTRAINED UNPREDICTABLE, the description
+               # chooses UNDEFINED while LLVM still decodes it
+               and not (l.split()[0].startswith(('cpy', 'set')) and 'xzr!' in l)]
+    assert not decoded, decoded

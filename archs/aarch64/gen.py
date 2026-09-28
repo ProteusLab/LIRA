@@ -15,7 +15,7 @@ from python.lira.ir_builder import InstructionBuilder, SnippetBuilder, Value
 from python.lira import arch_ser_yaml
 
 from . import xmlspec
-from .insns import FILES, SEM
+from .insns import EXCLUDE, FILES, SEM, SPECS
 from .lib import Ctx, S
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -52,9 +52,35 @@ def _encode_snippet(ctx: Ctx, e: xmlspec.Encoding) -> str:
     return name
 
 
+def resolve_overlaps(encs: Dict[str, xmlspec.Encoding]):
+    """A more specific encoding wins over a general one it is contained in (the
+    XML's `See(...)`, e.g. HINT vs. PACIASP): the general one excludes it."""
+    all_encs = list(encs.values())
+    for e in all_encs:
+        e.excluded = []
+        for f in all_encs:
+            if f is e or (f.const_mask & e.const_mask) != e.const_mask:
+                continue
+            if f.const_mask != e.const_mask and (f.const_value & e.const_mask) == e.const_value:
+                e.excluded.append((f.const_mask & ~e.const_mask, f.const_value & ~e.const_mask))
+
+
+def _word(s: S, e: xmlspec.Encoding, F) -> Value:
+    """The operand bits of the instruction word (fixed bits are zero)."""
+    acc = s.c(0, 32)
+    for f in e.operands:
+        v = s.zext(F(f.name), 32)
+        acc = s.orr(acc, s.lsl(v, s.c(f.lo, 32)) if f.lo else v)
+    return acc
+
+
 def _validity(s: S, e: xmlspec.Encoding, F, undef) -> Value:
     """1 iff the operand fields form an allocated (not UNDEFINED) encoding."""
     bad = []
+    if getattr(e, 'excluded', None):
+        word = _word(s, e, F)
+        for m, v in e.excluded:
+            bad.append(s.eqc(s.and_(word, s.c(m, 32)), v))
     for fname, pat in e.ne:                                # `field != pattern` in XML
         m = int(pat.replace('0', '1').replace('x', '0'), 2)
         v = int(pat.replace('x', '0'), 2)
@@ -134,17 +160,30 @@ def build_instruction(ctx: Ctx, e: xmlspec.Encoding) -> Instruction:
 def build_arch(xml_dir: Path) -> Arch:
     ctx = Ctx()
     encs = xmlspec.load(xml_dir, FILES)
+    for name in EXCLUDE:
+        del encs[name]
+    for name, e in list(encs.items()):
+        spec_list = SPECS.get(e.file)
+        if callable(spec_list):
+            spec_list = spec_list(e)
+        if spec_list:
+            del encs[name]
+            for suffix, fixed in spec_list:
+                spec = xmlspec.specialize(e, suffix, fixed)
+                encs[spec.name] = spec
+    resolve_overlaps(encs)
     instructions = [build_instruction(ctx, e) for e in encs.values()]
     return Arch(
         name='AArch64',
         attributes=['isa.A64', 'endianness.little'],
-        register_files=[ctx.rf_x, ctx.rf_nzcv],
+        register_files=[ctx.rf_x, ctx.rf_nzcv, ctx.rf_v, ctx.rf_fpcr, ctx.rf_fpsr],
         system_registers=[],
         environment_functions=list(ctx.envs.values()),
-        tables_int=[],
+        tables_int=list(ctx.tables.values()),
         operations=list(ctx.ops.values()),
         snippets=list(ctx.snippets.values()),
         instructions=instructions,
+        float_operations=list(ctx.fops.values()),
     )
 
 

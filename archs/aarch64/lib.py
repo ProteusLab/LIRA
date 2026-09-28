@@ -7,6 +7,10 @@ State model
            not a storage element, it is expressed in semantics (see S.x_read /
            S.x_write).
 * `NZCV` - one 4-bit register holding PSTATE.{N,Z,C,V} (N is bit 3).
+* `V`    - 32 x 128-bit SIMD&FP registers. Scalar B/H/S/D views are the low
+           bits; writing a scalar clears the upper bits (FPCR.NEP = 0).
+* `FPCR`, `FPSR` - FP control/status (32 bits each). Their attributes bind the
+           FPU state used by `fop` statements (see LIRA docs/float_ops.md).
 * PC and memory are environment functions (`pc_read`, `pc_write`,
   `mem_read_<n>`, `mem_write_<n>`); if `pc_write` is not called, the
   environment advances PC by 4.
@@ -17,7 +21,9 @@ ConditionHolds, ...) are pure `Operation`s whose semantics are snippets.
 from typing import Callable, Dict, List, Optional
 
 from python.lira.ir import Shape
-from python.lira.arch import EnvironmentFunction, Operation, Register, RegisterFile, Snippet
+from python.lira.arch import (EnvironmentFunction, FloatOperation, Operation, Register,
+                              RegisterFile, Snippet, TableInt)
+from python.lira import float_ops
 from python.lira.ir_builder import BaseBuilder, SnippetBuilder, Value
 from python.lira.ir_ser_txt import serialize_statement_seq
 from python.lira import ir_ops
@@ -35,6 +41,15 @@ class Ctx:
         regs.append(Register('sp', ['sp']))
         self.rf_x = RegisterFile('X', ['gpr'], Shape(64, None), regs)
         self.rf_nzcv = RegisterFile('NZCV', ['flags'], Shape(4, None), [Register('nzcv', ['flags'])])
+        self.rf_v = RegisterFile('V', ['simdfp'], Shape(128, None),
+                                 [Register(f'v{i}', []) for i in range(32)])
+        self.rf_fpcr = RegisterFile('FPCR', ['sysreg'], Shape(32, None), [Register('fpcr', [
+            'fpu.control', 'fpu.rmode@22+2', 'fpu.fz@24', 'fpu.fz16@19', 'fpu.dn@25'])])
+        self.rf_fpsr = RegisterFile('FPSR', ['sysreg'], Shape(32, None), [Register('fpsr', [
+            'fpu.status', 'fpu.flag.invalid@0', 'fpu.flag.divbyzero@1', 'fpu.flag.overflow@2',
+            'fpu.flag.underflow@3', 'fpu.flag.inexact@4', 'fpu.flag.input_denormal@7'])])
+        self.fops: Dict[str, FloatOperation] = {}
+        self.tables: Dict[str, TableInt] = {}
 
         self.envs: Dict[str, EnvironmentFunction] = {}
         self.env_pc_read = self._env('pc_read', ['pc.read'], [], [64])
@@ -43,6 +58,32 @@ class Ctx:
         for n in (8, 16, 32, 64, 128):
             self._env(f'mem_read_{n}', ['mem.read'], [64], [n])
             self._env(f'mem_write_{n}', ['mem.write'], [64, n], [])
+        # Environment hooks for behaviour outside the instruction semantics
+        # (memory system, pointer authentication keys, exceptions, system state)
+        # Alignment rules of ordered/atomic (FEAT_LSE2: within 16 bytes) and
+        # exclusive (natural) accesses; a violation is an Alignment fault
+        self._env('check_alignment', ['mem.align'], [64, 8, 1], [])      # addr, bytes, exclusive
+        self._env('exclusive_mark', ['mem.exclusive'], [64, 8], [])        # addr, bytes
+        self._env('exclusive_check', ['mem.exclusive'], [64, 8], [1])      # pass; clears
+        self._env('exclusive_clear', ['mem.exclusive'], [], [])
+        self._env('mem_copy', ['mem.read', 'mem.write'], [64, 64, 64, 1], [])  # dst, src, n, may overlap
+        self._env('mem_set', ['mem.write'], [64, 64, 8], [])               # dst, n, byte
+        self._env('pac_add', ['pauth'], [64, 64, 3], [64])                 # ptr, modifier, key
+        self._env('pac_auth', ['pauth'], [64, 64, 3], [64])
+        self._env('pac_strip', ['pauth'], [64, 1], [64])                   # ptr, is_data
+        self._env('pac_generic', ['pauth'], [64, 64], [64])                # PACGA
+        self._env('barrier', ['sys.barrier'], [4, 4], [])                  # kind, CRm
+        self._env('hint', ['sys.hint'], [7], [])                           # CRm:op2 (WFE, SEV, ...)
+        self._env('wait_timeout', ['sys.hint'], [1, 64], [])               # WFET/WFIT
+        self._env('branch_target', ['sys.bti'], [2], [])                   # BTI landing pad
+        self._env('exception_call', ['exception'], [3, 16], [])            # BRK/HLT/HVC/SMC/UDF
+        self._env('exception_return', ['exception', 'pc.write'], [2], [])  # ERET/ERETAA/ERETAB/DRPS
+        self._env('debug_state', ['exception'], [2], [])                   # DCPS1..3
+        self._env('sys_op', ['sys.op'], [3, 4, 4, 3, 64], [])              # SYS: op1 CRn CRm op2 Xt
+        self._env('sys_op_read', ['sys.op'], [3, 4, 4, 3], [64])           # SYSL
+        self._env('sysreg_read', ['sys.reg'], [1, 3, 4, 4, 3], [64])       # MRS: o0 op1 CRn CRm op2
+        self._env('sysreg_write', ['sys.reg'], [1, 3, 4, 4, 3, 64], [])
+        self._env('pstate_write', ['sys.pstate'], [3, 3, 4], [])           # MSR (imm): op1 op2 CRm
 
         self.ops: Dict[str, Operation] = {}
         self.snippets: Dict[str, Snippet] = {}
@@ -59,6 +100,9 @@ class Ctx:
         for op in b.operations_map.values():
             prev = self.ops.setdefault(op.name, op)
             assert prev == op, f'conflicting definitions of operation {op.name}'
+        for fop in b.float_operations_map.values():
+            prev = self.fops.setdefault(fop.name, fop)
+            assert prev == fop, f'conflicting definitions of float operation {fop.name}'
 
     def add_snippet(self, b: SnippetBuilder, dedup: bool = True) -> str:
         """Register a snippet; identical bodies are shared. Returns its name."""
@@ -71,6 +115,14 @@ class Ctx:
         self.snippets[snip.name] = snip
         self._snippet_by_body.setdefault(body, snip.name)
         return snip.name
+
+    def table_op(self, name: str, in_width: int, out_width: int, values: List[int]) -> Operation:
+        """Operation defined by a lookup table (`semantic_table`)."""
+        if name not in self.ops:
+            assert len(values) == 1 << in_width
+            self.tables[name] = TableInt(name, [], list(values))
+            self.ops[name] = Operation(name, [], [in_width], [out_width], semantic_table=name)
+        return self.ops[name]
 
     def func_op(self, name: str, inputs: List[int], outputs: List[int],
                 body: Callable[['S', List[Value]], List[Value]]) -> Operation:
@@ -95,8 +147,13 @@ class S:
         self.ctx, self.b = ctx, b
 
     # -- constants and width changes ----------------------------------------
-    def c(self, value: int, width: int) -> Value:
-        return self.b.const(value & _mask(width), width)
+    def c(self, value: int, width: int, shape: Optional[Shape] = None) -> Value:
+        """Constant; with `shape` it is replicated to all lanes."""
+        return self.b.const(value & _mask(width), width, shape or Shape(1, None))
+
+    def cl(self, value: int, like: Value, width: Optional[int] = None) -> Value:
+        """Constant with the shape (and by default the width) of `like`."""
+        return self.c(value, width or like.width, like.shape)
 
     def zext(self, v: Value, w: int) -> Value:
         return v if v.width == w else self.b.extend_zero(v, w)
@@ -110,7 +167,7 @@ class S:
     def bits(self, v: Value, lo: int, width: int) -> Value:
         """v[lo+width-1:lo]"""
         if lo:
-            v = self.b.lsr(v, self.c(lo, v.width))
+            v = self.b.lsr(v, self.cl(lo, v))
         return self.trunc(v, width)
 
     def bit_at(self, v: Value, pos: Value) -> Value:
@@ -124,7 +181,7 @@ class S:
         for p in reversed(parts):
             v = self.zext(p, total)
             if lo:
-                v = self.b.lsl(v, self.c(lo, total))
+                v = self.b.lsl(v, self.c(lo, total, p.shape))
             acc = v if acc is None else self.b.orr(acc, v)
             lo += p.width
         return acc
@@ -134,7 +191,7 @@ class S:
         return self.b.neg(self.zext(bit, w))
 
     def eqc(self, v: Value, k: int) -> Value:
-        return self.b.eq(v, self.c(k, v.width))
+        return self.b.eq(v, self.cl(k, v))
 
     def or1(self, *vs: Value) -> Value:
         acc = vs[0]
@@ -187,6 +244,30 @@ class S:
     def flags_write(self, nzcv: Value):
         self.b.write(self.ctx.rf_nzcv, self.c(0, 1), nzcv)
 
+    def v_read(self, idx: Value, w: int) -> Value:
+        """V{w}(idx): low w bits of a SIMD&FP register."""
+        return self.trunc(self.b.read(self.ctx.rf_v, idx), w)
+
+    def v_write(self, idx: Value, v: Value):
+        """V{w}(idx) = v: upper bits are cleared."""
+        self.b.write(self.ctx.rf_v, idx, self.zext(v, 128))
+
+    def sysreg_read(self, rf: RegisterFile) -> Value:
+        return self.b.read(rf, self.c(0, 1))
+
+    def sysreg_write(self, rf: RegisterFile, v: Value):
+        self.b.write(rf, self.c(0, 1), v)
+
+    def fop(self, base: str, n: int, args: List[Value], m: Optional[int] = None) -> Value:
+        """Standard float operation `<base>_<n>[_to_<m>]` (one output)."""
+        fop = float_ops.make(base, n, m)
+        assert [a.width for a in args] == fop.inputs, (fop.name, [a.width for a in args])
+        return self.b.fop(fop, args)[0]
+
+    def rm(self, mode: int) -> Value:
+        """Rounding-mode operand of a float operation (`float_ops.DYN` = FPCR)."""
+        return self.c(mode, 3)
+
     def carry(self) -> Value:
         return self.bits(self.flags_read(), 1, 1)
 
@@ -198,6 +279,9 @@ class S:
 
     def branch_if(self, cond: Value, target: Value):
         self.b.cond_env(self.ctx.env_pc_write, cond, [target], [])
+
+    def check_alignment(self, addr: Value, n: int, exclusive: bool = False):
+        self.b.env(self.ctx.envs['check_alignment'], [addr, self.c(n // 8, 8), self.c(int(exclusive), 1)])
 
     def mem_read(self, addr: Value, n: int) -> Value:
         return self.b.env(self.ctx.envs[f'mem_read_{n}'], [addr])[0]

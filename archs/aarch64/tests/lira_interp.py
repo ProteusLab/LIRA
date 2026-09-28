@@ -7,6 +7,7 @@ from typing import Callable, Dict, List
 
 from python.lira.arch import Arch, Instruction, Operation
 from python.lira.ir import StatementSeq
+from python.lira import float_ops
 
 
 def _m(w): return (1 << w) - 1
@@ -74,59 +75,111 @@ class Machine:
         self.arch = arch
         self.ops = {o.name: o for o in arch.operations}
         self.snippets = {s.name: s for s in arch.snippets}
+        self.tables = {t.name: t for t in arch.tables_int}
         self.instrs = {i.name: i for i in arch.instructions}
+        self.fops = {f.name: f for f in arch.float_operations}
+        self.fpu = float_ops.FPUBinding.from_arch(arch)
         self.regs: Dict[str, List[int]] = {rf.name: [0] * rf.regs_num() for rf in arch.register_files}
         self.env: Dict[str, Callable] = {}
         self.dyn: Dict[str, int] = {}
 
     def run_op(self, op: Operation, args: List[int]) -> List[int]:
+        """Evaluate an operation on scalar (single-lane) arguments."""
         if op.semantic_base:
             return _std(op.semantic_base, op, args)
-        return self.run(self.snippets[op.semantic_func].seq, args)
+        if op.semantic_table:
+            return [self.tables[op.semantic_table].values[args[0]]]
+        return [v[0] for v in self.run(self.snippets[op.semantic_func].seq, [[a] for a in args])]
 
-    def run(self, seq: StatementSeq, inputs: List[int]) -> List[int]:
-        vals: Dict[str, int] = {}
-        outputs: Dict[int, int] = {}
+    def run_fop(self, fop, args: List[int]) -> List[int]:
+        (crf, ci), (srf, si) = self.fpu.control, self.fpu.status
+        st = self.fpu.state(self.regs[crf][ci])
+        res = float_ops.evaluate(fop, args, st)
+        self.regs[srf][si] |= self.fpu.status_bits(st.flags)
+        return res
+
+    def _rf_size(self, name):
+        return next(rf.reg_size.lanes_base for rf in self.arch.register_files if rf.name == name)
+
+    def run(self, seq: StatementSeq, inputs: List[List[int]]) -> List[List[int]]:
+        """Execute a sequence; every value is a list of lanes."""
+        vals: Dict[str, List[int]] = {}
+        outputs: Dict[int, List[int]] = {}
         for st in seq.stmts:
-            assert st.shape.lanes_base == 1 and st.shape.lanes_mult is None
+            assert st.shape.lanes_mult is None
+            n = st.shape.lanes_base
             args = [vals[i] for i in st.inputs]
             k, spec = st.kind, st.specifier
+
+            def lanewise(fn):
+                assert all(len(a) == n for a in args), st
+                outs = [fn([a[i] for a in args]) for i in range(n)]
+                return [list(c) for c in zip(*outs)] if outs and outs[0] else [[] for _ in st.outputs]
+
             if k == 'input': res = [inputs[int(spec)]]
             elif k == 'output': outputs[int(spec)] = args[0]; res = []
-            elif k == 'const': res = [int(spec)]
-            elif k == 'dyn_const': res = [self.dyn[spec]]
-            elif k == 'read': res = [self.regs[spec][args[0]]]
-            elif k == 'write': self.regs[spec][args[0]] = args[1]; res = []
-            elif k == 'op': res = self.run_op(self.ops[spec], args)
-            elif k == 'env': res = self.env[spec](*args) or []
+            elif k == 'const': res = [[int(spec)] * n]
+            elif k == 'dyn_const': res = [[self.dyn[spec]] * n]
+            elif k == 'read':
+                w = st.outputs_types[0]
+                assert n * w == self._rf_size(spec), st
+                reg = self.regs[spec][args[0][0]]
+                res = [[(reg >> (i * w)) & _m(w) for i in range(n)]]
+            elif k == 'write':
+                idx, value = args
+                w = self._rf_size(spec) // n
+                assert len(value) == n
+                self.regs[spec][idx[0]] = sum(v << (i * w) for i, v in enumerate(value))
+                res = []
+            elif k == 'op': res = lanewise(lambda a: self.run_op(self.ops[spec], a))
+            elif k == 'fop': res = lanewise(lambda a: self.run_fop(self.fops[spec], a))
+            elif k == 'env': res = lanewise(lambda a: self.env[spec](*a) or [])
             elif k == 'cond_env':
                 nin = len(args) - 1 - len(st.outputs)
-                res = (self.env[spec](*args[1:1 + nin]) or []) if args[0] else args[1 + nin:]
+                res = lanewise(lambda a: (self.env[spec](*a[1:1 + nin]) or []) if a[0] else a[1 + nin:])
+            elif k == 'index': res = [list(range(n))]
+            elif k == 'gather':
+                value, index, default = args
+                res = [[value[j] if j < len(value) else default[i] for i, j in enumerate(index)]]
+            elif k == 'replicate': res = [[args[0][0]] * n]
+            elif k == 'extract_first': res = [args[0][:n]]
+            elif k == 'extend_zero': res = [args[0] + [0] * (n - len(args[0]))]
+            elif k == 'fold':
+                width = len(st.outputs)
+                state = [a[0] for a in args[:width]]
+                vectors = args[width:]
+                for lane in range(len(vectors[0])):
+                    state = self.run_op(self.ops[spec], state + [v[lane] for v in vectors])[:width]
+                res = [[v] for v in state]
             else:
                 raise NotImplementedError(k)
             assert len(res) == len(st.outputs), st
             for name, w, v in zip(st.outputs, st.outputs_types, res):
-                assert 0 <= v <= _m(w), (st, v)
+                assert all(0 <= x <= _m(w) for x in v), (st, v)
+                assert len(v) == (1 if k == 'fold' else n), st
                 vals[name] = v
         return [outputs[i] for i in sorted(outputs)]
+
+    def run_scalar(self, seq: StatementSeq, inputs: List[int]) -> List[int]:
+        return [v[0] for v in self.run(seq, [[i] for i in inputs])]
 
     # -- encoding helpers ------------------------------------------------------
     def encode(self, ins: Instruction, operands: List[int]) -> int:
         self.dyn['enc_base'] = ins.encoding.const_encoding_part
-        return self.run(self.snippets[ins.encoding.encode].seq, operands)[0]
+        return self.run_scalar(self.snippets[ins.encoding.encode].seq, operands)[0]
 
     def decode(self, ins: Instruction, word: int) -> List[int]:
-        return [self.run(self.snippets[d].seq, [word])[0] for d in ins.encoding.decode]
+        return [self.run_scalar(self.snippets[d].seq, [word])[0] for d in ins.encoding.decode]
 
     def valid_operands(self, ins: Instruction, operands: List[int]) -> bool:
         c = ins.encoding.constraint_encode
-        return not c or bool(self.run(self.snippets[c].seq, operands)[0])
+        return not c or bool(self.run_scalar(self.snippets[c].seq, operands)[0])
 
     def valid_word(self, ins: Instruction, word: int) -> bool:
         e = ins.encoding
         if word & e.const_mask != e.const_encoding_part:
             return False
-        return not e.constraint_decode or bool(self.run(self.snippets[e.constraint_decode].seq, [word])[0])
+        return not e.constraint_decode or bool(self.run_scalar(self.snippets[e.constraint_decode].seq, [word])[0])
 
     def execute(self, ins: Instruction, operands: List[int]):
-        self.run(ins.semantic, operands)
+        self.run_scalar(ins.semantic, operands)

@@ -101,11 +101,17 @@ def parse_file(path: Path) -> List[Encoding]:
         for enc in ic.findall('encoding'):
             ebits = list(bits)
             ne = list(ne_base)
-            for cond in (enc.get('bitdiffs') or '').split('&&'):
+            bitdiffs = enc.get('bitdiffs') or ''
+            if bitdiffs.startswith('!('):
+                bitdiffs = ''     # negated: overlaps with more specific encodings, see gen.py
+            for cond in bitdiffs.split('&&'):
                 cond = cond.strip()
-                if not cond:
+                if not cond or cond.startswith('!('):
+                    # `!(...)` excludes more specific encodings (e.g. MSR (immediate)
+                    # vs. CFINV); gen.py resolves overlaps generically
                     continue
-                m = re.fullmatch(r'(\w+) (==|!=) ([01x]+)', cond)
+                # `(...)` marks should-be bits; like in regdiagrams they are fixed
+                m = re.fullmatch(r'(\w+) (==|!=) \(?([01x]+)\)?', cond)
                 name, op, pat = m.groups()
                 f = fields[name]
                 assert len(pat) == f.width, cond
@@ -133,3 +139,22 @@ def load(xml_dir: Path, files: List[str]) -> Dict[str, Encoding]:
             assert e.name not in encs, e.name
             encs[e.name] = e
     return encs
+
+
+def specialize(e: Encoding, suffix: str, assignments: Dict[str, int]) -> Encoding:
+    """Copy of `e` with some operand fields fixed (e.g. a system register or a
+    SIMD arrangement), named `<name>_<suffix>`."""
+    value, mask = e.const_value, e.const_mask
+    for name, v in assignments.items():
+        f = e.fields[name]
+        vm = (1 << f.width) - 1
+        if isinstance(v, tuple):                   # (value, mask): fix some bits only
+            v, vm = v
+        fm, fv = e.fixed_bits(name)
+        assert (v & fm & vm) == (fv & vm), f'{e.name}: {name}={v} contradicts fixed bits'
+        value = (value & ~(vm << f.lo)) | ((v & vm) << f.lo)
+        mask |= vm << f.lo
+    operands = [f for f in e.operands if (mask & f.mask) != f.mask]
+    return Encoding(name=f'{e.name}_{suffix}', file=e.file, mnemonic=e.mnemonic,
+                    iclass=e.iclass, asm=e.asm, const_value=value, const_mask=mask,
+                    operands=operands, fields=e.fields, ne=list(e.ne), docvars=dict(e.docvars))

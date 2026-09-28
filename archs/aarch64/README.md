@@ -1,7 +1,9 @@
 # AArch64 (A64) in LIRA
 
-LIRA description of the A64 base integer instruction set, generated from the
-Arm machine-readable specification (`ISA_A64_xml_A_profile-2026-06_mc`).
+LIRA description of the A64 base integer instructions, the mandatory ARMv8.x
+general-purpose and system extensions, scalar floating point, and Advanced SIMD
+(integer and crypto). It is generated from the Arm machine-readable
+specification (`ISA_A64_xml_A_profile-2026-06_mc`).
 
 ```bash
 # from the repository root
@@ -9,7 +11,22 @@ python -m archs.aarch64.gen [--xml <ISA_A64_xml dir>] [--output archs/aarch64/aa
 python -m pytest archs/aarch64/tests
 ```
 
-The output is `aarch64.yaml`: 222 encodings, 83 mnemonics.
+The output is `aarch64.yaml`: 2706 instructions (676 mnemonics) from 578 XML
+files, one LIRA instruction per encoding and arrangement:
+
+| Module | XML files | Instructions | Content |
+|---|---|---|---|
+| `insns.py` | 129 | 252 | base integer |
+| `insns_fp.py` | 61 | 295 | scalar FP, SIMD&FP loads/stores, MRS/MSR |
+| `insns_simd.py` | 158 | 1291 | Advanced SIMD integer, part 1 |
+| `insns_simd2.py` | 64 | 428 | Advanced SIMD integer, part 2, and crypto |
+| `insns_v8.py` | 166 | 440 | ARMv8.1–v8.9 general-purpose and system instructions |
+
+The description uses 72 float operations, 35 environment functions and 361
+operations. `insns_vfp.py` (vector FP, FHM, FCMA, BF16, …) is a draft that is
+not imported yet.
+
+### Base integer
 
 | Group | Mnemonics |
 |---|---|
@@ -21,7 +38,62 @@ The output is `aarch64.yaml`: 222 encodings, 83 mnemonics.
 | conditional | CSEL CSINC CSINV CSNEG CCMP CCMN (imm, reg) |
 | branches | B BL B.cond CBZ CBNZ TBZ TBNZ BR BLR RET |
 | load/store | LDR STR LDRB STRB LDRH STRH LDRSB LDRSH LDRSW (post/pre/unsigned offset, register offset), LDUR/STUR family, LDP STP LDPSW, LDR/LDRSW (literal) |
-| system | NOP SVC |
+| system | NOP SVC, MRS/MSR for NZCV, FPCR, FPSR (other system registers through `sysreg_read`/`sysreg_write`) |
+
+### Floating point (`insns_fp.py`, H/S/D forms)
+
+| Group | Mnemonics |
+|---|---|
+| arithmetic | FADD FSUB FMUL FDIV FNMUL FMAX FMIN FMAXNM FMINNM FSQRT FABS FNEG FMOV |
+| fused | FMADD FMSUB FNMADD FNMSUB |
+| compare/select | FCMP FCMPE (register, #0.0) FCCMP FCCMPE FCSEL |
+| rounding | FRINTN FRINTP FRINTM FRINTZ FRINTA FRINTI FRINTX |
+| conversion | FCVT (H/S/D), FCVT{N,A,P,M,Z}{S,U} (to W/X), FCVTZS/FCVTZU (fixed-point), SCVTF UCVTF (integer, fixed-point), FMOV (general, `V.D[1]`, immediate) |
+| load/store | LDR STR (B/H/S/D/Q: post/pre/unsigned offset, register offset, literal), LDUR STUR, LDP STP LDNP STNP (S/D/Q) |
+
+### Advanced SIMD (`insns_simd.py`, vector and scalar forms)
+
+| Group | Mnemonics |
+|---|---|
+| three same | ADD SUB MUL MLA MLS AND BIC ORR ORN EOR BSL BIT BIF CMEQ CMGE CMGT CMHI CMHS CMTST SMAX SMIN UMAX UMIN SABD UABD SABA UABA SHADD UHADD SRHADD URHADD SHSUB UHSUB SQADD UQADD SQSUB UQSUB SSHL USHL SRSHL URSHL SQDMULH SQRDMULH PMUL ADDP SMAXP SMINP UMAXP UMINP |
+| two-reg misc | ABS NEG CLS CLZ CNT NOT RBIT REV16 REV32 REV64 CMEQ/CMGE/CMGT/CMLE/CMLT (#0) SQABS SQNEG XTN SQXTN UQXTN SQXTUN SADDLP UADDLP SADALP UADALP SHLL |
+| across lanes | ADDV SMAXV SMINV UMAXV UMINV SADDLV UADDLV, ADDP (scalar) |
+| shift immediate | SHL SLI SRI SSHR USHR SRSHR URSHR SSRA USRA SRSRA URSRA SHRN RSHRN SSHLL USHLL |
+| long/wide/narrow | SADDL UADDL SSUBL USUBL SADDW UADDW SSUBW USUBW SMULL UMULL SMLAL UMLAL SMLSL UMLSL SABDL UABDL SABAL UABAL ADDHN RADDHN SUBHN RSUBHN PMULL (8B, 1D) |
+| by element | MUL MLA MLS SMULL UMULL SMLAL UMLAL SMLSL UMLSL |
+| permute | ZIP1 ZIP2 UZP1 UZP2 TRN1 TRN2 EXT TBL TBX (1-4 registers) |
+| copy/immediate | DUP (element, general) INS (element, general) UMOV SMOV MOVI MVNI ORR BIC (immediate) |
+| load/store | LD1-LD4 ST1-ST4 (multiple structures, post-index), LD1R |
+
+### Advanced SIMD, part 2, and crypto (`insns_simd2.py`)
+
+| Group | Mnemonics |
+|---|---|
+| saturating shifts | SQSHL UQSHL SQRSHL UQRSHL (register), SQSHL UQSHL SQSHLU (immediate), SQSHRN UQSHRN SQRSHRN UQRSHRN SQSHRUN SQRSHRUN |
+| saturating multiply | SQDMULL SQDMLAL SQDMLSL (vector, element), SQDMULH SQRDMULH (element), SQRDMLAH SQRDMLSH (FEAT_RDM) |
+| misc | SUQADD USQADD URECPE URSQRTE |
+| load/store | LD1-LD4 ST1-ST4 (single structure), LD2R LD3R LD4R |
+| dot product | SDOT UDOT (FEAT_DotProd), USDOT SUDOT SMMLA UMMLA USMMLA (FEAT_I8MM) |
+| crypto | AESE AESD AESMC AESIMC, SHA1C SHA1P SHA1M SHA1H SHA1SU0 SHA1SU1, SHA256H SHA256H2 SHA256SU0 SHA256SU1 |
+
+### ARMv8.1–v8.9 general purpose and system (`insns_v8.py`)
+
+| Group | Mnemonics |
+|---|---|
+| load/store | LDTR/STTR family (unprivileged), LDNP STNP, LDAPUR/STLUR family (FEAT_LRCPC2), PRFM PRFUM (no-op) |
+| ordered | LDAR LDAPR LDLAR STLR STLLR (all sizes) |
+| exclusives | LDXR LDAXR STXR STLXR LDXP LDAXP STXP STLXP CLREX |
+| atomics (FEAT_LSE) | CAS CASP SWP LDADD LDCLR LDEOR LDSET LDSMAX LDSMIN LDUMAX LDUMIN (all sizes and orderings) |
+| CRC32 | CRC32B/H/W/X CRC32CB/H/W/X |
+| FEAT_CSSC | ABS CNT CTZ SMAX SMIN UMAX UMIN (register, immediate) |
+| flags (FEAT_FlagM/2) | CFINV AXFLAG XAFLAG RMIF SETF8 SETF16 |
+| branches | BC.cond (FEAT_HBC) |
+| FEAT_MOPS | CPYP/CPYM/CPYE and CPYFP/CPYFM/CPYFE (all read/write options), SETP/SETM/SETE (all options); SETG* needs MTE and is not included |
+| FEAT_PAuth | PACIA PACIB PACDA PACDB (+Z, SP, 1716 forms), AUTIA…, XPACI XPACD XPACLRI, PACGA, BRAA BRAB BLRAA BLRAB (+Z), RETAA RETAB, LDRAA LDRAB |
+| hints | HINT (generic), YIELD WFE WFI SEV SEVL, WFET WFIT (FEAT_WFxT), BTI, ESB CSDB CLRBHB |
+| barriers | DMB DSB ISB SB, DSB nXS (FEAT_XS) |
+| exceptions | BRK HLT HVC SMC UDF DCPS1-3 ERET ERETAA ERETAB DRPS |
+| system | SYS SYSL MSR (immediate) MRS/MSR (any system register) |
 
 Aliases such as `MOV`, `CMP`, `LSL #imm` and `SXTW` are not separate
 instructions. They are the same encodings as the instructions above.
@@ -84,8 +156,56 @@ An example is `ADDS <Xd>, <Xn|SP>, #imm{, LSL #12}` (`ADDS_64S_addsub_imm`), as 
 ```
 
 To add an instruction, add its XML file stem to a `@sem(...)` handler in
-`insns.py`, or write a new handler, plus an `undef=` predicate if its ASL
+`insns*.py`, or write a new handler, plus an `undef=` predicate if its ASL
 decode has UNDEFINED cases. Then regenerate the YAML and run the tests.
+
+**Specializations.** `spec=` splits an XML encoding into several LIRA
+instructions by fixing more fields (`xmlspec.specialize`), either fully or
+as `(value, mask)`:
+
+* SIMD arrangements: `size`/`Q`, `immh` for shifts, `imm5` for DUP/INS/UMOV,
+  `cmode`/`op` for modified immediates. Statement shapes are static, so
+  `ADD_asimdsame_only` becomes `..._8B`, `..._16B`, …, `..._2D`. Reserved
+  arrangements are simply not generated.
+* System registers for MRS/MSR (`MRS_RS_systemmove_FPCR`, …).
+
+**Floating point** uses `fop` statements with the standard float operations
+from LIRA `docs/float_ops.md`. For example, `FADD Dd, Dn, Dm` (`FADD_D_floatdp2`; operands Rm, Rn, Rd) is:
+
+```
+1 5 _t1 = input 0;                                  # Rm
+1 5 _t2 = input 1;                                  # Rn
+1 5 _t3 = input 2;                                  # Rd
+1 128 _t4 = read V _t2;
+1 64 _t5 = op extract_low_128_to_64 _t4;            # Dn
+1 128 _t6 = read V _t1;
+1 64 _t7 = op extract_low_128_to_64 _t6;            # Dm
+1 3 _t8 = const 7;                                  # rounding mode: from FPCR
+1 64 _t9 = fop fadd_64 _t5 _t7 _t8;                 # reads FPCR, sets FPSR flags
+1 128 _t10 = op extend_zero_64_to_128 _t9;
+1 = write V _t3 _t10;
+```
+
+**SIMD** uses vector shapes. `ADD Vd.4S, Vn.4S, Vm.4S` (`ADD_asimdsame_only_4S`) is:
+
+```
+1 5 _t1 = input 0;                                  # Rm
+1 5 _t2 = input 1;                                  # Rn
+1 5 _t3 = input 2;                                  # Rd
+4 32 _t4 = read V _t2;                              # V[n] as 4 x 32-bit lanes
+4 32 _t5 = read V _t1;
+4 32 _t6 = op add_32 _t4 _t5;
+4 = write V _t3 _t6;
+```
+
+The other SIMD statements are used as follows:
+
+* Permutes (ZIP/UZP/TRN/EXT/REV), TBL/TBX and lane extraction use `index`
+  arithmetic and `gather`.
+* Across-lane reductions use `fold`.
+* 64-bit arrangements use `extract_first` and `extend_zero`.
+* Structure loads/stores are shaped `mem_read`/`mem_write` accesses, one per
+  lane, with the (de)interleaving in the address computation.
 
 ## State model
 
@@ -98,6 +218,15 @@ decode has UNDEFINED cases. Then regenerate the YAML and run the tests.
 | `PC64()` / `BranchTo` | env `pc_read` / `pc_write`. Without a `pc_write`, the environment advances PC by 4 |
 | `Mem{n}` | env `mem_read_<n>` / `mem_write_<n>`, n in 8..128, little-endian |
 | `SVC` | env `supervisor_call(imm16)` |
+| alignment (ordered, atomic, exclusive) | env `check_alignment(addr, bytes, exclusive)` |
+| exclusive monitor | env `exclusive_mark`, `exclusive_check -> pass`, `exclusive_clear` |
+| MOPS copy/set | env `mem_copy(dst, src, n, may_overlap)`, `mem_set(dst, n, byte)` (whole operation in the prologue) |
+| PAC keys and algorithm | env `pac_add`, `pac_auth`, `pac_strip`, `pac_generic` |
+| barriers, hints, BTI | env `barrier(kind, CRm)`, `hint(CRm:op2)`, `wait_timeout`, `branch_target` |
+| exceptions | env `exception_call(kind, imm16)`, `exception_return`, `debug_state` |
+| system registers and ops | env `sysreg_read`, `sysreg_write`, `sys_op`, `sys_op_read`, `pstate_write` |
+| `V[0..31]` (Q/D/S/H/B views) | register file `V`: 32 x 128-bit; scalar writes clear the upper bits |
+| `FPCR`, `FPSR` | register files `FPCR`, `FPSR` (32-bit). Attributes bind them to the FPU state of `fop`. MSR writes the architected fields only (`0x07FF9F00`, `0x0800009F`) |
 
 ## Decisions and simplifications
 
@@ -112,23 +241,52 @@ decode has UNDEFINED cases. Then regenerate the YAML and run the tests.
   not decoded.
 * Not modeled: SP alignment checks, MTE tag checking, BTI/`BTYPE`, GCS,
   big-endian data, and the Arm-mandated behavior of `SVC` beyond calling the
-  environment.
-* Not yet covered: FP/SIMD, SVE/SME, atomics and exclusives, system registers
-  (`MRS`/`MSR`), and hints other than `NOP`.
+  environment. Exception levels, the MMU and exception entry belong to the
+  environment: the semantics only call the hooks listed above.
+* MOPS: the prologue (`CPYP`, `SETP`, …) performs the whole operation and
+  leaves the registers in the "option B" end state; the main and epilogue
+  forms then do nothing. Overlapping register operands are UNDEFINED.
+* The LRCPC3 writeback forms of LDAPR/STLR are excluded.
+* FP: FEAT_AFP (FPCR.AH/FIZ/NEP), FPCR.AHP and trapped FP exceptions are
+  not modeled; they are treated as 0 and disabled. Loads/stores of a Q-register
+  pair use two 128-bit accesses.
+* Not yet covered:
+  * vector FP, FRECPE/FRSQRTE/FRECPX, FRINT32/64, FJCVTZS, FHM, FCMA, BF16
+    (the float operations exist in `lira/float_ops.py`; the semantics are the
+    `insns_vfp.py` draft);
+  * FEAT_AFP (FPCR.AH/FIZ/NEP);
+  * optional extensions: SVE/SME, MTE, GCS, FP8, SHA3/SHA512/SM3/SM4, LS64,
+    LRCPC3, THE, D128 and others.
 
 ## Verification (`tests/`)
 
-* `lira_interp.py` is a small reference interpreter for scalar LIRA.
+* `lira_interp.py` is a small reference interpreter. It handles vector
+  shapes, `index`/`gather`/`replicate`/`extract_first`/`extend_zero`/`fold`,
+  and `fop` through `lira.float_ops`.
 * `test_encoding.py` checks the encode/decode roundtrip, that no two
   encodings overlap, and that every sampled valid word disassembles in
   `llvm-mc -M no-aliases` to the expected mnemonic. It also checks that the
   words the constraints reject are rejected by LLVM too.
-* `test_semantics_hw.py` (AArch64 host only) runs about 1,200 encoded
-  instructions with random register, flag and memory states on the host CPU,
-  and compares the results with the interpreter. It covers all non-branch
-  instructions.
+* `test_semantics_hw.py` (AArch64 host only) runs about 14,900 encoded
+  words (6 per instruction, about 2,490 instructions), 12 random states each,
+  on the host CPU and compares the results with the interpreter.
+  * It skips branches and literal loads (covered by `test_semantics.py`),
+    instructions whose effect belongs to the environment (PAuth, hints,
+    exceptions, SYS, system registers), and CSSC/HBC/MOPS, which Apple M1
+    lacks.
+  * Instructions that raise SIGILL on the host are found by a forked probe and
+    reported as skipped. On an M1 Pro these are DCPS1-3, DSB nXS and the I8MM
+    instructions.
+  * Ordered/atomic accesses use offsets that stay inside 16 bytes (the host
+    faults otherwise; LIRA models this with `check_alignment`).
+  * The state includes x0–x7, v0–v7, NZCV, FPCR (random rounding mode,
+    FZ, FZ16, DN), FPSR and memory.
+  * Random FP operands include zeros, subnormals, infinities, quiet and
+    signalling NaNs, and rounding-boundary values in every format.
 * `test_semantics.py` covers branches, index 31 (SP vs XZR), literal loads,
-  `SVC` and `NOP`.
+  `SVC` and `NOP`. It also checks the instructions the host cannot compare:
+  CSSC, BC.cond, exclusive pairs, MOPS and PAuth/system instructions (the
+  environment hooks they call, with which arguments).
 
 ### Generated simulator ([lira-simgen-lib](https://github.com/ProteusLab/lira-simgen-lib), `ARCH_TARGET=AArch64`)
 
@@ -136,6 +294,11 @@ Copy `aarch64.yaml` to `lira-simgen-lib/data/AArch64/`, then build the
 `build-interp` and `a64-capi` targets. By default the tests look in
 `../lira-simgen-lib/build/a64/interpreter/`; `$LIRA_A64_SIM` and
 `$LIRA_A64_CAPI` override that.
+
+The simulator is checked against the description it was generated from
+(`lira-simgen-lib/data/AArch64/aarch64.yaml`, or `$LIRA_A64_SIM_YAML`).
+simgen does not support `fop` or vector shapes yet, so it still uses the
+integer description.
 
 * `test_simgen.py` loads `liba64-capi` (the generated C++ decoder and
   interpreter, one instruction at a time):

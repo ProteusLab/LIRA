@@ -16,6 +16,13 @@ class StmtKind(str, Enum):
     COND_ENV = "cond_env"
     CONST = "const"
     DYN_CONST = "dyn_const"
+    FOP = "fop"
+    INDEX = "index"
+    GATHER = "gather"
+    REPLICATE = "replicate"
+    EXTRACT_FIRST = "extract_first"
+    EXTEND_ZERO = "extend_zero"
+    FOLD = "fold"
 
 
 @dataclass
@@ -60,6 +67,12 @@ class CondEnv:
     cond: str
     on_false: list[str]
     inputs: list[str]
+
+@dataclass
+class StmtFop:
+    kind: ClassVar[StmtKind] = StmtKind.FOP
+    fop: FloatOperation
+    args: list[str]
 
 @dataclass
 class StmtIndex:

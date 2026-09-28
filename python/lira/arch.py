@@ -54,6 +54,20 @@ class Operation(Component):
 
 
 @dataclass
+class FloatOperation(Component):
+    """Floating-point operation used by `fop` statements.
+
+    Unlike `Operation` it is not a pure function: it reads the FPU controls
+    (rounding mode, flush-to-zero, default NaN) and accumulates exception flags
+    in the FPU state. `semantic_base` names a standard float operation base,
+    see docs/float_ops.md and `lira.float_ops`.
+    """
+    inputs: list[int]
+    outputs: list[int]
+    semantic_base: str
+
+
+@dataclass
 class Register(Component):
     def __init__(self, name, attributes: list[str] = []):
         super().__init__(name=name, attributes=attributes)
@@ -127,3 +141,5 @@ class Arch(Component):
     operations: list[Operation]
     snippets: list[Snippet]
     instructions: list[Instruction]
+    # Optional: omitted from serialization when empty
+    float_operations: list[FloatOperation] = field(default_factory=list)

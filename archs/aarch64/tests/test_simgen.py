@@ -18,16 +18,38 @@ from pathlib import Path
 import pytest
 
 from .conftest import sample_operands
-from .test_semantics_hw import (MEM_BASE_OFF, MEM_SIZE, STATES_PER_CASE, _random_state,
-                                cases, interp_step)
+from .test_semantics_hw import (MEM_BASE_OFF, MEM_SIZE, STATES_PER_CASE, build_cases,
+                                interp_step, random_state, run_hw)
 
 DEFAULT = Path(__file__).resolve().parents[4] / 'lira-simgen-lib' / 'build' / 'a64' / \
     'interpreter' / 'liba64-capi.dylib'
 CAPI = Path(os.environ.get('LIRA_A64_CAPI', DEFAULT))
+# The description the simulator was generated from (may lag behind aarch64.yaml)
+SIM_YAML = Path(os.environ.get('LIRA_A64_SIM_YAML',
+                               DEFAULT.parents[3] / 'data' / 'AArch64' / 'aarch64.yaml'))
 
-pytestmark = pytest.mark.skipif(not CAPI.exists(), reason=f'{CAPI} not built')
+pytestmark = pytest.mark.skipif(not (CAPI.exists() and SIM_YAML.exists()),
+                                reason=f'{CAPI} or {SIM_YAML} not found')
 
 U64P = ctypes.POINTER(ctypes.c_uint64)
+
+
+@pytest.fixture(scope='module')
+def sim_arch():
+    from python.lira.arch_ser_yaml import read_arch
+    return read_arch(SIM_YAML)
+
+
+@pytest.fixture(scope='module')
+def sim_machine(sim_arch):
+    from .lira_interp import Machine
+    return Machine(sim_arch)
+
+
+@pytest.fixture(scope='module')
+def sim_cases(sim_arch, tmp_path_factory):
+    """Hardware cases for the instructions of the simulated description."""
+    return build_cases(sim_arch, tmp_path_factory.mktemp('hw'))
 
 
 @pytest.fixture(scope='module')
@@ -46,8 +68,9 @@ def sim_step(capi, word, x, nzcv, pc):
     return list(xs), f.value, p.value
 
 
-def test_decoder(arch, machine, capi):
+def test_decoder(sim_arch, sim_machine, capi):
     rng = random.Random(21)
+    arch, machine = sim_arch, sim_machine
     for idx, ins in enumerate(arch.instructions):
         for _ in range(30):
             word = machine.encode(ins, sample_operands(machine, ins, rng))
@@ -61,25 +84,25 @@ def test_decoder(arch, machine, capi):
     assert rejected > 1000
 
 
-def test_simgen_matches_hardware(arch, cases, capi):
+def test_simgen_matches_hardware(sim_arch, sim_cases, capi):
+    """X registers, NZCV and memory of the generated C++ vs. the host CPU."""
     rng = random.Random(11)
     mem = (ctypes.c_uint8 * MEM_SIZE)()
     base = ctypes.addressof(mem)
     failures = []
-    for fn, ins, ops, word in cases:
+    for fn, ins, ops, word in sim_cases:
         for _ in range(STATES_PER_CASE):
-            regs, nzcv = _random_state(rng, ins, ops, base)
+            st = random_state(rng, ins, ops, base)
+            st['FPCR'] = st['FPSR'] = 0
             init = bytes(rng.getrandbits(8) for _ in range(MEM_SIZE))
             ctypes.memmove(mem, init, MEM_SIZE)
-            state = (ctypes.c_uint64 * 10)(*regs, nzcv, 0)
-            fn(state)
-            hw = (list(state[:8]), state[8] >> 28, bytes(mem))
-            pc = state[9]
+            hw_out, pc = run_hw(fn, st)
+            hw = (hw_out['X'], hw_out['NZCV'], bytes(mem))
             ctypes.memmove(mem, init, MEM_SIZE)
-            x, f, _ = sim_step(capi, word, regs + [0] * 24, nzcv >> 28, pc)
+            x, f, _ = sim_step(capi, word, st['X'] + [0] * 24, st['NZCV'], pc)
             got = (x[:8], f, bytes(mem))
             if got != hw:
-                failures.append((ins.name, hex(word), [hex(r) for r in regs],
+                failures.append((ins.name, hex(word), [hex(r) for r in st['X']],
                                  'hw', [hex(r) for r in hw[0]], hw[1],
                                  'sim', [hex(r) for r in got[0]], got[1]))
                 break
@@ -99,7 +122,8 @@ def _pick(machine, ins, rng):
     return sample_operands(machine, ins, rng, fixed)
 
 
-def test_simgen_matches_interpreter(arch, machine, capi):
+def test_simgen_matches_interpreter(sim_arch, sim_machine, capi):
+    arch, machine = sim_arch, sim_machine
     rng = random.Random(5)
     mem = (ctypes.c_uint8 * MEM_SIZE)()
     base = ctypes.addressof(mem)
@@ -123,11 +147,13 @@ def test_simgen_matches_interpreter(arch, machine, capi):
             nzcv = rng.getrandbits(4)
             init = bytes(rng.getrandbits(8) for _ in range(MEM_SIZE))
 
-            ref = interp_step(arch, ins, word, x, nzcv, pc, base, init)
+            st = {'X': x, 'V': [], 'NZCV': nzcv, 'FPCR': 0, 'FPSR': 0}
+            out, ref_mem, ref_pc = interp_step(arch, ins, word, st, pc, base, init)
+            ref = (out['X'], out['NZCV'], ref_mem, ref_pc)
             ctypes.memmove(mem, init, MEM_SIZE)
             sx, sf, spc = sim_step(capi, word, x, nzcv, pc)
             got = (sx, sf, bytes(mem), spc)
-            if got != (ref[0], ref[1], ref[2], ref[3]):
+            if got != ref:
                 diff = [f'x{i}: ref={ref[0][i]:#x} sim={sx[i]:#x}' for i in range(32) if ref[0][i] != sx[i]]
                 failures.append((ins.name, hex(word), names, diff,
                                  f'nzcv ref={ref[1]} sim={sf}', f'pc ref={ref[3]:#x} sim={spc:#x}',

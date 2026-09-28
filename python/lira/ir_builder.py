@@ -6,10 +6,14 @@ from .ir_ops import *
 
 
 class Value:
-    def __init__(self, name: str, width: int = 32):
+    def __init__(self, name: str, width: int = 32, shape: Optional[Shape] = None):
         self.name = name
         self.width = width
-        self.shape = Shape(1, None)
+        self.shape = shape if shape is not None else Shape(1, None)
+
+    @property
+    def lanes(self) -> int:
+        return self.shape.lanes_base
 
     def __str__(self) -> str:
         return self.name
@@ -22,14 +26,25 @@ class SeqBuilder:
     def __init__(self):
         self.stmts: List[Statement] = []
         self._temp_counter = 0
+        self._shapes: Dict[str, Shape] = {}
 
-    def _new_temp(self, width: int = 32) -> Value:
+    def _new_temp(self, width: int = 32, shape: Optional[Shape] = None) -> Value:
         self._temp_counter += 1
-        return Value(f"_t{self._temp_counter}", width)
+        v = Value(f"_t{self._temp_counter}", width, shape)
+        self._shapes[v.name] = v.shape
+        return v
+
+    def _shape_of(self, names: List[str]) -> Shape:
+        """Common shape of statement inputs (lane-wise statements)."""
+        shapes = [self._shapes.get(n, Shape(1, None)) for n in names]
+        if any(s != shapes[0] for s in shapes):
+            raise TypeError(f"shape mismatch of inputs {names}: {shapes}")
+        return shapes[0] if shapes else Shape(1, None)
 
     def _emit_op(self, op: Operation, inputs: List[str], out_bits: int) -> Value:
-        out = self._new_temp(out_bits)
-        self.add_op(op, inputs, [out.name])
+        shape = self._shape_of(inputs)
+        out = self._new_temp(out_bits, shape)
+        self.add_op(op, inputs, [out.name], shape)
         return out
 
     def check_width_match(self, a: Value, b: Value):
@@ -207,21 +222,23 @@ class SeqBuilder:
     def read(
         self, rf: RegisterFile, rsi: Value, shape: Shape = Shape(1, None)
     ) -> Value:
-        width = rf.reg_size.lanes_base
-        out = self._new_temp(width)
+        """Read a full register as `shape` lanes (lane width = size / lanes)."""
+        width = rf.reg_size.lanes_base // shape.lanes_base
+        out = self._new_temp(width, shape)
         stmt = Statement(shape, [out.name], [width], "read", rf.name, [rsi.name])
         self.stmts.append(stmt)
         return out
 
     def write(
-        self, rf: RegisterFile, rsi: Value, value: Value, shape: Shape = Shape(1, None)
+        self, rf: RegisterFile, rsi: Value, value: Value, shape: Optional[Shape] = None
     ):
+        shape = shape if shape is not None else value.shape
         stmt = Statement(shape, [], [], "write", rf.name, [rsi.name, value.name])
         self.stmts.append(stmt)
 
-    def const(self, value: int, width: int = 32) -> Value:
-        out = self._new_temp(width)
-        stmt = Statement(Shape(1, None), [out.name], [width], "const", str(value), [])
+    def const(self, value: int, width: int = 32, shape: Shape = Shape(1, None)) -> Value:
+        out = self._new_temp(width, shape)
+        stmt = Statement(shape, [out.name], [width], "const", str(value), [])
         self.stmts.append(stmt)
         return out
 
@@ -231,10 +248,57 @@ class SeqBuilder:
         self.stmts.append(stmt)
         return out
 
+    # ------------------------------------------------------------------
+    # NOTE: Vector statements (docs: vector semantics)
+    # ------------------------------------------------------------------
+    def index(self, width: int, shape: Shape) -> Value:
+        """[0, 1, ..., lanes - 1]"""
+        out = self._new_temp(width, shape)
+        self.stmts.append(Statement(shape, [out.name], [width], "index", "_", []))
+        return out
+
+    def gather(self, value: Value, index: Value, default: Value) -> Value:
+        """out[i] = value[index[i]] if index[i] < lanes(value) else default[i]"""
+        shape = self._shape_of([index.name, default.name])
+        out = self._new_temp(value.width, shape)
+        self.stmts.append(Statement(shape, [out.name], [value.width], "gather", "_",
+                                    [value.name, index.name, default.name]))
+        return out
+
+    def replicate(self, value: Value, shape: Shape) -> Value:
+        out = self._new_temp(value.width, shape)
+        self.stmts.append(Statement(shape, [out.name], [value.width], "replicate", "_",
+                                    [value.name]))
+        return out
+
+    def extract_first(self, value: Value, shape: Shape) -> Value:
+        """First `shape` lanes of a vector."""
+        out = self._new_temp(value.width, shape)
+        self.stmts.append(Statement(shape, [out.name], [value.width], "extract_first", "_",
+                                    [value.name]))
+        return out
+
+    def extend_zero_lanes(self, value: Value, shape: Shape) -> Value:
+        """Append zero lanes up to `shape` (statement kind `extend_zero`)."""
+        out = self._new_temp(value.width, shape)
+        self.stmts.append(Statement(shape, [out.name], [value.width], "extend_zero", "_",
+                                    [value.name]))
+        return out
+
+    def fold(self, operation: Operation, state: List[Value], vectors: List[Value]) -> List[Value]:
+        """Reduce `vectors` lane by lane: state = operation(*state, *lanes)."""
+        shape = self._shape_of([v.name for v in vectors])
+        outputs = [self._new_temp(v.width) for v in state]
+        self.stmts.append(Statement(shape, [o.name for o in outputs], [v.width for v in state],
+                                    "fold", operation.name,
+                                    [v.name for v in state] + [v.name for v in vectors]))
+        return outputs
+
     def env(self, env_func: EnvironmentFunction, inputs: List[Value]) -> List[Value]:
-        outputs = [self._new_temp(w) for w in env_func.outputs]
+        shape = self._shape_of([v.name for v in inputs])
+        outputs = [self._new_temp(w, shape) for w in env_func.outputs]
         stmt = Statement(
-            Shape(1, None),
+            shape,
             [o.name for o in outputs],
             env_func.outputs,
             "env",
@@ -251,10 +315,11 @@ class SeqBuilder:
         inputs: List[Value],
         on_false: List[Value],
     ) -> List[Value]:
-        outputs = [self._new_temp(w) for w in env_func.outputs]
+        shape = self._shape_of([cond.name] + [v.name for v in inputs])
+        outputs = [self._new_temp(w, shape) for w in env_func.outputs]
         all_inputs = [cond.name] + [v.name for v in inputs] + [v.name for v in on_false]
         stmt = Statement(
-            Shape(1, None),
+            shape,
             [o.name for o in outputs],
             env_func.outputs,
             "cond_env",
@@ -288,6 +353,14 @@ class SeqBuilder:
         stmt = Statement(shape, outputs, out_types, "op", op.name, inputs)
         self.stmts.append(stmt)
 
+    def fop(self, fop: FloatOperation, inputs: List[Value]) -> List[Value]:
+        shape = self._shape_of([v.name for v in inputs])
+        outputs = [self._new_temp(w, shape) for w in fop.outputs]
+        stmt = Statement(shape, [o.name for o in outputs], fop.outputs,
+                         "fop", fop.name, [v.name for v in inputs])
+        self.stmts.append(stmt)
+        return outputs
+
     def op(self, operation: Operation, inputs: List[Value]) -> Value:
         if len(operation.outputs) != 1:
             raise ValueError(
@@ -296,8 +369,9 @@ class SeqBuilder:
         return self._emit_op(operation, [v.name for v in inputs], operation.outputs[0])
 
     def op_multi(self, operation: Operation, inputs: List[Value]) -> List[Value]:
-        outputs = [self._new_temp(w) for w in operation.outputs]
-        self.add_op(operation, [v.name for v in inputs], [o.name for o in outputs])
+        shape = self._shape_of([v.name for v in inputs])
+        outputs = [self._new_temp(w, shape) for w in operation.outputs]
+        self.add_op(operation, [v.name for v in inputs], [o.name for o in outputs], shape)
         return outputs
 
     def build(self) -> StatementSeq:
@@ -313,6 +387,7 @@ class BaseBuilder:
     def __init__(self):
         self.seq = SeqBuilder()
         self._op_cache: Dict[str, Operation] = {}
+        self._fop_cache: Dict[str, FloatOperation] = {}
 
     def _cache_op(self, op_class, *args, **kwargs) -> Operation:
         op = op_class(*args, **kwargs)
@@ -484,12 +559,31 @@ class BaseBuilder:
         return self.seq.read(rf, rsi, shape)
 
     def write(
-        self, rf: RegisterFile, rsi: Value, value: Value, shape: Shape = Shape(1, None)
+        self, rf: RegisterFile, rsi: Value, value: Value, shape: Optional[Shape] = None
     ):
         self.seq.write(rf, rsi, value, shape)
 
-    def const(self, value: int, width: int = 32) -> Value:
-        return self.seq.const(value, width)
+    def const(self, value: int, width: int = 32, shape: Shape = Shape(1, None)) -> Value:
+        return self.seq.const(value, width, shape)
+
+    def index(self, width: int, shape: Shape) -> Value:
+        return self.seq.index(width, shape)
+
+    def gather(self, value: Value, index: Value, default: Value) -> Value:
+        return self.seq.gather(value, index, default)
+
+    def replicate(self, value: Value, shape: Shape) -> Value:
+        return self.seq.replicate(value, shape)
+
+    def extract_first(self, value: Value, shape: Shape) -> Value:
+        return self.seq.extract_first(value, shape)
+
+    def extend_zero_lanes(self, value: Value, shape: Shape) -> Value:
+        return self.seq.extend_zero_lanes(value, shape)
+
+    def fold(self, operation: Operation, state: List[Value], vectors: List[Value]) -> List[Value]:
+        self._op_cache[operation.name] = operation
+        return self.seq.fold(operation, state, vectors)
 
     def dyn_const(self, name: str, width: int = 32) -> Value:
         return self.seq.dyn_const(name, width)
@@ -521,6 +615,14 @@ class BaseBuilder:
 
     def op_multi(self, operation: Operation, inputs: List[Value]) -> List[Value]:
         return self.seq.op_multi(operation, inputs)
+
+    def fop(self, fop: FloatOperation, inputs: List[Value]) -> List[Value]:
+        self._fop_cache[fop.name] = fop
+        return self.seq.fop(fop, inputs)
+
+    @property
+    def float_operations_map(self) -> Dict[str, FloatOperation]:
+        return dict(self._fop_cache)
 
 
 class SnippetBuilder(BaseBuilder):
@@ -573,6 +675,7 @@ class ArchBuilder:
         self.operations: List[Operation] = []
         self.snippets: List[Snippet] = []
         self.instructions: List[Instruction] = []
+        self.float_operations: List[FloatOperation] = []
 
     def add_register_file(self, rf: RegisterFile):
         self.register_files.append(rf)
@@ -598,6 +701,10 @@ class ArchBuilder:
         self.snippets.append(snippet)
         return self
 
+    def add_float_operation(self, fop: FloatOperation):
+        self.float_operations.append(fop)
+        return self
+
     def add_instruction(self, instr: Instruction):
         self.instructions.append(instr)
         return self
@@ -613,4 +720,5 @@ class ArchBuilder:
             operations=self.operations,
             snippets=self.snippets,
             instructions=self.instructions,
+            float_operations=self.float_operations,
         )

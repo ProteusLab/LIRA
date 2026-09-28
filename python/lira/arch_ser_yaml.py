@@ -50,6 +50,8 @@ def write_arch(arch: Arch, filepath: Path) -> None:
     yaml.indent(mapping=2, sequence=4, offset=2)
 
     data = to_serializable(arch)
+    if not data['float_operations']:
+        del data['float_operations']
     with open(filepath, 'w', encoding='utf-8') as f:
         yaml.dump(data, f)
 

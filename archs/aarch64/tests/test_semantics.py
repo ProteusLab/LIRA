@@ -21,11 +21,22 @@ class Run:
             self.m.env[f'mem_read_{n}'] = self._rd(n)
             self.m.env[f'mem_write_{n}'] = self._wr(n)
         self.m.regs['X'][31] = SP
+        # Every other environment function records its calls and returns zeros
+        self.calls = []
+        for env in arch.environment_functions:
+            if env.name not in self.m.env:
+                self.m.env[env.name] = self._recorder(env)
         self.ins = ins
         self.ops = [fields[n] for n in ins.operand_names]
         # the encoding must be valid and decode back to the same operands
         word = self.m.encode(ins, self.ops)
         assert self.m.valid_word(ins, word) and self.m.decode(ins, word) == self.ops
+
+    def _recorder(self, env):
+        def f(*args):
+            self.calls.append((env.name,) + args)
+            return [0] * len(env.outputs)
+        return f
 
     def _rd(self, n):
         return lambda a: [sum(self.mem.get(a + i, 0) << (8 * i) for i in range(n // 8))]
@@ -184,3 +195,76 @@ def test_svc_and_nop(arch):
     assert Run(arch, 'SVC_EX_exception', imm16=0x80).go().svc == [0x80]
     r = Run(arch, 'NOP_HI_hints').go()
     assert r.branches == [] and r.reg(31) == SP
+
+
+# -- ARMv8.1-8.9 general purpose (not all implemented by the test host) -----------
+def test_cssc(arch):
+    assert Run(arch, 'ABS_64_dp_1src', Rn=1, Rd=2).x(x1=-5).go().reg(2) == 5
+    assert Run(arch, 'ABS_32_dp_1src', Rn=1, Rd=2).x(x1=0xFFFFFFFF_80000000).go().reg(2) == 0x80000000
+    assert Run(arch, 'CNT_64_dp_1src', Rn=1, Rd=2).x(x1=0xF0F0).go().reg(2) == 8
+    assert Run(arch, 'CTZ_32_dp_1src', Rn=1, Rd=2).x(x1=0).go().reg(2) == 32
+    assert Run(arch, 'CTZ_64_dp_1src', Rn=1, Rd=2).x(x1=0x80).go().reg(2) == 7
+    assert Run(arch, 'SMAX_64_minmax_imm', imm8=0x80, Rn=1, Rd=2).x(x1=-200).go().reg(2) == M64 - 127
+    assert Run(arch, 'UMIN_32U_minmax_imm', imm8=0xFF, Rn=1, Rd=2).x(x1=0x1000).go().reg(2) == 0xFF
+    assert Run(arch, 'SMIN_64_dp_2src', Rm=3, Rn=1, Rd=2).x(x1=-1, x3=1).go().reg(2) == M64
+    assert Run(arch, 'UMAX_64_dp_2src', Rm=3, Rn=1, Rd=2).x(x1=-1, x3=1).go().reg(2) == M64
+
+
+def test_bc_cond(arch):
+    r = Run(arch, 'BC_only_condbranch', imm19=enc19(0x20), cond=0b0000).flags(0b0100).go()
+    assert r.branches == [PC + 0x20]
+    assert Run(arch, 'BC_only_condbranch', imm19=enc19(0x20), cond=0b0001).flags(0b0100).go().branches == []
+
+
+def test_exclusive_pair_success(arch):
+    """LDXR marks the monitor, a matching STXR stores and returns status 0."""
+    r = Run(arch, 'LDXR_LR64_ldstexclr', Rn=1, Rt=2).x(x1=0x2000)
+    r._wr(64)(0x2000, 77)
+    r.go()
+    assert r.reg(2) == 77
+    assert ('exclusive_mark', 0x2000, 8) in r.calls
+    s = Run(arch, 'STXR_SR64_ldstexclr', Rs=3, Rn=1, Rt=2).x(x1=0x2000, x2=99, x3=5)
+    s.m.env['exclusive_check'] = lambda a, n: [1]
+    s.go()
+    assert s._rd(64)(0x2000) == [99] and s.reg(3) == 0
+
+
+def test_mops_prologue_does_everything(arch):
+    r = Run(arch, 'CPYP_CPY_memcms', sz=0, Rs=2, Rn=3, Rd=1).x(x1=0x100, x2=0x80, x3=0x40).go()
+    assert ('mem_copy', 0x100, 0x80, 0x40, 1) in r.calls
+    assert (r.reg(1), r.reg(2), r.reg(3)) == (0x140, 0xC0, 0)
+    assert r.m.regs['NZCV'][0] == 0b0010
+    back = Run(arch, 'CPYP_CPY_memcms', sz=0, Rs=2, Rn=3, Rd=1).x(x1=0x90, x2=0x80, x3=0x40).go()
+    assert back.m.regs['NZCV'][0] == 0b1010                 # overlapping: backward
+    s = Run(arch, 'SETP_SET_memcms', sz=0, Rs=2, Rn=3, Rd=1).x(x1=0x100, x2=0xAB, x3=0x10).go()
+    assert ('mem_set', 0x100, 0x10, 0xAB) in s.calls and (s.reg(1), s.reg(3)) == (0x110, 0)
+
+
+def test_pauth_uses_environment(arch):
+    r = Run(arch, 'PACIASP_HI_hints').x(x30=0x1234)
+    r.m.env['pac_add'] = lambda p, m, k: [p | (k << 56) | (m & 0xF) << 52]
+    r.go()
+    assert r.reg(30) == 0x1234 | (SP & 0xF) << 52                 # key IA = 0, modifier SP
+    r = Run(arch, 'AUTDZB_64Z_dp_1src', Rd=4).x(x4=0x5555)
+    r.m.env['pac_auth'] = lambda p, m, k: [p + m + k]
+    assert r.go().reg(4) == 0x5555 + 0 + 3                         # zero modifier, key DB
+    r = Run(arch, 'BLRAA_64P_branch_reg', Rn=1, Rm=2).x(x1=0x4000, x2=7)
+    r.m.env['pac_auth'] = lambda p, m, k: [p ^ m]
+    r.go()
+    assert r.branches == [0x4000 ^ 7] and r.reg(30) == PC + 4
+
+
+def test_system_hooks(arch):
+    r = Run(arch, 'MRS_RS_systemmove_SYSREG', o0=1, op1=3, CRn=13, CRm=0, op2=2, Rt=5)   # TPIDR_EL0
+    r.m.env['sysreg_read'] = lambda *f: [0xABC]
+    assert r.go().reg(5) == 0xABC
+    r = Run(arch, 'MSR_SR_systemmove_SYSREG', o0=1, op1=3, CRn=13, CRm=0, op2=2, Rt=5).x(x5=9).go()
+    assert ('sysreg_write', 1, 3, 13, 0, 2, 9) in r.calls
+    r = Run(arch, 'DMB_BO_barriers', CRm=0b1011).go()
+    assert ('barrier', 0, 0b1011) in r.calls
+    r = Run(arch, 'SYS_CR_systeminstrs', op1=3, CRn=7, CRm=4, op2=1, Rt=2).x(x2=0x8000).go()  # DC ZVA
+    assert ('sys_op', 3, 7, 4, 1, 0x8000) in r.calls
+    r = Run(arch, 'HVC_EX_exception', imm16=0x42).go()
+    assert ('exception_call', 2, 0x42) in r.calls
+    r = Run(arch, 'CFINV_M_pstate').flags(0b0010).go()
+    assert r.m.regs['NZCV'][0] == 0b0000

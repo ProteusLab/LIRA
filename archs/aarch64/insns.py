@@ -8,20 +8,29 @@ a constant if the encoding fixes that field.
 `undef` handlers return a 1-bit value that is set when the ASL decode ends in
 `EndOfDecode(Decode_UNDEF)`; they become the encoding constraints.
 """
-from typing import Callable, Dict, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 from .lib import S
 from .xmlspec import Encoding
 
 Handler = Callable[[S, Encoding, Callable], None]
 SEM: Dict[str, Tuple[Handler, Optional[Handler]]] = {}
+# file -> [(suffix, {field: value})]: split an XML encoding into several
+# LIRA instructions with these fields fixed (see xmlspec.specialize)
+SPECS: Dict[str, List[Tuple[str, Dict[str, int]]]] = {}
+# Encodings of covered files that belong to features outside the modeled set
+EXCLUDE: set = set()
+# Load/store files whose accesses are ordered (alignment-checked)
+LDST_ORDERED: set = set()
 
 
-def sem(*files, undef=None):
+def sem(*files, undef=None, spec=None):
     def deco(fn):
         for f in files:
             assert f not in SEM, f
             SEM[f] = (fn, undef)
+            if spec:
+                SPECS[f] = spec
         return fn
     return deco
 
@@ -399,7 +408,7 @@ def _ldst(s: S, e: Encoding, F):
     bits, signed, load, regsize = _ldst_params(e)
     scale = bits.bit_length() - 4                          # log2(bits / 8)
     mode = e.name.rsplit('_', 1)[1]
-    if mode in ('immpost', 'immpre', 'unscaled'):
+    if mode in ('immpost', 'immpre', 'unscaled', 'unpriv'):
         offset = s.sext(F('imm9'), 64)
     elif mode == 'pos':
         offset = s.lsl(s.zext(F('imm12'), 64), s.c(scale, 64))
@@ -410,6 +419,8 @@ def _ldst(s: S, e: Encoding, F):
 
     base = s.xsp_read(F('Rn'), 64)
     address = base if post else s.add(base, offset)
+    if e.file in LDST_ORDERED:
+        s.check_alignment(address, bits)
     if load:
         data = s.mem_read(address, bits)
         s.x_write(F('Rt'), (s.sext if signed else s.zext)(data, regsize))
@@ -464,5 +475,7 @@ def _nop(s: S, e: Encoding, F):
 def _svc(s: S, e: Encoding, F):
     s.env(s.ctx.env_svc, [F('imm16')])
 
+
+from . import insns_fp, insns_simd, insns_simd2, insns_v8  # noqa: E402,F401  (register handlers)
 
 FILES = list(SEM)
