@@ -200,7 +200,8 @@ SIMGEN_RFS = ('X', 'V', 'NZCV', 'FPCR', 'FPSR')
 SIMGEN_ENVS = {'pc_read', 'pc_write', 'supervisor_call'} | \
     {f'mem_{d}_{n}' for d in ('read', 'write') for n in (8, 16, 32, 64, 128)} | \
     {'check_alignment', 'exclusive_mark', 'exclusive_check', 'exclusive_clear',
-     'barrier', 'hint', 'wait_timeout', 'branch_target', 'mem_copy', 'mem_set'}
+     'barrier', 'hint', 'wait_timeout', 'branch_target', 'mem_copy', 'mem_set',
+     'pac_add', 'pac_auth', 'pac_strip', 'pac_generic'}
 
 
 def simgen_subset(arch: Arch) -> Arch:

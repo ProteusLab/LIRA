@@ -234,7 +234,15 @@ def run_hw(fn, st):
     return out, block[S_PC]
 
 
-class AlignmentFault(Exception):
+class Fault(Exception):
+    """An exception the environment raises (the simulator stops)."""
+
+
+class AlignmentFault(Fault):
+    pass
+
+
+class PacFault(Fault):
     pass
 
 
@@ -243,6 +251,52 @@ def check_alignment(addr, size, exclusive):
     within 16 bytes (FEAT_LSE2)."""
     if not (addr % size == 0 if exclusive else addr % 16 + size <= 16):
         raise AlignmentFault(f'{size}-byte access at {addr:#x}')
+
+
+# Pointer authentication as the simulator's runtime does it (lira-simgen-lib
+# cpu_state_ext.cc): Linux EL0, 48-bit VAs, TBI for data pointers only, an
+# implementation-defined keyed hash, faulting AUT (FEAT_FPAC)
+PAC_KEYS = [(0x243f6a8885a308d3, 0x13198a2e03707344), (0xa4093822299f31d0, 0x082efa98ec4e6c89),
+            (0x452821e638d01377, 0xbe5466cf34e90c6c), (0xc0ac29b7c97c50dd, 0x3f84d5b5b5470917),
+            (0x9216d5d98979fb1b, 0xd1310ba698dfb5ac)]
+
+
+def _mix(x):
+    x ^= x >> 33
+    x = x * 0xff51afd7ed558ccd & M64
+    x ^= x >> 33
+    x = x * 0xc4ceb9fe1a85ec53 & M64
+    return x ^ x >> 33
+
+
+def _pac_hash(ptr, modifier, key):
+    k0, k1 = PAC_KEYS[key]
+    return _mix(_mix(ptr ^ k0) ^ modifier ^ k1) ^ _mix((modifier + k0) & M64)
+
+
+def _pac_field(data):
+    return 0x007f000000000000 if data else 0xff7f000000000000
+
+
+def pac_strip(ptr, data):
+    field = _pac_field(data)
+    return ptr | field if ptr >> 55 & 1 else ptr & ~field & M64
+
+
+def pac_add(ptr, modifier, key):
+    field = _pac_field(key >= 2)
+    original = pac_strip(ptr, key >= 2)
+    pac = _pac_hash(original, modifier, key) & field
+    if ptr != original:
+        pac ^= 1 << 54
+    return [original & ~field & M64 | pac]
+
+
+def pac_auth(ptr, modifier, key):
+    original = pac_strip(ptr, key >= 2)
+    if pac_add(original, modifier, key)[0] != ptr:
+        raise PacFault(f'{ptr:#x} key {key}')
+    return [original]
 
 
 def interp_step(arch, ins, word, st, pc, mem_base, mem_init):
@@ -291,6 +345,9 @@ def interp_step(arch, ins, word, st, pc, mem_base, mem_init):
             wr(8)(dst + i, rd(8)(src + i)[0])
 
     m.env['mem_copy'] = mem_copy
+    m.env['pac_add'], m.env['pac_auth'] = pac_add, pac_auth
+    m.env['pac_strip'] = lambda ptr, data: [pac_strip(ptr, data)]
+    m.env['pac_generic'] = lambda v, mod: [_pac_hash(v, mod, 4) & 0xffffffff00000000]
     m.env['mem_set'] = lambda dst, n, byte: [wr(8)(dst + i, byte) for i in range(n)] and None
     for name in ('barrier', 'hint', 'branch_target', 'wait_timeout'):
         m.env[name] = lambda *a: None

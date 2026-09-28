@@ -20,7 +20,7 @@ from pathlib import Path
 import pytest
 
 from .conftest import sample_operands
-from .test_semantics_hw import (M64, MEM_BASE_OFF, MEM_SIZE, STATES_PER_CASE, AlignmentFault,
+from .test_semantics_hw import (M64, MEM_BASE_OFF, MEM_SIZE, STATES_PER_CASE, Fault,
                                 build_cases, diff_state, interp_step, random_state, random_v,
                                 run_hw)
 
@@ -63,7 +63,7 @@ def capi():
     return lib
 
 
-SIM_FAULT = -2       # lira_a64_exec: runtime error (e.g. an Alignment fault)
+SIM_FAULT = -2       # lira_a64_exec: runtime error (an Alignment or PAC fault)
 
 
 def sim_exec(capi, word, st, pc):
@@ -194,7 +194,7 @@ def test_simgen_matches_interpreter(sim_arch, sim_machine, capi):
             rc, sim, sim_pc = sim_exec(capi, word, st, pc)
             try:
                 out, ref_mem, ref_pc = interp_step(arch, ins, word, st, pc, base, init)
-            except AlignmentFault as e:
+            except Fault as e:
                 if rc != SIM_FAULT:
                     failures.append((ins.name, hex(word), names, f'reference faults ({e}), sim rc={rc}'))
                     break

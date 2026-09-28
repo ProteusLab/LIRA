@@ -297,9 +297,9 @@ supports. `gen.py --simgen <file>` writes the instructions whose semantics use
 only the statements in `SIMGEN_KINDS` (scalar and vector, including `fop`),
 the register files `X`, `V`, `NZCV`, `FPCR`, `FPSR` and the environment
 functions the simulator implements (`SIMGEN_ENVS`: PC, memory, SVC, alignment
-checks, the exclusive monitor, barriers, hints and MOPS copy/set). Currently
-2643 of the 2706 instructions: everything but PAuth and the system and
-exception instructions:
+checks, the exclusive monitor, barriers, hints, MOPS copy/set and pointer
+authentication). Currently 2689 of the 2706 instructions: everything but the
+system and exception instructions:
 
 ```bash
 python -m archs.aarch64.gen --simgen ../lira-simgen-lib/data/AArch64/aarch64.yaml
@@ -321,12 +321,14 @@ or `$LIRA_A64_SIM_YAML`).
     with random fields including register 31, branches and literal loads.
 * `test_programs.py` cross-compiles `programs/*.c` (integer algorithms,
   division, `__int128`, bit manipulation, bitfields, jump tables, function
-  pointers, narrow loads, struct copies, MOPS copy/set sequences) at `-O0`,
+  pointers, narrow loads, struct copies, MOPS copy/set sequences, pointer
+  authentication) at `-O0`,
   `-O1`, `-O2`, `-O3` and `-Os` for `aarch64-linux` with
   `-mgeneral-regs-only` (plus a program's `guest-flags:` line). Each binary
   runs in the generated simulator and must print exactly what the natively
-  compiled program prints; `mops.c` uses memmove/memcpy/memset natively, as
-  the host may lack MOPS.
+  compiled program prints; `mops.c` uses memmove/memcpy/memset and `pauth.c`
+  plain pointers natively (the host may lack MOPS; PAC values depend on
+  keys).
 * `test_valgrind.py` runs valgrind's arm64 instruction tests
   (`none/tests/arm64`, from a checkout at `$VALGRIND_SRC`, default
   `../valgrind`) in the simulator with a small freestanding libc
