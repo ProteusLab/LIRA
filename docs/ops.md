@@ -119,11 +119,11 @@ Overflow:
   - same for others with signedness and operation set correspondingly
 
 Shifts:
-- `lsl(a, b) = bv2u(a) * 2^bv2u(b)`
+- `lsl(a, b) = bv2u(a) * 2**bv2u(b)`
   - Note: this provides `lsl(a, huge number) = 0`
-- `lsr(a, b) = bv2u(a) / 2^bv2u(b)`
+- `lsr(a, b) = bv2u(a) / 2**bv2u(b)`
   - Note: this provides `lsr(a, huge number) = 0`
-- `asr(a, b) = bv2s(a) / 2^bv2u(b)`
+- `asr(a, b) = bv2s(a) / 2**bv2u(b)`
   - Note: this provides `asr(a, huge number) = replicate sign bit`
   - Note: `b` is treated as unsigned
 
@@ -140,10 +140,10 @@ Others:
 Others: complex: are standard, but have to be defined (have `semantic_func`):
 - `rol<N>(a, b) = lsl(a, b%N) | lsr(a, N - b%N)`
   - same for `ror` with `lsl` and `lsr` swapped
-- `concat_hi_lo<_, _, L>(a, b) = bv2u(a) * 2^L + bv2u(b)`
+- `concat_hi_lo<_, _, L>(a, b) = bv2u(a) * 2**L + bv2u(b)`
 - `extract(val, lsb) = extract_low(lsr(val, lsb))`
   - Note: standard extraction of several bits from a bigger bit vector from a given offset
 - `orr_shifted(base, val, lsb) = orr(base, lsl(extend_zero(val), lsb))`
   - Note: this is simplified `insert` created for encoding - it behaves the same way if `base` has 0 bits in the place of modification
-- `insert<_, M>(base, val, lsb) = orr(and(base, (2^M - 1) * 2^lsb), lsl(extend_zero(val), lsb))`
+- `insert<_, M>(base, val, lsb) = orr(and(base, (2**M - 1) * 2**lsb), lsl(extend_zero(val), lsb))`
   - Note: standard inserting of several bits into a bigger bit vector at a given offset
