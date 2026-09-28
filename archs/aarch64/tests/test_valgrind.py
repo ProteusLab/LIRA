@@ -13,7 +13,8 @@ only none/tests/arm64 is used:
 
 The sources are GPL-2 and are not copied here. The guest build uses the libc in
 valgrind/. Tests of features the simulator does not run yet are left out, and
-memory_test is filtered down to the cases it runs (`supported_only`).
+memory_test keeps the cases whose instructions all decode in the description
+the simulator was generated from (`supported_only`).
 """
 import os
 import platform
@@ -25,6 +26,7 @@ from pathlib import Path
 import pytest
 
 from .test_programs import CC, GUEST_FLAGS, HOST_CC, LD, SIM
+from .test_simgen import SIM_YAML
 
 HERE = Path(__file__).resolve().parent
 RT = HERE / 'valgrind'
@@ -46,33 +48,85 @@ def cast_operands(src: str) -> str:
     return re.sub(r'"r" \((R[A-Z]+val)\)', r'"r" ((ULong)(\1))', src)
 
 
-# SIMD&FP registers and instructions: not in the simulator yet.
-_UNSUPPORTED = re.compile(r'\b[vqdsbh]\d+\b|\b(ld|st)[1-4]r?\b')
+MC_ATTRS = '+v8.9a,+fullfp16,+fp16fml,+aes,+sha2,+sha3,+sm4,+i8mm,+dotprod,+rdm,+crc,+lse'
+
+
+def _byte(b: str) -> int:
+    """A byte of llvm-mc's encoding; fixup bits (label references) read as 0."""
+    b = b.strip()
+    if b.startswith('0x'):
+        return int(b, 16)
+    return int(re.sub(r'[^01]', '0', b[2:] if b.startswith('0b') else '0'), 2)
+
+
+def assemble(texts):
+    """Encode each asm text (statements separated by ';' or newlines) with
+    llvm-mc: the list of words per text, None where a statement is rejected."""
+    mc = Path(CC).with_name('llvm-mc')
+    lines, owner = [], []           # asm lines; the text each line belongs to
+    for i, text in enumerate(texts):
+        stmts = [st.strip() for st in re.split(r'[;\n]', text) if st.strip()]
+        lines += [f'.ascii "@{i}"'] + stmts
+        owner += [i] * (len(stmts) + 1)
+    p = subprocess.run([mc, '-triple=aarch64', f'-mattr={MC_ATTRS}', '--show-encoding'],
+                       input='\n'.join(lines), capture_output=True, text=True)
+    bad = {owner[int(n) - 1] for n in re.findall(r'^<stdin>:(\d+):\d+: error', p.stderr, re.M)}
+    words, cur = [[] for _ in texts], None
+    for line in p.stdout.splitlines():
+        if m := re.search(r'\.ascii\s+"@(\d+)"', line):
+            cur = int(m.group(1))
+        elif m := re.search(r'encoding: \[([^\]]*)\]', line):
+            words[cur].append(int.from_bytes(bytes(map(_byte, m.group(1).split(','))), 'little'))
+    return [None if i in bad else w for i, w in enumerate(words)]
+
+
+_sim_decoder = None
+
+
+def sim_decodes(word: int) -> bool:
+    """The word decodes in the description the simulator was generated from."""
+    global _sim_decoder
+    if _sim_decoder is None:
+        from python.lira.arch_ser_yaml import read_arch
+        from .lira_interp import Machine
+        arch = read_arch(SIM_YAML)
+        _sim_decoder = Machine(arch), arch.instructions
+    machine, insns = _sim_decoder
+    return any(machine.valid_word(ins, word) for ins in insns)
+
+
+def supported(texts):
+    """For each asm text: every statement assembles and decodes in the simulator."""
+    return [w is not None and all(map(sim_decodes, w)) for w in assemble(texts)]
+
+
 _CASE = re.compile(r'^\s*(MEM_TEST|TESTINST\w*)\s*\(\s*("(?:[^"\\]|\\.)*")')
 
 
 def supported_only(src: str) -> str:
-    """memory_test.c without SIMD&FP: drop the q17-q20 transfer from MEM_TEST
-    (their xor lines stay 0 for integer instructions) and every case outside
-    the simulator subset."""
+    """memory_test.c with the cases the simulator runs."""
+    lines = src.split('\n')
+    cases, i = [], 0                # (first line, last line, asm text)
+    while i < len(lines):
+        m = _CASE.match(lines[i])
+        if m:
+            j = i
+            while not re.search(r'\)\s*;?\s*$', lines[j]):
+                j += 1
+            cases.append((i, j, m.group(2)[1:-1]))
+            i = j
+        i += 1
+    drop = set()
+    for (first, last, _), ok in zip(cases, supported([c[2] for c in cases])):
+        if not ok:
+            drop.update(range(first, last + 1))
     out = []
-    lines = iter(src.split('\n'))
-    for line in lines:
-        if re.search(r'"(ldr|str) q(17|18|19|20),', line):
+    for n, line in enumerate(lines):
+        if n in drop:
             continue
-        line = line.replace('"v17", "v18", "v19", "v20", ', '')
         # AREA_MID rounds into `area` by address; pin its alignment so the
         # data read does not depend on the stack layout.
-        line = line.replace('unsigned char area[512];', 'unsigned char area[512] __attribute__((aligned(16)));')
-        m = _CASE.match(line)
-        if not m:
-            out.append(line)
-            continue
-        case = [line]
-        while not re.search(r'\)\s*;?\s*$', case[-1]):
-            case.append(next(lines))
-        if not _UNSUPPORTED.search(m.group(2)):
-            out.extend(case)
+        out.append(line.replace('unsigned char area[512];', 'unsigned char area[512] __attribute__((aligned(16)));'))
     return '\n'.join(out)
 
 
@@ -99,7 +153,10 @@ def darwin(src: str) -> str:
 
 
 def build_guest(src: Path, elf: Path, *flags):
-    subprocess.run([CC, '-O0', *GUEST_FLAGS, '-march=armv8-a+crc', '-fno-builtin', '-nostdlibinc',
+    # The tests' inline asm uses SIMD&FP registers; the compiler must not
+    # (-mno-implicit-float instead of -mgeneral-regs-only).
+    cflags = [f for f in GUEST_FLAGS if f != '-mgeneral-regs-only'] + ['-mno-implicit-float']
+    subprocess.run([CC, '-O0', *cflags, '-march=armv8-a+crc', '-fno-builtin', '-nostdlibinc',
                     f'-I{RT / "include"}', '-w', f'--ld-path={LD}', *flags, '-o', elf, src, RT / 'rt.c'],
                    check=True)
 

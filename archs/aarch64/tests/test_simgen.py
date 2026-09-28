@@ -20,8 +20,9 @@ from pathlib import Path
 import pytest
 
 from .conftest import sample_operands
-from .test_semantics_hw import (MEM_BASE_OFF, MEM_SIZE, STATES_PER_CASE, AlignmentFault,
-                                build_cases, interp_step, random_state, run_hw)
+from .test_semantics_hw import (M64, MEM_BASE_OFF, MEM_SIZE, STATES_PER_CASE, AlignmentFault,
+                                build_cases, diff_state, interp_step, random_state, random_v,
+                                run_hw)
 
 DEFAULT = Path(__file__).resolve().parents[4] / 'lira-simgen-lib' / 'build' / 'a64' / \
     'interpreter' / ('liba64-capi.dylib' if sys.platform == 'darwin' else 'liba64-capi.so')
@@ -57,7 +58,7 @@ def sim_cases(sim_arch, tmp_path_factory):
 @pytest.fixture(scope='module')
 def capi():
     lib = ctypes.CDLL(str(CAPI))
-    lib.lira_a64_exec.argtypes = [ctypes.c_uint32, U64P, U64P, U64P, U64P, U64P]
+    lib.lira_a64_exec.argtypes = [ctypes.c_uint32, U64P, U64P, U64P, U64P, U64P, U64P]
     lib.lira_a64_decode.argtypes = [ctypes.c_uint32]
     return lib
 
@@ -65,18 +66,24 @@ def capi():
 SIM_FAULT = -2       # lira_a64_exec: runtime error (e.g. an Alignment fault)
 
 
-def sim_exec(capi, word, x, nzcv, fpcr, fpsr, pc):
-    """Run one word in the generated simulator: (rc, [x, nzcv, fpcr, fpsr, pc])."""
+def sim_exec(capi, word, st, pc):
+    """Run one word in the generated simulator on state `st` (X and V with up to
+    32 registers, NZCV, FPCR, FPSR): (rc, state with 32 X/V registers, pc)."""
+    x = st['X'] + [0] * (32 - len(st['X']))
+    v = st['V'] + [0] * (32 - len(st['V']))
     xs = (ctypes.c_uint64 * 32)(*x)
-    regs = [ctypes.c_uint64(v) for v in (nzcv, fpcr, fpsr, pc)]
-    rc = capi.lira_a64_exec(word, xs, *map(ctypes.byref, regs))
-    return rc, [list(xs)] + [r.value for r in regs]
+    vs = (ctypes.c_uint64 * 64)(*[w for r in v for w in (r & M64, r >> 64)])
+    regs = [ctypes.c_uint64(r) for r in (st['NZCV'], st['FPCR'], st['FPSR'], pc)]
+    rc = capi.lira_a64_exec(word, xs, vs, *map(ctypes.byref, regs))
+    out = {'X': list(xs), 'V': [vs[2 * i] | vs[2 * i + 1] << 64 for i in range(32)],
+           'NZCV': regs[0].value, 'FPCR': regs[1].value, 'FPSR': regs[2].value}
+    return rc, out, regs[3].value
 
 
-def sim_step(capi, word, x, nzcv, fpcr, fpsr, pc):
-    rc, out = sim_exec(capi, word, x, nzcv, fpcr, fpsr, pc)
+def sim_step(capi, word, st, pc):
+    rc, out, pc = sim_exec(capi, word, st, pc)
     assert rc == 0, (hex(word), rc)
-    return out
+    return out, pc
 
 
 def test_decoder(sim_arch, sim_machine, capi):
@@ -97,7 +104,7 @@ def test_decoder(sim_arch, sim_machine, capi):
 
 @pytest.mark.skipif(platform.machine() not in ('arm64', 'aarch64'), reason='needs an AArch64 host')
 def test_simgen_matches_hardware(sim_arch, sim_cases, capi):
-    """X registers, NZCV, FPCR, FPSR and memory of the generated C++ vs. the host CPU."""
+    """X and V registers, NZCV, FPCR, FPSR and memory of the generated C++ vs. the host CPU."""
     rng = random.Random(11)
     mem = (ctypes.c_uint8 * MEM_SIZE)()
     base = ctypes.addressof(mem)
@@ -107,16 +114,14 @@ def test_simgen_matches_hardware(sim_arch, sim_cases, capi):
             st = random_state(rng, ins, ops, base)
             init = bytes(rng.getrandbits(8) for _ in range(MEM_SIZE))
             ctypes.memmove(mem, init, MEM_SIZE)
-            hw_out, pc = run_hw(fn, st)
-            hw = (hw_out['X'], hw_out['NZCV'], hw_out['FPCR'], hw_out['FPSR'], bytes(mem))
+            hw, pc = run_hw(fn, st)
+            hw_mem = bytes(mem)
             ctypes.memmove(mem, init, MEM_SIZE)
-            x, f, fpcr, fpsr, _ = sim_step(capi, word, st['X'] + [0] * 24, st['NZCV'],
-                                           st['FPCR'], st['FPSR'], pc)
-            got = (x[:8], f, fpcr, fpsr, bytes(mem))
-            if got != hw:
-                failures.append((ins.name, hex(word), [hex(r) for r in st['X']],
-                                 'hw', [hex(r) for r in hw[0]], *map(hex, hw[1:4]),
-                                 'sim', [hex(r) for r in got[0]], *map(hex, got[1:4])))
+            sim, _ = sim_step(capi, word, st, pc)
+            sim = dict(sim, X=sim['X'][:8], V=sim['V'][:8])
+            if diff_state(hw, sim) or bytes(mem) != hw_mem:
+                failures.append((ins.name, hex(word), 'hw vs sim:', diff_state(hw, sim),
+                                 'mem differs' if bytes(mem) != hw_mem else ''))
                 break
     assert not failures, '\n'.join(map(str, failures[:20])) + f'\n({len(failures)} failing)'
 
@@ -134,10 +139,16 @@ def _pick(machine, ins, rng):
         fixed['Rn'] = rn
         fixed['Rm'] = rng.choice([r for r in range(32) if r != rn])
     if 'imm12' in ins.operand_names and _is_mem(ins):
-        fixed['imm12'] = rng.randrange(256)          # scaled offset stays in the buffer
+        fixed['imm12'] = rng.randrange(64)           # scaled offset (up to x16) stays in the buffer
     if 'loadlit' in ins.name:
         fixed['imm19'] = rng.randrange(-512, 512) & ((1 << 19) - 1)
-    return sample_operands(machine, ins, rng, fixed)
+    try:
+        return sample_operands(machine, ins, rng, fixed)
+    except AssertionError:
+        if fixed.get('Rm') != 31:                    # Rm = 31 selects another form (post-index)
+            raise
+        fixed['Rm'] = rng.choice([r for r in range(31) if r != fixed['Rn']])
+        return sample_operands(machine, ins, rng, fixed)
 
 
 def test_simgen_matches_interpreter(sim_arch, sim_machine, capi):
@@ -156,18 +167,19 @@ def test_simgen_matches_interpreter(sim_arch, sim_machine, capi):
             names = dict(zip(ins.operand_names, ops))
             x = [rng.getrandbits(64) if rng.random() < 0.7 else rng.choice([0, 1, (1 << 64) - 1, 1 << 63])
                  for _ in range(32)]
+            v = [random_v(rng) for _ in range(32)]
             pc = base + MEM_BASE_OFF if is_mem else rng.getrandbits(62) << 2
             if is_mem:
                 if 'Rn' in names:
                     x[names['Rn']] = base + MEM_BASE_OFF + rng.randrange(-256, 256)
                 if 'Rm' in names and names['Rm'] != 31:
-                    x[names['Rm']] = rng.randrange(256)
+                    x[names['Rm']] = rng.randrange(64)     # scaled by up to 16
             nzcv, fpcr, fpsr = rng.getrandbits(4), rng.getrandbits(32), rng.getrandbits(32)
             init = bytes(rng.getrandbits(8) for _ in range(MEM_SIZE))
 
-            st = {'X': x, 'V': [], 'NZCV': nzcv, 'FPCR': fpcr, 'FPSR': fpsr}
+            st = {'X': x, 'V': v, 'NZCV': nzcv, 'FPCR': fpcr, 'FPSR': fpsr}
             ctypes.memmove(mem, init, MEM_SIZE)
-            rc, (sx, sf, sfpcr, sfpsr, spc) = sim_exec(capi, word, x, nzcv, fpcr, fpsr, pc)
+            rc, sim, sim_pc = sim_exec(capi, word, st, pc)
             try:
                 out, ref_mem, ref_pc = interp_step(arch, ins, word, st, pc, base, init)
             except AlignmentFault as e:
@@ -175,13 +187,11 @@ def test_simgen_matches_interpreter(sim_arch, sim_machine, capi):
                     failures.append((ins.name, hex(word), names, f'reference faults ({e}), sim rc={rc}'))
                     break
                 continue
-            ref = (out['X'], out['NZCV'], out['FPCR'], out['FPSR'], ref_mem, ref_pc)
-            got = (sx, sf, sfpcr, sfpsr, bytes(mem), spc)
-            if got != ref:
-                diff = [f'x{i}: ref={ref[0][i]:#x} sim={sx[i]:#x}' for i in range(32) if ref[0][i] != sx[i]]
-                failures.append((ins.name, hex(word), names, diff,
-                                 f'nzcv ref={ref[1]} sim={sf}', f'fpcr ref={ref[2]:#x} sim={sfpcr:#x}',
-                                 f'fpsr ref={ref[3]:#x} sim={sfpsr:#x}', f'pc ref={ref[5]:#x} sim={spc:#x}',
-                                 'mem differs' if got[4] != ref[4] else ''))
+            assert rc == 0, (ins.name, hex(word), rc)
+            diff = diff_state(out, sim)
+            if diff or bytes(mem) != ref_mem or sim_pc != ref_pc:
+                failures.append((ins.name, hex(word), names, 'ref vs sim:', diff,
+                                 f'pc ref={ref_pc:#x} sim={sim_pc:#x}',
+                                 'mem differs' if bytes(mem) != ref_mem else ''))
                 break
     assert not failures, '\n'.join(map(str, failures[:25])) + f'\n({len(failures)} failing)'
