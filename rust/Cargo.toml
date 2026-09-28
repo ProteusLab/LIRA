@@ -1,7 +1,7 @@
 [workspace]
 resolver = "3"
 
-members = ["lira", "lira_trs", "tests", "copy"]
+members = ["lira", "lira_trs", "lira_opt", "tests", "copy"]
 
 [workspace.dependencies]
 anyhow = "1.0.102"
@@ -12,6 +12,9 @@ ahash = "0.8.12"
 regex = "1.12.3"
 serde = "1.0.228"
 serde_yaml = "0.8"
+rayon = "1.12.0"
+dateg = { git = "https://github.com/belovdv/dateg.git", rev = "abad7b4ce1e677515781306575a11930b6bfd9c4" }
+dateg_extractors = { git = "https://github.com/belovdv/dateg.git", rev = "abad7b4ce1e677515781306575a11930b6bfd9c4" }
 
 [profile.work]
 inherits = "dev"

@@ -3,9 +3,9 @@ use lira_trs::{dfg, theory::Lira};
 
 fn optimize(ir: &lira::StatementSeq) -> lira::StatementSeq {
     let dfg = dfg::State::from_lira(&ir, |kind| match kind {
-        "input" | "op" | "const" => dfg::ImplicitKind::Pure,
-        "read" => dfg::ImplicitKind::ImplicitRead,
-        _ => dfg::ImplicitKind::Implicit,
+        "input" | "op" | "const" => dfg::Implicitness::Pure,
+        "read" => dfg::Implicitness::Read,
+        _ => dfg::Implicitness::Write,
     });
     dfg._dbg_print(8, 4);
 
@@ -48,11 +48,9 @@ fn optimize(ir: &lira::StatementSeq) -> lira::StatementSeq {
         val)
     }
 
-    while lira.run_ruleset("factorize vector arguments") {}
-    while lira.run_ruleset("aliases convert") {}
+    lira.enrich();
     while lira.run_ruleset("opt") {}
-    while lira.run_ruleset("aliases convert") {}
-    while lira.run_ruleset("de factorize vector arguments") {}
+    lira.enrich();
 
     let dfg = dfg::State::from_egraph(&lira, state);
     dfg._dbg_print(8, 4);

@@ -73,7 +73,7 @@ impl Statement {
 
 impl std::fmt::Display for StatementSeq {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for stmt in self.iter() {
+        for stmt in self.0.iter() {
             writeln!(f, "{};", stmt)?;
         }
         Ok(())
@@ -82,12 +82,17 @@ impl std::fmt::Display for StatementSeq {
 
 impl StatementSeq {
     pub fn parse(s: &str) -> anyhow::Result<Self> {
-        let mut seq = StatementSeq::default();
-        for raw in s.split(';').filter(|part| !part.trim().is_empty()) {
-            let stmt = Statement::parse(raw.trim())?;
-            seq.try_push(stmt)?;
+        let mut seq = StatementSeqBuilder::default();
+        for raw in s.lines() {
+            if raw.is_empty() {
+            } else if raw.starts_with("#") {
+            } else {
+                anyhow::ensure!(raw.ends_with(";"));
+                let stmt = Statement::parse(raw.trim_end_matches(";").trim())?;
+                seq.try_push(stmt)?;
+            }
         }
-        Ok(seq)
+        Ok(seq.finish())
     }
 }
 

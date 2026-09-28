@@ -120,3 +120,20 @@ pub struct Arch {
     pub snippets: Vec<Snippet>,
     pub instructions: Vec<Instruction>,
 }
+
+pub trait Named {
+    fn name(&self) -> &str;
+}
+macro_rules! impl_named {
+    ($($Struct:ident)*) => {$(
+        impl Named for $Struct {
+            fn name(&self) -> &str {
+                &self.name.as_str()
+            }
+        }
+    )*};
+}
+impl_named!(
+    Register RegisterFile EnvironmentFunction SystemRegisterField SystemRegister
+    Snippet Operation TableInt Instruction
+);
