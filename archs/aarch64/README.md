@@ -292,17 +292,15 @@ The other SIMD statements are used as follows:
 
 ### Generated simulator ([lira-simgen-lib](https://github.com/ProteusLab/lira-simgen-lib), `ARCH_TARGET=AArch64`)
 
-simgen does not support vector shapes yet, so the simulator is generated
-from a subset of the description. `gen.py --simgen <file>` writes the
-instructions whose semantics use only scalar statements (including `fop`), the
-register files `X`, `V`, `NZCV`, `FPCR`, `FPSR` and the environment functions
-the simulator implements (`SIMGEN_ENVS`: PC, memory, SVC, alignment checks,
-the exclusive monitor, barriers and hints). Currently 1030 instructions: base
-integer, MRS/MSR for NZCV, FPCR and FPSR, CRC32, CSSC, FlagM, BC.cond,
-LDTR/STTR, LDNP/STNP, PRFM, exclusives, LSE atomics, LRCPC/LRCPC2 and
-load-acquire/store-release, barriers, hints, BTI, scalar FP (H/S/D arithmetic,
-FMA, compares, conversions, rounding) and the scalar SIMD&FP instructions
-(loads/stores of B/H/S/D/Q, moves, scalar RDM and the like):
+The simulator is generated from the subset of the description that simgen
+supports. `gen.py --simgen <file>` writes the instructions whose semantics use
+only the statements in `SIMGEN_KINDS` (scalar and vector, including `fop`),
+the register files `X`, `V`, `NZCV`, `FPCR`, `FPSR` and the environment
+functions the simulator implements (`SIMGEN_ENVS`: PC, memory, SVC, alignment
+checks, the exclusive monitor, barriers and hints), and no table operations.
+Currently 2529 of the 2706 instructions: everything but the table-based
+instructions (AESE/AESD, URECPE/URSQRTE), MOPS, PAuth and the system and
+exception instructions:
 
 ```bash
 python -m archs.aarch64.gen --simgen ../lira-simgen-lib/data/AArch64/aarch64.yaml

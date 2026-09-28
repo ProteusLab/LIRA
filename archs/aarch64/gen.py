@@ -191,10 +191,11 @@ def build_arch(xml_dir: Path) -> Arch:
     )
 
 
-# What lira-simgen-lib supports: scalar statements (including `fop`), these
-# register files and environment functions, and operations defined by a base
-# or a snippet
-SIMGEN_KINDS = {'input', 'output', 'const', 'dyn_const', 'read', 'write', 'op', 'fop', 'env', 'cond_env'}
+# What lira-simgen-lib supports: these statements (scalar and vector shapes
+# without lanes_mult), register files and environment functions, and
+# operations defined by a base or a snippet
+SIMGEN_KINDS = {'input', 'output', 'const', 'dyn_const', 'read', 'write', 'op', 'fop', 'env', 'cond_env',
+                'index', 'gather', 'replicate', 'extract_first', 'extend_zero', 'fold'}
 SIMGEN_RFS = ('X', 'V', 'NZCV', 'FPCR', 'FPSR')
 SIMGEN_ENVS = {'pc_read', 'pc_write', 'supervisor_call'} | \
     {f'mem_{d}_{n}' for d in ('read', 'write') for n in (8, 16, 32, 64, 128)} | \
@@ -210,13 +211,13 @@ def simgen_subset(arch: Arch) -> Arch:
 
     def seq_ok(seq, used_ops, used_snippets):
         for st in seq.stmts:
-            if st.kind not in SIMGEN_KINDS or st.shape.lanes_base != 1 or st.shape.lanes_mult:
+            if st.kind not in SIMGEN_KINDS or st.shape.lanes_mult:
                 return False
             if st.kind in ('read', 'write') and st.specifier not in SIMGEN_RFS:
                 return False
             if st.kind in ('env', 'cond_env') and st.specifier not in SIMGEN_ENVS:
                 return False
-            if st.kind == 'op' and not op_ok(ops[st.specifier], used_ops, used_snippets):
+            if st.kind in ('op', 'fold') and not op_ok(ops[st.specifier], used_ops, used_snippets):
                 return False
         return True
 
