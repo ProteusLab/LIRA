@@ -331,6 +331,12 @@ EXPECTED = [
     ('ldxp_stxp', 'ldxp_stxp_basisimpl', [], []),
     ('fmadd_sub', 'fmadd_sub', [], []),
     ('cvtf_imm', 'cvtf_imm', [], []),
+    ('simd_v81', 'simd_v81', [], ['-march=armv8.1-a+crypto']),
+    ('simd_dotprod', 'simd_dotprod', [], ['-march=armv8.2-a+dotprod']),
+    ('v8crypto', 'v8crypto', ['simd'], ['-march=armv8-a+crypto']),
+    ('fp_and_simd', 'fp_and_simd', ['simd'], []),
+    ('fp_and_simd_v82', 'fp_and_simd_v82', ['simd'], ['-march=armv8.2-a+fp16+crypto']),
+    ('sha512_v82', 'sha512_v82', ['simd'], ['-march=armv8.2-a+sha3']),
 ]
 
 

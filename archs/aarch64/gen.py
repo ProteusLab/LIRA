@@ -193,7 +193,7 @@ def build_arch(xml_dir: Path) -> Arch:
 
 # What lira-simgen-lib supports: these statements (scalar and vector shapes
 # without lanes_mult), register files and environment functions, and
-# operations defined by a base or a snippet
+# operations defined by a base, a snippet or a table
 SIMGEN_KINDS = {'input', 'output', 'const', 'dyn_const', 'read', 'write', 'op', 'fop', 'env', 'cond_env',
                 'index', 'gather', 'replicate', 'extract_first', 'extend_zero', 'fold'}
 SIMGEN_RFS = ('X', 'V', 'NZCV', 'FPCR', 'FPSR')
@@ -231,8 +231,6 @@ def simgen_subset(arch: Arch) -> Arch:
         if op.name in used_ops:
             return True
         used_ops.add(op.name)
-        if op.semantic_table:
-            return False
         return all(snippet_ok(s, used_ops, used_snippets)
                    for s in (op.semantic_func, op.semantic_func_128) if s)
 
@@ -255,7 +253,8 @@ def simgen_subset(arch: Arch) -> Arch:
         register_files=[rf for rf in arch.register_files if rf.name in used_rfs],
         system_registers=arch.system_registers,
         environment_functions=[f for f in arch.environment_functions if f.name in used_envs],
-        tables_int=[],
+        tables_int=[t for t in arch.tables_int
+                    if any(o.semantic_table == t.name for o in arch.operations if o.name in all_ops)],
         operations=[o for o in arch.operations if o.name in all_ops],
         snippets=[s for s in arch.snippets if s.name in all_snippets],
         instructions=keep,

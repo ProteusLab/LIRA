@@ -297,10 +297,9 @@ supports. `gen.py --simgen <file>` writes the instructions whose semantics use
 only the statements in `SIMGEN_KINDS` (scalar and vector, including `fop`),
 the register files `X`, `V`, `NZCV`, `FPCR`, `FPSR` and the environment
 functions the simulator implements (`SIMGEN_ENVS`: PC, memory, SVC, alignment
-checks, the exclusive monitor, barriers and hints), and no table operations.
-Currently 2529 of the 2706 instructions: everything but the table-based
-instructions (AESE/AESD, URECPE/URSQRTE), MOPS, PAuth and the system and
-exception instructions:
+checks, the exclusive monitor, barriers and hints). Currently 2535 of the
+2706 instructions: everything but MOPS, PAuth and the system and exception
+instructions:
 
 ```bash
 python -m archs.aarch64.gen --simgen ../lira-simgen-lib/data/AArch64/aarch64.yaml
@@ -331,7 +330,9 @@ or `$LIRA_A64_SIM_YAML`).
   `../valgrind`) in the simulator with a small freestanding libc
   (`tests/valgrind/`; `printf` formats doubles exactly as glibc). The output
   must equal valgrind's `.stdout.exp` (`integer`, `crc32`, `atomics_v81`,
-  `ldxp_stxp`, `fmadd_sub`, `cvtf_imm`) or the same source run natively
+  `ldxp_stxp`, `fmadd_sub`, `cvtf_imm`, `simd_v81`, `simd_dotprod`,
+  `v8crypto`; `fp_and_simd`, `fp_and_simd_v82` and `sha512_v82` also use
+  instructions the description does not have) or the same source run natively
   (`integer` with the SBFM/UBFM/BFM cases, `memory_test`, `fp_and_simd`,
   `fp_and_simd_v82`, `simd_v81`, `simd_dotprod`, `v8crypto`, `sha512_v82`).
   An instruction is runnable when `llvm-mc` assembles it and the simulator's
