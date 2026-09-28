@@ -292,17 +292,17 @@ The other SIMD statements are used as follows:
 
 ### Generated simulator ([lira-simgen-lib](https://github.com/ProteusLab/lira-simgen-lib), `ARCH_TARGET=AArch64`)
 
-simgen does not support `fop` or vector shapes yet, so the simulator is
-generated from a subset of the description. `gen.py --simgen <file>` writes
-the instructions whose semantics use only scalar statements without `fop`, the
+simgen does not support vector shapes yet, so the simulator is generated
+from a subset of the description. `gen.py --simgen <file>` writes the
+instructions whose semantics use only scalar statements (including `fop`), the
 register files `X`, `V`, `NZCV`, `FPCR`, `FPSR` and the environment functions
 the simulator implements (`SIMGEN_ENVS`: PC, memory, SVC, alignment checks,
-the exclusive monitor, barriers and hints). Currently 847 instructions: base
+the exclusive monitor, barriers and hints). Currently 1030 instructions: base
 integer, MRS/MSR for NZCV, FPCR and FPSR, CRC32, CSSC, FlagM, BC.cond,
 LDTR/STTR, LDNP/STNP, PRFM, exclusives, LSE atomics, LRCPC/LRCPC2 and
-load-acquire/store-release, barriers, hints, BTI, and the SIMD&FP instructions
-without float arithmetic or vector shapes (loads/stores of B/H/S/D/Q, FMOV,
-FABS/FNEG, scalar moves and bitwise operations):
+load-acquire/store-release, barriers, hints, BTI, scalar FP (H/S/D arithmetic,
+FMA, compares, conversions, rounding) and the scalar SIMD&FP instructions
+(loads/stores of B/H/S/D/Q, moves, scalar RDM and the like):
 
 ```bash
 python -m archs.aarch64.gen --simgen ../lira-simgen-lib/data/AArch64/aarch64.yaml
@@ -331,9 +331,12 @@ or `$LIRA_A64_SIM_YAML`).
 * `test_valgrind.py` runs valgrind's arm64 instruction tests
   (`none/tests/arm64`, from a checkout at `$VALGRIND_SRC`, default
   `../valgrind`) in the simulator with a small freestanding libc
-  (`tests/valgrind/`). The output must equal valgrind's `.stdout.exp`
-  (`integer`, `crc32`, `atomics_v81`, `ldxp_stxp`) or the same source run
-  natively (`integer` with the SBFM/UBFM/BFM cases, and `memory_test`).
-  Test cases whose instructions do not all decode in the simulator's
-  description are left out (assembled with `llvm-mc`, decoded by the
-  reference interpreter).
+  (`tests/valgrind/`; `printf` formats doubles exactly as glibc). The output
+  must equal valgrind's `.stdout.exp` (`integer`, `crc32`, `atomics_v81`,
+  `ldxp_stxp`, `fmadd_sub`, `cvtf_imm`) or the same source run natively
+  (`integer` with the SBFM/UBFM/BFM cases, `memory_test`, `fp_and_simd`,
+  `fp_and_simd_v82`, `simd_v81`, `simd_dotprod`, `v8crypto`, `sha512_v82`).
+  An instruction is runnable when `llvm-mc` assembles it and the simulator's
+  decoder accepts it. Programs compared with `.stdout.exp` must be runnable
+  entirely; the others keep their runnable test functions (the rest get
+  empty bodies) or test cases.

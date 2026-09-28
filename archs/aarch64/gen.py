@@ -191,10 +191,10 @@ def build_arch(xml_dir: Path) -> Arch:
     )
 
 
-# What lira-simgen-lib supports: scalar statements without `fop`, these
+# What lira-simgen-lib supports: scalar statements (including `fop`), these
 # register files and environment functions, and operations defined by a base
 # or a snippet
-SIMGEN_KINDS = {'input', 'output', 'const', 'dyn_const', 'read', 'write', 'op', 'env', 'cond_env'}
+SIMGEN_KINDS = {'input', 'output', 'const', 'dyn_const', 'read', 'write', 'op', 'fop', 'env', 'cond_env'}
 SIMGEN_RFS = ('X', 'V', 'NZCV', 'FPCR', 'FPSR')
 SIMGEN_ENVS = {'pc_read', 'pc_write', 'supervisor_call'} | \
     {f'mem_{d}_{n}' for d in ('read', 'write') for n in (8, 16, 32, 64, 128)} | \
@@ -247,6 +247,7 @@ def simgen_subset(arch: Arch) -> Arch:
             all_snippets |= used_snippets
     used_rfs = {st.specifier for ins in keep for st in ins.semantic.stmts if st.kind in ('read', 'write')}
     used_envs = {st.specifier for ins in keep for st in ins.semantic.stmts if st.kind in ('env', 'cond_env')}
+    used_fops = {st.specifier for ins in keep for st in ins.semantic.stmts if st.kind == 'fop'}
     return Arch(
         name=arch.name,
         attributes=arch.attributes,
@@ -257,6 +258,7 @@ def simgen_subset(arch: Arch) -> Arch:
         operations=[o for o in arch.operations if o.name in all_ops],
         snippets=[s for s in arch.snippets if s.name in all_snippets],
         instructions=keep,
+        float_operations=[f for f in arch.float_operations if f.name in used_fops],
     )
 
 

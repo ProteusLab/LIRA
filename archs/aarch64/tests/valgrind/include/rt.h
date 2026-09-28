@@ -1,5 +1,5 @@
 /* Minimal libc for valgrind's arm64 tests in the LIRA AArch64 simulator:
-   Linux write/exit via SVC, no FP. */
+   Linux write/exit via SVC; float formats use integer arithmetic only. */
 #ifndef LIRA_RT_H
 #define LIRA_RT_H
 #include <stddef.h>
