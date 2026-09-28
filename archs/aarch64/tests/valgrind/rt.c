@@ -96,6 +96,10 @@ int vprintf(const char *fmt, va_list ap) {
       else
         break;
     }
+    if (*fmt == '*') {
+      width = va_arg(ap, int);
+      fmt++;
+    }
     while (*fmt >= '0' && *fmt <= '9')
       width = width * 10 + (*fmt++ - '0');
     while (*fmt == 'l' || *fmt == 'z') {
@@ -180,6 +184,12 @@ int memcmp(const void *a, const void *b, size_t n) {
     if (*p != *q)
       return *p - *q;
   return 0;
+}
+
+int strcmp(const char *a, const char *b) {
+  for (; *a && *a == *b; a++, b++) {
+  }
+  return (unsigned char)*a - (unsigned char)*b;
 }
 
 size_t strlen(const char *s) {

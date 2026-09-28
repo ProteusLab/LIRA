@@ -20,8 +20,8 @@ from pathlib import Path
 import pytest
 
 from .conftest import sample_operands
-from .test_semantics_hw import (MEM_BASE_OFF, MEM_SIZE, STATES_PER_CASE, build_cases,
-                                interp_step, random_state, run_hw)
+from .test_semantics_hw import (MEM_BASE_OFF, MEM_SIZE, STATES_PER_CASE, AlignmentFault,
+                                build_cases, interp_step, random_state, run_hw)
 
 DEFAULT = Path(__file__).resolve().parents[4] / 'lira-simgen-lib' / 'build' / 'a64' / \
     'interpreter' / ('liba64-capi.dylib' if sys.platform == 'darwin' else 'liba64-capi.so')
@@ -62,12 +62,21 @@ def capi():
     return lib
 
 
-def sim_step(capi, word, x, nzcv, fpcr, fpsr, pc):
-    """Run one word in the generated simulator: (x, nzcv, fpcr, fpsr, pc)."""
+SIM_FAULT = -2       # lira_a64_exec: runtime error (e.g. an Alignment fault)
+
+
+def sim_exec(capi, word, x, nzcv, fpcr, fpsr, pc):
+    """Run one word in the generated simulator: (rc, [x, nzcv, fpcr, fpsr, pc])."""
     xs = (ctypes.c_uint64 * 32)(*x)
     regs = [ctypes.c_uint64(v) for v in (nzcv, fpcr, fpsr, pc)]
-    assert capi.lira_a64_exec(word, xs, *map(ctypes.byref, regs)) == 0, hex(word)
-    return [list(xs)] + [r.value for r in regs]
+    rc = capi.lira_a64_exec(word, xs, *map(ctypes.byref, regs))
+    return rc, [list(xs)] + [r.value for r in regs]
+
+
+def sim_step(capi, word, x, nzcv, fpcr, fpsr, pc):
+    rc, out = sim_exec(capi, word, x, nzcv, fpcr, fpsr, pc)
+    assert rc == 0, (hex(word), rc)
+    return out
 
 
 def test_decoder(sim_arch, sim_machine, capi):
@@ -112,13 +121,19 @@ def test_simgen_matches_hardware(sim_arch, sim_cases, capi):
     assert not failures, '\n'.join(map(str, failures[:20])) + f'\n({len(failures)} failing)'
 
 
+def _is_mem(ins):
+    """Accesses memory: calls a mem_* environment function."""
+    return any(st.kind in ('env', 'cond_env') and st.specifier.startswith('mem_')
+               for st in ins.semantic.stmts)
+
+
 def _pick(machine, ins, rng):
     fixed = {}
-    if '_ldst' in ins.name and 'Rm' in ins.operand_names:
+    if _is_mem(ins) and 'Rm' in ins.operand_names:
         rn = rng.randrange(32)
         fixed['Rn'] = rn
         fixed['Rm'] = rng.choice([r for r in range(32) if r != rn])
-    if 'imm12' in ins.operand_names and '_ldst' in ins.name:
+    if 'imm12' in ins.operand_names and _is_mem(ins):
         fixed['imm12'] = rng.randrange(256)          # scaled offset stays in the buffer
     if 'loadlit' in ins.name:
         fixed['imm19'] = rng.randrange(-512, 512) & ((1 << 19) - 1)
@@ -134,7 +149,7 @@ def test_simgen_matches_interpreter(sim_arch, sim_machine, capi):
     for ins in arch.instructions:
         if ins.name.startswith('SVC_'):                 # effect defined by the runtime
             continue
-        is_mem = '_ldst' in ins.name or 'loadlit' in ins.name
+        is_mem = _is_mem(ins)
         for _ in range(40):
             ops = _pick(machine, ins, rng)
             word = machine.encode(ins, ops)
@@ -151,10 +166,16 @@ def test_simgen_matches_interpreter(sim_arch, sim_machine, capi):
             init = bytes(rng.getrandbits(8) for _ in range(MEM_SIZE))
 
             st = {'X': x, 'V': [], 'NZCV': nzcv, 'FPCR': fpcr, 'FPSR': fpsr}
-            out, ref_mem, ref_pc = interp_step(arch, ins, word, st, pc, base, init)
-            ref = (out['X'], out['NZCV'], out['FPCR'], out['FPSR'], ref_mem, ref_pc)
             ctypes.memmove(mem, init, MEM_SIZE)
-            sx, sf, sfpcr, sfpsr, spc = sim_step(capi, word, x, nzcv, fpcr, fpsr, pc)
+            rc, (sx, sf, sfpcr, sfpsr, spc) = sim_exec(capi, word, x, nzcv, fpcr, fpsr, pc)
+            try:
+                out, ref_mem, ref_pc = interp_step(arch, ins, word, st, pc, base, init)
+            except AlignmentFault as e:
+                if rc != SIM_FAULT:
+                    failures.append((ins.name, hex(word), names, f'reference faults ({e}), sim rc={rc}'))
+                    break
+                continue
+            ref = (out['X'], out['NZCV'], out['FPCR'], out['FPSR'], ref_mem, ref_pc)
             got = (sx, sf, sfpcr, sfpsr, bytes(mem), spc)
             if got != ref:
                 diff = [f'x{i}: ref={ref[0][i]:#x} sim={sx[i]:#x}' for i in range(32) if ref[0][i] != sx[i]]

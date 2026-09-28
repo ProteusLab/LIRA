@@ -12,8 +12,8 @@ only none/tests/arm64 is used:
     git -C valgrind sparse-checkout set none/tests/arm64
 
 The sources are GPL-2 and are not copied here. The guest build uses the libc in
-valgrind/, the simulator runs the integer subset only (no SIMD&FP, LSE or
-exclusives).
+valgrind/. Tests of features the simulator does not run yet are left out, and
+memory_test is filtered down to the cases it runs (`supported_only`).
 """
 import os
 import platform
@@ -46,12 +46,12 @@ def cast_operands(src: str) -> str:
     return re.sub(r'"r" \((R[A-Z]+val)\)', r'"r" ((ULong)(\1))', src)
 
 
-# SIMD&FP registers and instructions the simulator subset does not have.
-_UNSUPPORTED = re.compile(r'\b[vqdsbh]\d+\b|\b(ld|st)[1-4]r?\b|\b(ldar|stlr|ldx|stx|ldaxr|stlxr)[bhp]?\b')
+# SIMD&FP registers and instructions: not in the simulator yet.
+_UNSUPPORTED = re.compile(r'\b[vqdsbh]\d+\b|\b(ld|st)[1-4]r?\b')
 _CASE = re.compile(r'^\s*(MEM_TEST|TESTINST\w*)\s*\(\s*("(?:[^"\\]|\\.)*")')
 
 
-def integer_only(src: str) -> str:
+def supported_only(src: str) -> str:
     """memory_test.c without SIMD&FP: drop the q17-q20 transfer from MEM_TEST
     (their xor lines stay 0 for integer instructions) and every case outside
     the simulator subset."""
@@ -122,22 +122,25 @@ def run_host(src: Path, exe: Path, *flags) -> str:
     return p.stdout
 
 
-@pytest.mark.parametrize('prog, flags', [
-    ('integer', ['-DTEST_BFM=0']),  # as in valgrind's Makefile.am
-    ('crc32', []),
+# program, expected output, flags (as in valgrind's Makefile.am)
+@pytest.mark.parametrize('prog, expected, flags', [
+    ('integer', 'integer', ['-DTEST_BFM=0']),
+    ('crc32', 'crc32', []),
+    ('atomics_v81', 'atomics_v81', ['-march=armv8.1-a']),
+    ('ldxp_stxp', 'ldxp_stxp_basisimpl', []),
 ])
-def test_expected(prog, flags, tmp_path):
+def test_expected(prog, expected, flags, tmp_path):
     """Compare with valgrind's expected output, recorded on hardware."""
     src = tmp_path / f'{prog}.c'
     src.write_text(cast_operands((TESTS / f'{prog}.c').read_text()))
     build_guest(src, tmp_path / f'{prog}.elf', *flags)
-    assert run_guest(tmp_path / f'{prog}.elf') == (TESTS / f'{prog}.stdout.exp').read_text()
+    assert run_guest(tmp_path / f'{prog}.elf') == (TESTS / f'{expected}.stdout.exp').read_text()
 
 
 @pytest.mark.skipif(not AARCH64_HOST, reason='reference output needs an AArch64 host')
 @pytest.mark.parametrize('prog, transform, flags', [
     ('integer', cast_operands, ['-DTEST_BFM=1']),  # + SBFM/UBFM/BFM, no .stdout.exp
-    ('memory_test', lambda s: cast_operands(integer_only(s)), []),
+    ('memory_test', lambda s: cast_operands(supported_only(s)), []),
 ])
 def test_host(prog, transform, flags, tmp_path):
     """Compare with the same source run natively."""

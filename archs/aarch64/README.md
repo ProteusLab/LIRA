@@ -295,9 +295,12 @@ The other SIMD statements are used as follows:
 simgen does not support `fop` or vector shapes yet, so the simulator is
 generated from a subset of the description. `gen.py --simgen <file>` writes
 the instructions whose semantics use only scalar statements without `fop`, the
-register files `X`, `NZCV`, `FPCR`, `FPSR` and the PC/memory/SVC environment
-functions (currently 287 instructions: base integer, MRS/MSR for NZCV, FPCR and
-FPSR, CRC32, CSSC, FlagM, BC.cond, LDTR/STTR, LDNP/STNP, PRFM):
+register files `X`, `NZCV`, `FPCR`, `FPSR` and the environment functions the
+simulator implements (`SIMGEN_ENVS`: PC, memory, SVC, alignment checks, the
+exclusive monitor, barriers and hints). Currently 529 instructions: base
+integer, MRS/MSR for NZCV, FPCR and FPSR, CRC32, CSSC, FlagM, BC.cond,
+LDTR/STTR, LDNP/STNP, PRFM, exclusives, LSE atomics, LRCPC/LRCPC2 and
+load-acquire/store-release, barriers, hints, BTI:
 
 ```bash
 python -m archs.aarch64.gen --simgen ../lira-simgen-lib/data/AArch64/aarch64.yaml
@@ -323,3 +326,10 @@ or `$LIRA_A64_SIM_YAML`).
   `-Os` for `aarch64-linux` with `-mgeneral-regs-only`. Each binary runs in
   the generated simulator and must print exactly what the natively compiled
   program prints. The programs use 67 distinct mnemonics.
+* `test_valgrind.py` runs valgrind's arm64 instruction tests
+  (`none/tests/arm64`, from a checkout at `$VALGRIND_SRC`, default
+  `../valgrind`) in the simulator with a small freestanding libc
+  (`tests/valgrind/`). The output must equal valgrind's `.stdout.exp`
+  (`integer`, `crc32`, `atomics_v81`, `ldxp_stxp`) or the same source run
+  natively (`integer` with the SBFM/UBFM/BFM cases, and `memory_test`
+  without the SIMD&FP cases).

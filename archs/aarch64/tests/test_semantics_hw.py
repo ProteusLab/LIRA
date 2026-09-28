@@ -234,6 +234,17 @@ def run_hw(fn, st):
     return out, block[S_PC]
 
 
+class AlignmentFault(Exception):
+    pass
+
+
+def check_alignment(addr, size, exclusive):
+    """Exclusives are naturally aligned; ordered and atomic accesses stay
+    within 16 bytes (FEAT_LSE2)."""
+    if not (addr % size == 0 if exclusive else addr % 16 + size <= 16):
+        raise AlignmentFault(f'{size}-byte access at {addr:#x}')
+
+
 def interp_step(arch, ins, word, st, pc, mem_base, mem_init):
     """Run one instruction word in the reference interpreter with memory
     [mem_base, mem_base + len(mem_init)). `st` has 8 or 32 X/V registers.
@@ -271,7 +282,8 @@ def interp_step(arch, ins, word, st, pc, mem_base, mem_init):
         monitor.clear()
         return [int(ok)]
     m.env['exclusive_check'] = check
-    for name in ('barrier', 'hint', 'branch_target', 'check_alignment'):
+    m.env['check_alignment'] = check_alignment
+    for name in ('barrier', 'hint', 'branch_target', 'wait_timeout'):
         m.env[name] = lambda *a: None
     for k in ('X', 'V'):                         # descriptions may lack V/FPCR/FPSR
         if k in m.regs:
