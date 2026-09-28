@@ -1,5 +1,7 @@
 """Encoding checks: LIRA encode/decode/constraint snippets vs. LLVM's disassembler."""
+import os
 import random
+import re
 import shutil
 import subprocess
 
@@ -27,10 +29,24 @@ def test_encodings_do_not_overlap(arch, machine):
             assert owners == [ins.name], (hex(word), owners)
 
 
-def _llvm_disasm(words):
-    mc = shutil.which('llvm-mc')
+# Oldest LLVM that decodes all of ARMv8.9 as described (FEAT_RPRFM, CSSC, ...)
+LLVM_MIN = 17
+
+
+def _llvm_mc():
+    mc = os.environ.get('LLVM_MC') or shutil.which('llvm-mc')
     if mc is None:
-        pytest.skip('llvm-mc not found')
+        pytest.skip('llvm-mc not found (set $LLVM_MC)')
+    out = subprocess.run([mc, '--version'], capture_output=True, text=True).stdout
+    m = re.search(r'LLVM version (\d+)', out)
+    if not m or int(m.group(1)) < LLVM_MIN:
+        pytest.skip(f'{mc} is LLVM {m.group(1) if m else "?"}; LLVM >= {LLVM_MIN} is needed '
+                    f'(set $LLVM_MC)')
+    return mc
+
+
+def _llvm_disasm(words):
+    mc = _llvm_mc()
     text = '\n'.join(' '.join(f'0x{(w >> (8 * i)) & 0xff:02x}' for i in range(4)) for w in words)
     p = subprocess.run([mc, '--disassemble', '-triple=aarch64', '-mattr=+v8.9a,+fullfp16,+fp16fml,+aes,+sha2', '-M', 'no-aliases'],
                        input=text, capture_output=True, text=True)

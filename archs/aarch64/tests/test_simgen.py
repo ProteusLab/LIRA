@@ -12,7 +12,9 @@ located via $LIRA_A64_CAPI (default: ../lira-simgen-lib/build/a64/...).
 """
 import ctypes
 import os
+import platform
 import random
+import sys
 from pathlib import Path
 
 import pytest
@@ -22,7 +24,7 @@ from .test_semantics_hw import (MEM_BASE_OFF, MEM_SIZE, STATES_PER_CASE, build_c
                                 interp_step, random_state, run_hw)
 
 DEFAULT = Path(__file__).resolve().parents[4] / 'lira-simgen-lib' / 'build' / 'a64' / \
-    'interpreter' / 'liba64-capi.dylib'
+    'interpreter' / ('liba64-capi.dylib' if sys.platform == 'darwin' else 'liba64-capi.so')
 CAPI = Path(os.environ.get('LIRA_A64_CAPI', DEFAULT))
 # The description the simulator was generated from (may lag behind aarch64.yaml)
 SIM_YAML = Path(os.environ.get('LIRA_A64_SIM_YAML',
@@ -84,6 +86,7 @@ def test_decoder(sim_arch, sim_machine, capi):
     assert rejected > 1000
 
 
+@pytest.mark.skipif(platform.machine() not in ('arm64', 'aarch64'), reason='needs an AArch64 host')
 def test_simgen_matches_hardware(sim_arch, sim_cases, capi):
     """X registers, NZCV and memory of the generated C++ vs. the host CPU."""
     rng = random.Random(11)

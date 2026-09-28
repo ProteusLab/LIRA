@@ -266,7 +266,9 @@ The other SIMD statements are used as follows:
 * `test_encoding.py` checks the encode/decode roundtrip, that no two
   encodings overlap, and that every sampled valid word disassembles in
   `llvm-mc -M no-aliases` to the expected mnemonic. It also checks that the
-  words the constraints reject are rejected by LLVM too.
+  words the constraints reject are rejected by LLVM too. It needs LLVM 17 or
+  newer (older versions do not decode all of ARMv8.9, e.g. RPRFM) and skips
+  otherwise; `$LLVM_MC` selects the `llvm-mc` binary.
 * `test_semantics_hw.py` (AArch64 host only) runs about 14,900 encoded
   words (6 per instruction, about 2,490 instructions), 12 random states each,
   on the host CPU and compares the results with the interpreter.
