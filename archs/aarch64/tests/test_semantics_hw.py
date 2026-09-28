@@ -283,6 +283,15 @@ def interp_step(arch, ins, word, st, pc, mem_base, mem_init):
         return [int(ok)]
     m.env['exclusive_check'] = check
     m.env['check_alignment'] = check_alignment
+
+    def mem_copy(dst, src, n, may_overlap):
+        """memmove when the copy may overlap, else a forward byte copy."""
+        order = range(n - 1, -1, -1) if may_overlap and 0 < dst - src < n else range(n)
+        for i in order:
+            wr(8)(dst + i, rd(8)(src + i)[0])
+
+    m.env['mem_copy'] = mem_copy
+    m.env['mem_set'] = lambda dst, n, byte: [wr(8)(dst + i, byte) for i in range(n)] and None
     for name in ('barrier', 'hint', 'branch_target', 'wait_timeout'):
         m.env[name] = lambda *a: None
     for k in ('X', 'V'):                         # descriptions may lack V/FPCR/FPSR

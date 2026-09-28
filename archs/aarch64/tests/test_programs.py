@@ -8,6 +8,7 @@ requires an AArch64 host.
 """
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -77,11 +78,17 @@ def host_output(tmp_path_factory):
     return out
 
 
+def guest_flags(prog):
+    """Extra flags of a program's guest build: a `guest-flags:` line in it."""
+    m = re.search(r'guest-flags:(.*)', (PROGRAMS / f'{prog}.c').read_text())
+    return m.group(1).split() if m else []
+
+
 @pytest.mark.parametrize('opt', OPT_LEVELS)
 @pytest.mark.parametrize('prog', _programs())
 def test_program(prog, opt, host_output, tmp_path):
     elf = tmp_path / f'{prog}.elf'
-    subprocess.run([CC, opt, *GUEST_FLAGS, f'--ld-path={LD}', '-o', elf,
+    subprocess.run([CC, opt, *GUEST_FLAGS, *guest_flags(prog), f'--ld-path={LD}', '-o', elf,
                     PROGRAMS / f'{prog}.c', PROGRAMS / 'rt_guest.c'], check=True)
     p = subprocess.run([SIM, '--propagate-exit', '-q', elf], capture_output=True, text=True, timeout=600)
     stdout = ''.join(l for l in p.stdout.splitlines(keepends=True) if not l.startswith('Exiting with code'))
@@ -98,7 +105,7 @@ def test_static_instruction_coverage(tmp_path, capsys):
     for prog in _programs():
         for opt in OPT_LEVELS:
             elf = tmp_path / f'{prog}{opt}.elf'
-            subprocess.run([CC, opt, *GUEST_FLAGS, f'--ld-path={LD}', '-o', elf,
+            subprocess.run([CC, opt, *GUEST_FLAGS, *guest_flags(prog), f'--ld-path={LD}', '-o', elf,
                             PROGRAMS / f'{prog}.c', PROGRAMS / 'rt_guest.c'], check=True)
             dis = subprocess.run([objdump, '-d', '-M', 'no-aliases', elf], capture_output=True, text=True).stdout
             for line in dis.splitlines():

@@ -129,11 +129,18 @@ def test_simgen_matches_hardware(sim_arch, sim_cases, capi):
 def _is_mem(ins):
     """Accesses memory: calls a mem_* environment function."""
     return any(st.kind in ('env', 'cond_env') and st.specifier.startswith('mem_')
-               for st in ins.semantic.stmts)
+               for st in ins.semantic.stmts) and not _is_mops(ins)
+
+
+def _is_mops(ins):
+    return ins.name.endswith(('_memcms', '_memcms_st')) or '_SET_' in ins.name
 
 
 def _pick(machine, ins, rng):
     fixed = {}
+    if _is_mops(ins):                                # distinct Rd, Rs, Rn below 31
+        fixed.update(zip(('Rd', 'Rs', 'Rn'), rng.sample(range(31), 3)))
+        return sample_operands(machine, ins, rng, fixed)
     if _is_mem(ins) and 'Rm' in ins.operand_names:
         rn = rng.randrange(32)
         fixed['Rn'] = rn
@@ -169,7 +176,12 @@ def test_simgen_matches_interpreter(sim_arch, sim_machine, capi):
                  for _ in range(32)]
             v = [random_v(rng) for _ in range(32)]
             pc = base + MEM_BASE_OFF if is_mem else rng.getrandbits(62) << 2
-            if is_mem:
+            if _is_mops(ins):          # Rd, Rs addresses (or Rs data), Rn size
+                x[names['Rd']] = base + MEM_BASE_OFF + rng.randrange(-256, 256)
+                if ins.name.startswith('CPY'):
+                    x[names['Rs']] = base + MEM_BASE_OFF + rng.randrange(-256, 256)
+                x[names['Rn']] = rng.randrange(200)
+            elif is_mem:
                 if 'Rn' in names:
                     x[names['Rn']] = base + MEM_BASE_OFF + rng.randrange(-256, 256)
                 if 'Rm' in names and names['Rm'] != 31:
