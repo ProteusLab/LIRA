@@ -246,6 +246,10 @@ class PacFault(Fault):
     pass
 
 
+class UndefinedFault(Fault):
+    """Undefined Instruction or debug exception at EL0."""
+
+
 def check_alignment(addr, size, exclusive):
     """Exclusives are naturally aligned; ordered and atomic accesses stay
     within 16 bytes (FEAT_LSE2)."""
@@ -299,6 +303,70 @@ def pac_auth(ptr, modifier, key):
     return [original]
 
 
+# Exceptions and system registers as the simulator's runtime models a Linux
+# EL0 process (lira-simgen-lib cpu_state_ext.cc); the counters read 0 in a
+# single-instruction run
+def _sysreg(op0, op1, crn, crm, op2):
+    return op0 << 14 | op1 << 11 | crn << 7 | crm << 3 | op2
+
+
+SYSREG_VALUES = {_sysreg(3, 3, 13, 0, 3): 0, _sysreg(3, 3, 0, 0, 1): 0x8444c004,
+                 _sysreg(3, 3, 0, 0, 7): 4, _sysreg(3, 3, 14, 0, 0): 1_000_000_000,
+                 **{_sysreg(3, 3, 14, 0, k): 0 for k in (1, 2, 5, 6)},
+                 _sysreg(3, 0, 0, 0, 0): 0x410fd0c0, _sysreg(3, 0, 0, 0, 5): 0x80000000}
+
+
+class SystemState:
+    """TPIDR_EL0 and PSTATE.{DIT,SSBS}; DC ZVA writes through `write8`."""
+
+    def __init__(self, write8):
+        self.tpidr, self.dit, self.ssbs, self.write8 = 0, 0, 0, write8
+
+    def sysreg_read(self, o0, op1, crn, crm, op2):
+        key = _sysreg(2 + o0, op1, crn, crm, op2)
+        if key == _sysreg(3, 3, 13, 0, 2):
+            return [self.tpidr]
+        if key == _sysreg(3, 3, 4, 2, 5):
+            return [self.dit << 24]
+        if key == _sysreg(3, 3, 4, 2, 6):
+            return [self.ssbs << 12]
+        if key in SYSREG_VALUES:
+            return [SYSREG_VALUES[key]]
+        if key >> 7 == _sysreg(3, 0, 0, 0, 0) >> 7:
+            return [0]
+        raise UndefinedFault(f'MRS {key:#x}')
+
+    def sysreg_write(self, o0, op1, crn, crm, op2, value):
+        key = _sysreg(2 + o0, op1, crn, crm, op2)
+        if key == _sysreg(3, 3, 13, 0, 2):
+            self.tpidr = value
+        elif key == _sysreg(3, 3, 4, 2, 5):
+            self.dit = value >> 24 & 1
+        elif key == _sysreg(3, 3, 4, 2, 6):
+            self.ssbs = value >> 12 & 1
+        else:
+            raise UndefinedFault(f'MSR {key:#x}')
+
+    def sys_op(self, op1, crn, crm, op2, value):
+        if (op1, crn, op2) == (3, 7, 1) and crm == 4:          # DC ZVA
+            for i in range(64):
+                self.write8((value & ~63) + i, 0)
+        elif not ((op1, crn, op2) == (3, 7, 1) and crm in (5, 10, 11, 12, 13, 14)):
+            raise UndefinedFault(f'SYS {op1} {crn} {crm} {op2}')
+
+    def pstate_write(self, op1, op2, crm):
+        if (op1, op2) == (3, 2):
+            self.dit = crm & 1
+        elif (op1, op2) == (3, 1):
+            self.ssbs = crm & 1
+        else:
+            raise UndefinedFault(f'MSR imm {op1} {op2}')
+
+
+def _undefined(*args):
+    raise UndefinedFault(str(args))
+
+
 def interp_step(arch, ins, word, st, pc, mem_base, mem_init):
     """Run one instruction word in the reference interpreter with memory
     [mem_base, mem_base + len(mem_init)). `st` has 8 or 32 X/V registers.
@@ -348,6 +416,11 @@ def interp_step(arch, ins, word, st, pc, mem_base, mem_init):
     m.env['pac_add'], m.env['pac_auth'] = pac_add, pac_auth
     m.env['pac_strip'] = lambda ptr, data: [pac_strip(ptr, data)]
     m.env['pac_generic'] = lambda v, mod: [_pac_hash(v, mod, 4) & 0xffffffff00000000]
+    system = SystemState(lambda a, v: wr(8)(a, v))
+    for name in ('sysreg_read', 'sysreg_write', 'sys_op', 'pstate_write'):
+        m.env[name] = getattr(system, name)
+    for name in ('exception_call', 'exception_return', 'debug_state', 'sys_op_read'):
+        m.env[name] = _undefined
     m.env['mem_set'] = lambda dst, n, byte: [wr(8)(dst + i, byte) for i in range(n)] and None
     for name in ('barrier', 'hint', 'branch_target', 'wait_timeout'):
         m.env[name] = lambda *a: None

@@ -176,6 +176,8 @@ def test_simgen_matches_interpreter(sim_arch, sim_machine, capi):
                  for _ in range(32)]
             v = [random_v(rng) for _ in range(32)]
             pc = base + MEM_BASE_OFF if is_mem else rng.getrandbits(62) << 2
+            if ins.name.startswith('SYS_'):   # DC ZVA stays in the buffer
+                x[names['Rt']] = base + MEM_BASE_OFF + rng.randrange(-256, 256)
             if _is_mops(ins):          # Rd, Rs addresses (or Rs data), Rn size
                 x[names['Rd']] = base + MEM_BASE_OFF + rng.randrange(-256, 256)
                 if ins.name.startswith('CPY'):
