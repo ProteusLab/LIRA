@@ -40,7 +40,13 @@ static u8 *set(u8 *d, u64 n, u8 v) {
   return n == 0 ? d : 0;
 }
 #else
-static u8 *copy(u8 *d, const u8 *s, u64 n) { return (u8 *)memmove(d, s, n) + n; }
+/* A CPY sequence ends with Xd past the copied bytes, or at the start when it
+ * copies backward: the description does so when the source overlaps the
+ * start of the destination (IsMemCpyForward) */
+static u8 *copy(u8 *d, const u8 *s, u64 n) {
+  memmove(d, s, n);
+  return s < d && d < s + n ? d : d + n;
+}
 static u8 *copy_forward(u8 *d, const u8 *s, u64 n) { return (u8 *)memcpy(d, s, n) + n; }
 static u8 *set(u8 *d, u64 n, u8 v) { return (u8 *)memset(d, v, n) + n; }
 #endif

@@ -140,16 +140,30 @@ class Ctx:
         return self.ops[name]
 
 
+# Environment functions that exchange values only through their operands; the
+# others (system, exception, hint hooks) may change registers behind the semantics
+_OPERAND_ONLY_ENV = ('mem.', 'pc.', 'pauth')
+
+
 class S:
     """Thin semantic-building layer over a LIRA BaseBuilder."""
 
     def __init__(self, ctx: Ctx, b: BaseBuilder):
         self.ctx, self.b = ctx, b
+        self._consts: Dict[str, int] = {}       # value name -> constant (scalar constants)
+        self._x_reads: Dict[object, Value] = {}  # index -> `read X` since the last X write
 
     # -- constants and width changes ----------------------------------------
     def c(self, value: int, width: int, shape: Optional[Shape] = None) -> Value:
         """Constant; with `shape` it is replicated to all lanes."""
-        return self.b.const(value & _mask(width), width, shape or Shape(1, None))
+        v = self.b.const(value & _mask(width), width, shape or Shape(1, None))
+        if shape is None:
+            self._consts[v.name] = value & _mask(width)
+        return v
+
+    def const_of(self, v: Value) -> Optional[int]:
+        """The value of `v` if it is a scalar constant made by `c`."""
+        return self._consts.get(v.name)
 
     def cl(self, value: int, like: Value, width: Optional[int] = None) -> Value:
         """Constant with the shape (and by default the width) of `like`."""
@@ -215,28 +229,62 @@ class S:
             return [self.b.op(op, args)]
         return self.b.seq.op_multi(op, args)
 
+    # -- environment calls ---------------------------------------------------
+    def env(self, f: EnvironmentFunction, args: List[Value]) -> List[Value]:
+        if not all(a.startswith(_OPERAND_ONLY_ENV) for a in f.attributes):
+            self._x_reads.clear()
+        return self.b.env(f, args)
+
+    def cond_env(self, f: EnvironmentFunction, cond: Value, args: List[Value],
+                 on_false: List[Value]) -> List[Value]:
+        if not all(a.startswith(_OPERAND_ONLY_ENV) for a in f.attributes):
+            self._x_reads.clear()
+        return self.b.cond_env(f, cond, args, on_false)
+
     # -- architectural state -------------------------------------------------
+    def _x_raw(self, idx: Value) -> Value:
+        """`read X idx`, shared by the reads of the same index until X is written
+        (or an environment hook that may change registers is called)."""
+        k = self.const_of(idx)
+        key = idx.name if k is None else ('const', k)
+        if key not in self._x_reads:
+            self._x_reads[key] = self.b.read(self.ctx.rf_x, idx)
+        return self._x_reads[key]
+
+    def _x_store(self, idx: Value, v: Value):
+        self._x_reads.clear()
+        self.b.write(self.ctx.rf_x, idx, v)
+
     def x_read(self, idx: Value, w: int) -> Value:
         """X{w}(idx): register 31 reads as zero (XZR)."""
-        v = self.b.read(self.ctx.rf_x, idx)
-        v = self.b.select(self.eqc(idx, 31), self.c(0, 64), v)
+        k = self.const_of(idx)
+        if k == 31:
+            return self.c(0, w)
+        v = self._x_raw(idx)
+        if k is None:
+            v = self.b.select(self.eqc(idx, 31), self.c(0, 64), v)
         return self.trunc(v, w)
 
     def xsp_read(self, idx: Value, w: int) -> Value:
         """`if n == 31 then SP else X`: register 31 is SP."""
-        return self.trunc(self.b.read(self.ctx.rf_x, idx), w)
+        return self.trunc(self._x_raw(idx), w)
 
     def x_write(self, idx: Value, v: Value):
         """X{w}(idx) = v: zero-extends; writes to register 31 (XZR) are discarded."""
-        old = self.b.read(self.ctx.rf_x, idx)
-        self.b.write(self.ctx.rf_x, idx, self.b.select(self.eqc(idx, 31), old, self.zext(v, 64)))
+        k = self.const_of(idx)
+        if k == 31:
+            return
+        v = self.zext(v, 64)
+        if k is None:
+            v = self.b.select(self.eqc(idx, 31), self._x_raw(idx), v)
+        self._x_store(idx, v)
 
     def xsp_write(self, idx: Value, v: Value):
         """`if d == 31 then SP = ZeroExtend(v) else X[d] = v`"""
-        self.b.write(self.ctx.rf_x, idx, self.zext(v, 64))
+        self._x_store(idx, self.zext(v, 64))
 
     def x_write_n(self, n: int, v: Value):
-        self.b.write(self.ctx.rf_x, self.c(n, 5), self.zext(v, 64))
+        self.x_write(self.c(n, 5), v)
 
     def flags_read(self) -> Value:
         return self.b.read(self.ctx.rf_nzcv, self.c(0, 1))
@@ -272,22 +320,22 @@ class S:
         return self.bits(self.flags_read(), 1, 1)
 
     def pc(self) -> Value:
-        return self.b.env(self.ctx.env_pc_read, [])[0]
+        return self.env(self.ctx.env_pc_read, [])[0]
 
     def branch(self, target: Value):
-        self.b.env(self.ctx.env_pc_write, [target])
+        self.env(self.ctx.env_pc_write, [target])
 
     def branch_if(self, cond: Value, target: Value):
-        self.b.cond_env(self.ctx.env_pc_write, cond, [target], [])
+        self.cond_env(self.ctx.env_pc_write, cond, [target], [])
 
     def check_alignment(self, addr: Value, n: int, exclusive: bool = False):
-        self.b.env(self.ctx.envs['check_alignment'], [addr, self.c(n // 8, 8), self.c(int(exclusive), 1)])
+        self.env(self.ctx.envs['check_alignment'], [addr, self.c(n // 8, 8), self.c(int(exclusive), 1)])
 
     def mem_read(self, addr: Value, n: int) -> Value:
-        return self.b.env(self.ctx.envs[f'mem_read_{n}'], [addr])[0]
+        return self.env(self.ctx.envs[f'mem_read_{n}'], [addr])[0]
 
     def mem_write(self, addr: Value, v: Value):
-        self.b.env(self.ctx.envs[f'mem_write_{v.width}'], [addr, v])
+        self.env(self.ctx.envs[f'mem_write_{v.width}'], [addr, v])
 
     # -- ASL helper functions ------------------------------------------------
     def add_with_carry(self, x: Value, y: Value, cin: Value):

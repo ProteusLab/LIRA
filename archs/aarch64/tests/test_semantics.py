@@ -236,6 +236,17 @@ def test_mops_prologue_does_everything(arch):
     assert r.m.regs['NZCV'][0] == 0b0010
     back = Run(arch, 'CPYP_CPY_memcms', sz=0, Rs=2, Rn=3, Rd=1).x(x1=0x90, x2=0x80, x3=0x40).go()
     assert back.m.regs['NZCV'][0] == 0b1010                 # overlapping: backward
+    assert ('mem_copy', 0x90, 0x80, 0x40, 1) in back.calls
+    assert (back.reg(1), back.reg(2), back.reg(3)) == (0x90, 0x80, 0)   # copied down to the start
+    # only address bits 55:0 decide the direction (tagged source)
+    tagged = Run(arch, 'CPYP_CPY_memcms', sz=0, Rs=2, Rn=3, Rd=1).x(x1=0x90, x2=0x2A << 56 | 0x80, x3=0x40).go()
+    assert tagged.m.regs['NZCV'][0] == 0b1010
+    # ArchMaxMOPSCPYSize limits a copy; ArchMaxMOPSBlockSize a set
+    big = Run(arch, 'CPYFP_CPY_memcms', sz=0, Rs=2, Rn=3, Rd=1).x(x1=0x100, x2=0x80, x3=-1).go()
+    assert ('mem_copy', 0x100, 0x80, 0x007F_FFFF_FFFF_FFFF, 0) in big.calls
+    assert (big.reg(1), big.reg(3)) == (0x100 + 0x007F_FFFF_FFFF_FFFF, 0)
+    big = Run(arch, 'SETP_SET_memcms', sz=0, Rs=2, Rn=3, Rd=1).x(x1=0x100, x2=0, x3=-1).go()
+    assert ('mem_set', 0x100, 0x7FFF_FFFF_FFFF_FFFF, 0) in big.calls
     s = Run(arch, 'SETP_SET_memcms', sz=0, Rs=2, Rn=3, Rd=1).x(x1=0x100, x2=0xAB, x3=0x10).go()
     assert ('mem_set', 0x100, 0x10, 0xAB) in s.calls and (s.reg(1), s.reg(3)) == (0x110, 0)
 
@@ -268,3 +279,18 @@ def test_system_hooks(arch):
     assert ('exception_call', 2, 0x42) in r.calls
     r = Run(arch, 'CFINV_M_pstate').flags(0b0010).go()
     assert r.m.regs['NZCV'][0] == 0b0000
+
+
+def test_msr_immediate_fields(arch):
+    """MSR (immediate) decodes only the PSTATE fields of the described profile."""
+    m = Machine(arch)
+    ins = next(i for i in arch.instructions if i.name == 'MSR_SI_pstate')
+    def ok(op1, op2, crm=0):
+        return m.valid_operands(ins, [op1, crm, op2])
+    # UAO, PAN, SPSel, SSBS, DIT, DAIFSet, DAIFClr, ALLINT (CRm = 000x)
+    assert all(ok(*f) for f in ((0, 3), (0, 4), (0, 5), (3, 1), (3, 2), (3, 6, 0xF), (3, 7, 0xF),
+                                (1, 0, 1)))
+    # PM (ALLINT's op1:op2 with CRm = 001x), TCO, SVCR (optional features), unallocated
+    assert not any(ok(*f) for f in ((1, 0, 2), (3, 4), (3, 3, 2), (2, 0), (7, 7), (0, 6)))
+    r = Run(arch, 'MSR_SI_pstate', op1=3, CRm=0b0010, op2=6).go()          # MSR DAIFSet, #2
+    assert ('pstate_write', 3, 6, 0b0010) in r.calls

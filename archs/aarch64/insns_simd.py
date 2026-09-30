@@ -13,7 +13,7 @@ Saturating instructions set FPSR.QC.
 from typing import Callable, Dict, List, Optional
 
 from python.lira.ir import Shape
-from python.lira.ir_ops import Orr
+from python.lira.ir_ops import Add, Orr
 
 from .insns import sem
 from .lib import S
@@ -215,23 +215,38 @@ def _shl_reg(s, a, b, signed, rounding):
     return s.trunc(s.select(neg, right, left), e)
 
 
-def _pmul8(s, a, b):
-    acc = s.cl(0, a)
-    for i in range(8):
-        bit = s.bits(a, i, 1)
-        acc = s.xor(acc, s.and_(ones(s, bit, 8), s.lsl(b, s.cl(i, b))))
-    return acc
+def _polynomial_mult(s: S, a):
+    """PolynomialMult(op1, op2): carry-less product on 2 * esize bits."""
+    x, y = a
+    w = 2 * x.width
+    y = s.zext(y, w)
+    acc = None
+    for i in range(x.width):
+        t = s.and_(ones(s, s.bits(x, i, 1), w), s.lsl(y, s.c(i, w)) if i else y)
+        acc = t if acc is None else s.xor(acc, t)
+    return [acc]
 
 
-def _qdmulh(s, a, b, rounding):
+def pmull(s: S, a, b):
+    """PolynomialMult of two esize-bit lanes (a shared operation)."""
+    es = a.width
+    op = s.ctx.func_op(f'polynomial_mult_{es}', [es, es], [2 * es], _polynomial_mult)
+    return s.call(op, [a, b])[0]
+
+
+def _qdmulh(s: S, a, b, rounding, acc=None, sub=False):
+    """SQDMULH/SQRDMULH and, with `acc`, SQRDMLAH/SQRDMLSH:
+    SignedSatQ(((acc << esize) +/- 2 * a * b + round) >> esize)."""
     e = a.width
-    p = s.mul(s.sext(a, 2 * e), s.sext(b, 2 * e))
-    p = s.lsl(p, s.cl(1, p))
+    w = 4 * e if e < 32 else 128
+    p = s.lsl(s.mul(s.sext(a, w), s.sext(b, w)), s.c(1, w, a.shape))
+    if sub:
+        p = s.neg(p)
+    if acc is not None:
+        p = s.add(s.lsl(s.sext(acc, w), s.c(e, w, a.shape)), p)
     if rounding:
-        p = s.add(p, s.cl(1 << (e - 1), p))
-    r = s.bits(p, e, e)
-    both_min = s.and_(s.eqc(a, 1 << (e - 1)), s.eqc(b, 1 << (e - 1)))
-    return s.select(both_min, s.cl((1 << (e - 1)) - 1, r), r), both_min
+        p = s.add(p, s.c(1 << (e - 1), w, a.shape))
+    return sat(s, s.asr(p, s.c(e, w, a.shape)), e, False)
 
 
 def _qaddsub(s, a, b, signed, sub):
@@ -264,7 +279,7 @@ SAME: Dict[str, Callable] = {
     'ushl_advsimd': lambda s, a, b: _shl_reg(s, a, b, False, False),
     'srshl_advsimd': lambda s, a, b: _shl_reg(s, a, b, True, True),
     'urshl_advsimd': lambda s, a, b: _shl_reg(s, a, b, False, True),
-    'pmul_advsimd': _pmul8,
+    'pmul_advsimd': lambda s, a, b: s.trunc(pmull(s, a, b), a.width),
 }
 SAME_SAT = {
     'sqadd_advsimd': lambda s, a, b: _qaddsub(s, a, b, True, False),
@@ -348,11 +363,6 @@ def _pairwise(s: S, e: Encoding, F):
 # -----------------------------------------------------------------------------
 # Two-register miscellaneous
 # -----------------------------------------------------------------------------
-def _cls(s, a):
-    z = s.lsr(s.xor(a, s.lsl(a, s.cl(1, a))), s.cl(1, a))
-    return s.sub(s.clz(z), s.cl(1, a))
-
-
 def _qabsneg(s, a, neg):
     e = a.width
     x = s.sext(a, 2 * e)
@@ -363,7 +373,7 @@ def _qabsneg(s, a, neg):
 MISC = {
     'abs_advsimd': lambda s, a: s.select(s.slt(a, s.cl(0, a)), s.neg(a), a),
     'neg_advsimd': lambda s, a: s.neg(a),
-    'cls_advsimd': _cls,
+    'cls_advsimd': lambda s, a: s.cls(a),
     'clz_advsimd': lambda s, a: s.clz(a),
     'cnt_advsimd': lambda s, a: s.popcnt(a),
     'not_advsimd': lambda s, a: s.not_(a),
@@ -483,6 +493,10 @@ def _reduce(s: S, e: Encoding, F):
     v = rd(s, F('Rn'), n, es)
     if widen:
         v = ext(s, v, 2 * es, e.file[0] == 's')
+    if name == 'add':                                    # sum from 0
+        s.v_write(F('Rd'), fold(s, Add(v.width), s.c(0, v.width), v))
+        return
+    # min/max: start from lane 0, fold the others
     op = _binop(s, f'reduce_{name}', fn, v.width)
     s.v_write(F('Rd'), fold(s, op, pick(s, v, s.c(0, 8)), s.b.gather(
         v, s.add(iota(s, n - 1), s.c(1, 8, sh(n - 1))), s.c(0, v.width, sh(n - 1)))))
@@ -528,18 +542,16 @@ def _ext(s: S, e: Encoding, F):
 def _tbl(s: S, e: Encoding, F):
     n = 8 << e.fixed('Q')
     regs = e.fixed('len') + 1
-    table = None
-    for r in range(regs):
-        idx = s.and_(s.add(F('Rn'), s.c(r, 5)), s.c(31, 5)) if r else F('Rn')
-        v = s.b.read(s.ctx.rf_v, idx, sh(16))
-        if table is None:
-            table = v
-            continue
-        # append v: pad it to the table's lane count, concatenate, keep 16 * (r + 1) lanes
-        padded = s.b.gather(v, iota(s, table.lanes), s.c(0, 8, sh(table.lanes)))
-        table = concat(s, table, padded)
-        if table.lanes != 16 * (r + 1):
-            table = s.b.extract_first(table, sh(16 * (r + 1)))
+    # table = V[n+regs-1]:...:V[n+1]:V[n] as 16 * regs byte lanes; lanes of
+    # register r are gathered at iota - 16r (other lanes are out of range)
+    table = s.b.read(s.ctx.rf_v, F('Rn'), sh(16))
+    if regs > 1:
+        lanes = sh(16 * regs)
+        i = iota(s, 16 * regs)
+        table = s.b.gather(table, i, s.c(0, 8, lanes))
+        for r in range(1, regs):
+            v = s.b.read(s.ctx.rf_v, _vreg(s, F, 'Rn', r), sh(16))
+            table = s.b.gather(v, s.sub(i, s.c(16 * r, 8, lanes)), table)
     default = rd(s, F('Rd'), n, 8) if e.file == 'tbx_advsimd' else s.c(0, 8, sh(n))
     wr(s, F('Rd'), s.b.gather(table, rd(s, F('Rm'), n, 8), default))
 
@@ -597,7 +609,7 @@ def _insert(s: S, idx, lane, value, es):
     """V[idx][lane] = value."""
     n = 128 // es
     old = s.b.read(s.ctx.rf_v, idx, sh(n))
-    hit = s.eq(iota(s, n), s.b.replicate(lane, sh(n)))
+    hit = s.eq(iota(s, n), s.b.replicate(s.zext(lane, 8), sh(n)))
     s.b.write(s.ctx.rf_v, idx, s.select(hit, s.b.replicate(value, sh(n)), old))
 
 
@@ -651,60 +663,50 @@ def _imm8(s: S, F):
     return s.concat(*[F(c) for c in 'abcdefgh'])
 
 
-def _expand_imm(s: S, op: int, cmode: int, imm8):
-    """AdvSIMDExpandImm for a fixed op/cmode; returns a 64-bit value."""
+def _replicate(s: S, v, w: int = 64):
+    """Replicate{w}(v): copies of v multiplied into place."""
+    pattern = sum(1 << i for i in range(0, w, v.width))
+    return s.mul(s.zext(v, w), s.c(pattern, w))
+
+
+def _expand_imm(s: S, a):
+    """AdvSIMDExpandImm(op, cmode, imm8) -> 64 bits."""
+    op, cmode, imm8 = a
     z = lambda w: s.c(0, w)
     o = lambda w: s.c((1 << w) - 1, w)
-    rep = lambda v: s.concat(*([v] * (64 // v.width)))
-    c = cmode >> 1
-    if c == 0: return rep(s.concat(z(24), imm8))
-    if c == 1: return rep(s.concat(z(16), imm8, z(8)))
-    if c == 2: return rep(s.concat(z(8), imm8, z(16)))
-    if c == 3: return rep(s.concat(imm8, z(24)))
-    if c == 4: return rep(s.concat(z(8), imm8))
-    if c == 5: return rep(s.concat(imm8, z(8)))
-    if c == 6:
-        return rep(s.concat(z(16), imm8, o(8)) if cmode & 1 == 0 else s.concat(z(8), imm8, o(16)))
-    if cmode & 1 == 0 and op == 0:
-        return rep(imm8)
-    assert cmode & 1 == 0 and op == 1
-    return s.concat(*[s.replicate1(s.bits(imm8, i, 1), 8) for i in range(7, -1, -1)])
+    bit = lambda i: s.bits(imm8, i, 1)
+    cmode0 = s.bits(cmode, 0, 1)
+    by_cmode_3_1 = [
+        _replicate(s, s.concat(z(24), imm8)),            # 000
+        _replicate(s, s.concat(z(16), imm8, z(8))),      # 001
+        _replicate(s, s.concat(z(8), imm8, z(16))),      # 010
+        _replicate(s, s.concat(imm8, z(24))),            # 011
+        _replicate(s, s.concat(z(8), imm8)),             # 100
+        _replicate(s, s.concat(imm8, z(8))),             # 101
+        s.select(cmode0,                                 # 110
+                 _replicate(s, s.concat(z(8), imm8, o(16))),
+                 _replicate(s, s.concat(z(16), imm8, o(8)))),
+    ]
+    # 111: bytes (op 0) or byte masks (op 1); cmode<0> = 1 is FMOV (vector, immediate)
+    masks = s.concat(*[s.replicate1(bit(i), 8) for i in range(7, -1, -1)])
+    b6 = bit(6)
+    fp32 = s.concat(bit(7), s.not_(b6), s.replicate1(b6, 5), s.bits(imm8, 0, 6), z(19))
+    fp64 = s.concat(bit(7), s.not_(b6), s.replicate1(b6, 8), s.bits(imm8, 0, 6), z(48))
+    r = s.select(cmode0, s.select(op, fp64, _replicate(s, fp32)),
+                 s.select(op, masks, _replicate(s, imm8)))
+    sel = s.bits(cmode, 1, 3)
+    for k in range(6, -1, -1):
+        r = s.select(s.eqc(sel, k), by_cmode_3_1[k], r)
+    return [r]
 
 
-def _modimm_spec(e):
-    out = []
-    for cmode in range(16):
-        for op in (0, 1):
-            for q in (0, 1):
-                a = {'cmode': cmode, 'op': op, 'Q': q}
-                a = {k: v for k, v in a.items() if k in {f.name for f in e.operands}}
-                if not a or not _fits(e, a):
-                    continue
-                if cmode == 15 or (cmode == 14 and op == 1 and 'Q' not in a):
-                    pass
-                if cmode == 15:            # FMOV (vector, immediate): not in this step
-                    continue
-                name = f'c{cmode}_o{op}' + (f'_q{q}' if 'Q' in a else '')
-                out.append((name, a))
-    # deduplicate names of assignments that fix the same bits
-    seen, uniq = set(), []
-    for n, a in out:
-        key = tuple(sorted(a.items()))
-        if key not in seen:
-            seen.add(key)
-            uniq.append((n, a))
-    return uniq
-
-
-@simd('movi_advsimd', 'mvni_advsimd', 'orr_advsimd_imm', 'bic_advsimd_imm', spec=_modimm_spec)
+@simd('movi_advsimd', 'mvni_advsimd', 'orr_advsimd_imm', 'bic_advsimd_imm')
 def _modimm(s: S, e: Encoding, F):
-    op, cmode, q = e.fixed('op'), e.fixed('cmode'), e.fixed('Q')
-    imm = _expand_imm(s, op if e.file == 'movi_advsimd' else 0, cmode, _imm8(s, F))
-    if e.file == 'movi_advsimd' and not (cmode == 14 and op == 1) or e.file == 'mvni_advsimd':
-        pass
+    expand = s.ctx.func_op('adv_simd_expand_imm', [1, 4, 8], [64], _expand_imm)
+    imm = s.call(expand, [F('op'), F('cmode'), _imm8(s, F)])[0]
     if e.file in ('mvni_advsimd', 'bic_advsimd_imm'):
         imm = s.not_(imm)
-    datasize = 64 << q
+    datasize = 64 << e.fixed('Q')
     val = imm if datasize == 64 else s.concat(imm, imm)
     if e.file in ('orr_advsimd_imm', 'bic_advsimd_imm'):
         old = s.v_read(F('Rd'), datasize)
@@ -878,12 +880,7 @@ def _hn(s: S, e: Encoding, F):
 def _pmull(s: S, e: Encoding, F):
     es = esize_of(e)
     n, part = 64 // es, e.fixed('Q')
-    x = s.zext(rd_part(s, F('Rn'), part, n, es), 2 * es)
-    y = s.zext(rd_part(s, F('Rm'), part, n, es), 2 * es)
-    acc = s.cl(0, x)
-    for i in range(es):
-        acc = s.xor(acc, s.and_(ones(s, s.bits(x, i, 1), 2 * es), s.lsl(y, s.cl(i, y))))
-    wr(s, F('Rd'), acc)
+    wr(s, F('Rd'), pmull(s, rd_part(s, F('Rn'), part, n, es), rd_part(s, F('Rm'), part, n, es)))
 
 
 # -----------------------------------------------------------------------------

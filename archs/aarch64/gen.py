@@ -78,13 +78,18 @@ def _word(s: S, e: xmlspec.Encoding, F) -> Value:
     return acc
 
 
-def _validity(s: S, e: xmlspec.Encoding, F, undef) -> Value:
-    """1 iff the operand fields form an allocated (not UNDEFINED) encoding."""
+def _validity(s: S, e: xmlspec.Encoding, F, undef, word: Value = None) -> Value:
+    """1 iff the operand fields form an allocated (not UNDEFINED) encoding.
+    `word` is the instruction word when it is at hand (constraint_decode)."""
     bad = []
     if getattr(e, 'excluded', None):
-        word = _word(s, e, F)
+        if word is None:
+            word = _word(s, e, F)
+        masked: Dict[int, Value] = {}
         for m, v in e.excluded:
-            bad.append(s.eqc(s.and_(word, s.c(m, 32)), v))
+            if m not in masked:
+                masked[m] = s.and_(word, s.c(m, 32))
+            bad.append(s.eqc(masked[m], v))
     for fname, pat in e.ne:                                # `field != pattern` in XML
         m = int(pat.replace('0', '1').replace('x', '0'), 2)
         v = int(pat.replace('x', '0'), 2)
@@ -123,17 +128,24 @@ def _constraint_snippets(ctx: Ctx, e: xmlspec.Encoding, undef):
     sb = SnippetBuilder(f'constraint_decode_{e.name}')
     s = S(ctx, sb)
     word = sb.input(0, 32)
-    vals = {f.name: s.bits(word, f.lo, f.width) for f in e.operands}
-    sb.output(_validity(s, e, _field_accessor(s, e, vals), undef), 0)
+    sb.output(_validity(s, e, _field_accessor(s, e, {}, word), undef, word), 0)
     return ctx.add_snippet(sb), enc_name
 
 
-def _field_accessor(s: S, e: xmlspec.Encoding, vals: Dict[str, Value]):
+def _field_accessor(s: S, e: xmlspec.Encoding, vals: Dict[str, Value], word: Value = None):
+    """F(name): an operand value, a field extracted from `word` on first use,
+    or the constant value of a fixed field."""
+    operands = {f.name: f for f in e.operands}
+
     def F(name: str) -> Value:
         if name not in vals:
-            v = e.fixed(name)
-            assert v is not None, f'{e.name}: field {name} is neither operand nor fixed'
-            vals[name] = s.c(v, e.fields[name].width)
+            if word is not None and name in operands:
+                f = operands[name]
+                vals[name] = s.bits(word, f.lo, f.width)
+            else:
+                v = e.fixed(name)
+                assert v is not None, f'{e.name}: field {name} is neither operand nor fixed'
+                vals[name] = s.c(v, e.fields[name].width)
         return vals[name]
     return F
 

@@ -70,6 +70,17 @@ LLVM_FORCED_ALIASES = {
 
 
 OPTIONAL_MNEMONICS = {'rprfm'}      # FEAT_RPRFM
+# PSTATE fields of optional features the description leaves UNDEFINED in
+# MSR (immediate) (FEAT_MTE, FEAT_SME, PM); LLVM names some of them
+OPTIONAL_PSTATE_FIELDS = {'TCO', 'SVCRSM', 'SVCRZA', 'SVCRSMZA', 'PM'}
+
+
+def _llvm_msr_imm_extra(line):
+    """LLVM prints any MSR (immediate) word: fields it does not know as a write
+    of the generic register S0_<op1>_C4_C<CRm>_<op2> (op0 = 0 has no system
+    registers), optional-feature fields by name."""
+    parts = line.replace(',', ' ').split()
+    return parts[0] == 'msr' and (parts[1].startswith('S0_') or parts[1] in OPTIONAL_PSTATE_FIELDS)
 
 
 def _mnemonic(ins):
@@ -122,5 +133,6 @@ def test_constraint_rejects_match_llvm(arch, machine):
     decoded = [l for l in lines if l.split()[0] not in OPTIONAL_MNEMONICS
                # MOPS with Xn = XZR: CONSTRAINED UNPREDICTABLE, the description
                # chooses UNDEFINED while LLVM still decodes it
-               and not (l.split()[0].startswith(('cpy', 'set')) and 'xzr!' in l)]
+               and not (l.split()[0].startswith(('cpy', 'set')) and 'xzr!' in l)
+               and not _llvm_msr_imm_extra(l)]
     assert not decoded, decoded

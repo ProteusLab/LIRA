@@ -227,9 +227,10 @@ def _extr(s: S, e: Encoding, F):
     op1 = s.x_read(F('Rn'), n)
     op2 = s.x_read(F('Rm'), n)
     lsb = s.zext(F('imms'), n)
-    back = s.and_(s.sub(s.c(n, n), lsb), s.c(n - 1, n))
-    res = s.select(s.eqc(lsb, 0), op2, s.orr(s.lsr(op2, lsb), s.lsl(op1, back)))
-    s.x_write(F('Rd'), res)
+    # (op1:op2)<lsb+n-1:lsb>; op1 moves up by n - lsb in two steps, so no
+    # shift reaches n (lsb = 0 shifts op1 out entirely)
+    hi = s.lsl(s.lsl(op1, s.c(1, n)), s.sub(s.c(n - 1, n), lsb))
+    s.x_write(F('Rd'), s.orr(s.lsr(op2, lsb), hi))
 
 
 # -----------------------------------------------------------------------------

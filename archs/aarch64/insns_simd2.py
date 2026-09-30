@@ -5,9 +5,9 @@ FEAT_I8MM) and the AES/SHA1/SHA256 crypto instructions."""
 from python.lira.ir import Shape
 
 from .insns import sem
-from .insns_simd import (_element, _fits, _immh_spec, _immhb, _shift_esize, _vreg, arr_spec,
-                         concat, esize_of, ext, iota, is_scalar, lanes_of, pick, rd, rd_part, sat,
-                         set_qc, sh, simd, wr, wr_part, SCALAR)
+from .insns_simd import (_elem_operand, _element, _fits, _immh_spec, _immhb, _insert, _qdmulh,
+                         _shift_esize, _vreg, arr_spec, concat, esize_of, ext, iota, is_scalar,
+                         lanes_of, pick, rd, rd_part, sat, set_qc, sh, simd, wr, wr_part, SCALAR)
 from .lib import S
 from .xmlspec import Encoding
 
@@ -103,15 +103,6 @@ def _qshrn(s: S, e: Encoding, F):
 # -----------------------------------------------------------------------------
 # Saturating doubling multiplies
 # -----------------------------------------------------------------------------
-def _elem_operand(s: S, e: Encoding, F, es, n):
-    if es == 16:
-        idx, rm = s.concat(F('H'), F('L'), F('M')), s.zext(F('Rm'), 5)
-    else:
-        idx, rm = s.concat(F('H'), F('L')), s.concat(F('M'), F('Rm'))
-    elem = _element(s, s.b.read(s.ctx.rf_v, rm, sh(128 // es)), s.zext(idx, 8))
-    return elem if n == 1 else s.b.replicate(elem, sh(n))
-
-
 def _second(s: S, e: Encoding, F, es, n, part=0):
     """Second operand: Vm (vector/scalar) or a by-element operand."""
     if 'elem' in e.name:
@@ -150,20 +141,6 @@ def _sqdmull(s: S, e: Encoding, F):
         sat1 = s.orr(sat1, sat2)
     wr(s, F('Rd'), prod)
     set_qc(s, sat1)
-
-
-def _qdmulh(s: S, a, b, rounding, acc=None, sub=False):
-    """SQDMULH/SQRDMULH and SQRDMLAH/SQRDMLSH (acc given)."""
-    e = a.width
-    w = 4 * e if e < 32 else 128
-    p = s.lsl(s.mul(s.sext(a, w), s.sext(b, w)), s.c(1, w, a.shape))
-    if sub:
-        p = s.neg(p)
-    if acc is not None:
-        p = s.add(s.lsl(s.sext(acc, w), s.c(e, w, a.shape)), p)
-    if rounding:
-        p = s.add(p, s.c(1 << (e - 1), w, a.shape))
-    return sat(s, s.asr(p, s.c(e, w, a.shape)), e, False)
 
 
 QDMULH = {'sqdmulh_advsimd_elt': (False, None), 'sqrdmulh_advsimd_elt': (True, None),
@@ -269,13 +246,6 @@ def _post(s: S, e: Encoding, F, base, total):
     return lambda: s.xsp_write(F('Rn'), new)
 
 
-def _insert_lane(s: S, t, lane, value, es):
-    n = 128 // es
-    old = s.b.read(s.ctx.rf_v, t, sh(n))
-    hit = s.eq(iota(s, n), s.b.replicate(s.zext(lane, 8), sh(n)))
-    s.b.write(s.ctx.rf_v, t, s.select(hit, s.b.replicate(value, sh(n)), old))
-
-
 SNGL = {f'{op}{k}_advsimd_sngl': (op == 'ld', k) for op in ('ld', 'st') for k in range(1, 5)}
 
 
@@ -291,7 +261,7 @@ def _ldst_sngl(s: S, e: Encoding, F):
         t = _vreg(s, F, 'Rt', k)
         addr = s.add(base, s.c(k * ebytes, 64))
         if load:
-            _insert_lane(s, t, lane, s.mem_read(addr, es), es)
+            _insert(s, t, lane, s.mem_read(addr, es), es)
         else:
             src = s.b.read(s.ctx.rf_v, t, sh(128 // es))
             s.mem_write(addr, _element(s, src, s.zext(lane, 8)))

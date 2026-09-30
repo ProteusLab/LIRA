@@ -105,6 +105,15 @@ The `name` field follows the specific pattern.
 | `extend_sign`  | sign-extend (`out` > `in`) |
 | `extend_zero`  | zero-extend (`out` > `in`) |
 
+## Edge cases
+
+- `clz` and `ctz` of zero return `n`, the operand width.
+- `ror` and `rol` rotate by the amount modulo `n`.
+- `lsl`, `lsr` and `asr` by an amount of `n` or more are unspecified: a
+  description must keep shift amounts below `n`.
+- `div_u`/`div_s` return the default operand when dividing by zero;
+  `div_s` of the most negative value by -1 wraps to the most negative value.
+
 ## Derivatives
 
 Some compound operations are derived from the standard set and need semantic definitions in the LIRA architecture:

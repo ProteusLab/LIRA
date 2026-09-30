@@ -11,18 +11,18 @@ python -m archs.aarch64.gen [--xml <ISA_A64_xml dir>] [--output archs/aarch64/aa
 python -m pytest archs/aarch64/tests
 ```
 
-The output is `aarch64.yaml`: 2706 instructions (676 mnemonics) from 578 XML
+The output is `aarch64.yaml`: 2670 instructions (676 mnemonics) from 578 XML
 files, one LIRA instruction per encoding and arrangement:
 
 | Module | XML files | Instructions | Content |
 |---|---|---|---|
 | `insns.py` | 129 | 252 | base integer |
 | `insns_fp.py` | 61 | 295 | scalar FP, SIMD&FP loads/stores, MRS/MSR |
-| `insns_simd.py` | 158 | 1291 | Advanced SIMD integer, part 1 |
+| `insns_simd.py` | 158 | 1255 | Advanced SIMD integer, part 1 |
 | `insns_simd2.py` | 64 | 428 | Advanced SIMD integer, part 2, and crypto |
 | `insns_v8.py` | 166 | 440 | ARMv8.1–v8.9 general-purpose and system instructions |
 
-The description uses 72 float operations, 35 environment functions and 361
+The description uses 72 float operations, 35 environment functions and 368
 operations. `insns_vfp.py` (vector FP, FHM, FCMA, BF16, …) is a draft that is
 not imported yet.
 
@@ -125,12 +125,14 @@ because `sf` is a fixed bit.
    is translated into a flat SSA sequence:
    * Every `if` becomes a `select`, or a `cond_env` for effects (conditional
      branches).
-   * Loops (`RBIT`, `REV`) and integer arithmetic become bit-vector
-     expressions. `SMULH` computes in 128 bits.
+   * Loops and integer arithmetic become bit-vector expressions; `RBIT` is
+     the standard `reverse` operation. `SMULH` computes in 128 bits.
    * Shared ASL functions are pure `Operation`s whose `semantic_func` is a
      snippet: `add_with_carry_N`, `shift_reg_N`, `extend_reg_N`,
      `decode_bit_masks_N`, `logic_imm_valid`, `condition_holds`,
-     `rev_bytes_N_in_C` and `cls_N`.
+     `rev_bytes_N_in_C` and `cls_N`; in the other modules also
+     `poly32_mod2_N` (CRC32), `polynomial_mult_N` (PMUL/PMULL) and
+     `adv_simd_expand_imm` (MOVI/MVNI/ORR/BIC).
 
 An example is `ADDS <Xd>, <Xn|SP>, #imm{, LSL #12}` (`ADDS_64S_addsub_imm`), as generated:
 
@@ -146,10 +148,10 @@ An example is `ADDS <Xd>, <Xn|SP>, #imm{, LSL #12}` (`ADDS_64S_addsub_imm`), as 
 1 64 _t9 = op select_64 _t1 _t8 _t6;                # sh ? imm << 12 : imm
 1 1 _t10 = const 0;
 1 64 _t11 4 _t12 = op add_with_carry_64 _t5 _t9 _t10;   # (result, nzcv)
-1 64 _t13 = read X _t4;
-1 5 _t14 = const 31;
-1 1 _t15 = op eq_5 _t4 _t14;
-1 64 _t16 = op select_64 _t15 _t13 _t11;            # Rd == 31 is XZR: keep SP
+1 5 _t13 = const 31;
+1 1 _t14 = op eq_5 _t4 _t13;
+1 64 _t15 = read X _t4;
+1 64 _t16 = op select_64 _t14 _t15 _t11;            # Rd == 31 is XZR: keep SP
 1 = write X _t4 _t16;
 1 1 _t17 = const 0;
 1 = write NZCV _t17 _t12;
@@ -163,8 +165,8 @@ decode has UNDEFINED cases. Then regenerate the YAML and run the tests.
 instructions by fixing more fields (`xmlspec.specialize`), either fully or
 as `(value, mask)`:
 
-* SIMD arrangements: `size`/`Q`, `immh` for shifts, `imm5` for DUP/INS/UMOV,
-  `cmode`/`op` for modified immediates. Statement shapes are static, so
+* SIMD arrangements: `size`/`Q`, `immh` for shifts, `imm5` for DUP/INS/UMOV.
+  Statement shapes are static, so
   `ADD_asimdsame_only` becomes `..._8B`, `..._16B`, …, `..._2D`. Reserved
   arrangements are simply not generated.
 * System registers for MRS/MSR (`MRS_RS_systemmove_FPCR`, …).
@@ -212,7 +214,7 @@ The other SIMD statements are used as follows:
 | ASL | LIRA |
 |---|---|
 | `X[0..30]`, `SP` | register file `X`: 32 x 64-bit, `x0..x30`, and `sp` at index 31 |
-| `XZR` (index 31 where `X{}(n)` is used) | expressed in the semantics: a read is `select(n == 31, 0, X[n])`, a write is `X[n] = select(n == 31, X[n], v)` (a no-op) |
+| `XZR` (index 31 where `X{}(n)` is used) | expressed in the semantics: a read is `select(n == 31, 0, X[n])`, a write is `X[n] = select(n == 31, X[n], v)` (a no-op). Fixed register numbers (X16, X17, X30) are plain reads and writes, and an instruction reads a register once until it writes X |
 | `X{32}(d) = v` | the value is zero-extended to 64 bits before the write |
 | `PSTATE.{N,Z,C,V}` | register file `NZCV`: one 4-bit register (N = bit 3) |
 | `PC64()` / `BranchTo` | env `pc_read` / `pc_write`. Without a `pc_write`, the environment advances PC by 4 |
@@ -243,9 +245,16 @@ The other SIMD statements are used as follows:
   big-endian data, and the Arm-mandated behavior of `SVC` beyond calling the
   environment. Exception levels, the MMU and exception entry belong to the
   environment: the semantics only call the hooks listed above.
-* MOPS: the prologue (`CPYP`, `SETP`, …) performs the whole operation and
-  leaves the registers in the "option B" end state; the main and epilogue
-  forms then do nothing. Overlapping register operands are UNDEFINED.
+* MOPS: the prologue (`CPYP`, `SETP`, …) performs the whole operation, up to
+  `ArchMaxMOPSCPYSize` bytes for a copy and `ArchMaxMOPSBlockSize` for a set,
+  and leaves the registers in the "option B" end state: Xd and Xs after the
+  copied bytes, or unchanged when the copy runs backward (overlapping, source
+  below destination in address bits 55:0). The main and epilogue forms then do
+  nothing. Overlapping register operands are UNDEFINED; the exception for a
+  state left by the other option is not raised.
+* MSR (immediate) decodes the PSTATE fields UAO, PAN, SPSel, SSBS, DIT,
+  ALLINT, DAIFSet and DAIFClr. The fields of optional features that are not
+  described (TCO, SVCR, PM) are UNDEFINED, like unallocated fields.
 * The LRCPC3 writeback forms of LDAPR/STLR are excluded.
 * FP: FEAT_AFP (FPCR.AH/FIZ/NEP), FPCR.AHP and trapped FP exceptions are
   not modeled; they are treated as 0 and disabled. Loads/stores of a Q-register
@@ -269,8 +278,8 @@ The other SIMD statements are used as follows:
   words the constraints reject are rejected by LLVM too. It needs LLVM 17 or
   newer (older versions do not decode all of ARMv8.9, e.g. RPRFM) and skips
   otherwise; `$LLVM_MC` selects the `llvm-mc` binary.
-* `test_semantics_hw.py` (AArch64 host only) runs about 14,900 encoded
-  words (6 per instruction, about 2,490 instructions), 12 random states each,
+* `test_semantics_hw.py` (AArch64 host only) runs about 14,700 encoded
+  words (6 per instruction, about 2,450 instructions), 12 random states each,
   on the host CPU and compares the results with the interpreter.
   * It skips branches and literal loads (covered by `test_semantics.py`),
     instructions whose effect belongs to the environment (PAuth, hints,
@@ -296,7 +305,7 @@ The simulator is generated from the subset of the description that simgen
 supports. `gen.py --simgen <file>` writes the instructions whose semantics use
 only the statements in `SIMGEN_KINDS`, the register files in `SIMGEN_RFS` and
 the environment functions in `SIMGEN_ENVS`, which simgen and its AArch64
-runtime implement. This is now the whole description (2706 instructions); the
+runtime implement. This is now the whole description (2670 instructions); the
 lists keep the export correct when the description grows faster than simgen:
 
 ```bash

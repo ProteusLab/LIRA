@@ -104,7 +104,7 @@ def _stx(s: S, e: Encoding, F):
     s.check_alignment(address, total, exclusive=True)
     data = s.concat(s.x_read(F('Rt2'), el), s.x_read(F('Rt'), el)) if pair else s.x_read(F('Rt'), el)
     ok = s.env(s.ctx.envs['exclusive_check'], [address, s.c(total // 8, 8)])[0]
-    s.b.cond_env(s.ctx.envs[f'mem_write_{total}'], ok, [address, data], [])
+    s.cond_env(s.ctx.envs[f'mem_write_{total}'], ok, [address, data], [])
     s.x_write(F('Rs'), s.zext(s.not_(ok), 32))
 
 
@@ -127,7 +127,7 @@ def _cas(s: S, e: Encoding, F):
     s.check_alignment(address, bits)
     data = s.mem_read(address, bits)
     hit = s.eq(data, s.x_read(F('Rs'), bits))
-    s.b.cond_env(s.ctx.envs[f'mem_write_{bits}'], hit, [address, s.x_read(F('Rt'), bits)], [])
+    s.cond_env(s.ctx.envs[f'mem_write_{bits}'], hit, [address, s.x_read(F('Rt'), bits)], [])
     s.x_write(F('Rs'), s.zext(data, _regsize(bits)))
 
 
@@ -143,7 +143,7 @@ def _casp(s: S, e: Encoding, F):
     new = s.concat(s.x_read(_next_reg(s, F('Rt')), n), s.x_read(F('Rt'), n))
     s.check_alignment(address, 2 * n)
     data = s.mem_read(address, 2 * n)
-    s.b.cond_env(s.ctx.envs[f'mem_write_{2 * n}'], s.eq(data, compare), [address, new], [])
+    s.cond_env(s.ctx.envs[f'mem_write_{2 * n}'], s.eq(data, compare), [address, new], [])
     s.x_write(F('Rs'), s.trunc(data, n))
     s.x_write(_next_reg(s, F('Rs')), s.bits(data, n, n))
 
@@ -171,6 +171,17 @@ def _atomic(s: S, e: Encoding, F):
 # -----------------------------------------------------------------------------
 # CRC32, CSSC, flag manipulation, BC.cond
 # -----------------------------------------------------------------------------
+def _poly32_mod2(s: S, a):
+    """Poly32Mod2(data, poly): reduce `data` (N bits) modulo the polynomial `poly`."""
+    data, poly = a
+    n = data.width
+    p = s.zext(poly, n)
+    for i in range(n - 1, 31, -1):
+        reduced = s.xor(data, s.lsl(p, s.c(i - 32, n)))
+        data = s.select(s.bits(data, i, 1), reduced, data)
+    return [s.trunc(data, 32)]
+
+
 @sem('crc32', 'crc32c')
 def _crc32(s: S, e: Encoding, F):
     size = 8 << e.fixed('sz')
@@ -180,10 +191,8 @@ def _crc32(s: S, e: Encoding, F):
     n = 32 + size
     data = s.xor(s.lsl(s.zext(s.reverse(acc), n), s.c(size, n)),
                  s.lsl(s.zext(s.reverse(val), n), s.c(32, n)))
-    for i in range(n - 1, 31, -1):                         # Poly32Mod2
-        reduced = s.xor(data, s.c(poly << (i - 32), n))
-        data = s.select(s.bits(data, i, 1), reduced, data)
-    s.x_write(F('Rd'), s.reverse(s.trunc(data, 32)))
+    mod = s.ctx.func_op(f'poly32_mod2_{n}', [n, 32], [32], _poly32_mod2)
+    s.x_write(F('Rd'), s.reverse(s.call(mod, [data, s.c(poly, 32)])[0]))
 
 
 def _ds(e):
@@ -264,7 +273,8 @@ CPY_FILES = [p + opts for p in ('cpyf', 'cpy') for opts in
              ('p', 'pn', 'prn', 'prt', 'prtn', 'prtrn', 'prtwn', 'pt', 'ptn', 'ptrn', 'ptwn',
               'pwn', 'pwt', 'pwtn', 'pwtrn', 'pwtwn')]
 SET_FILES = ['setp', 'setpn', 'setpt', 'setptn']
-MOPS_MAX = 0x7FFFFFFFFFFFFFFF
+MOPS_CPY_MAX = 0x007FFFFFFFFFFFFF                           # ArchMaxMOPSCPYSize
+MOPS_SET_MAX = 0x7FFFFFFFFFFFFFFF                           # ArchMaxMOPSBlockSize
 
 
 def _undef_mops(s: S, e: Encoding, F):
@@ -284,17 +294,22 @@ def _cpy(s: S, e: Encoding, F):
     stage = e.fixed('op1')                                  # 0 prologue, 1 main, 2 epilogue
     forward_only = e.file.startswith('cpyf')
     d, src, n = s.x_read(F('Rd'), 64), s.x_read(F('Rs'), 64), s.x_read(F('Rn'), 64)
-    size = s.select(s.ugt(n, s.c(MOPS_MAX, 64)), s.c(MOPS_MAX, 64), n)
     if stage == 0:
+        size = s.select(s.ugt(n, s.c(MOPS_CPY_MAX, 64)), s.c(MOPS_CPY_MAX, 64), n)
         s.env(s.ctx.envs['mem_copy'], [d, src, size, s.c(0 if forward_only else 1, 1)])
-        s.x_write(F('Rd'), s.add(d, size))
-        s.x_write(F('Rs'), s.add(src, size))
-        s.x_write(F('Rn'), s.c(0, 64))
+        end_d, end_s = s.add(d, size), s.add(src, size)
         if forward_only:
             s.flags_write(s.c(0b0010, 4))
-        else:                                               # backward if the regions overlap
-            backward = s.and_(s.ult(src, d), s.ult(d, s.add(src, size)))
+        else:
+            # IsMemCpyForward: backward if the source overlaps the start of the
+            # destination (addresses [55:0]); a backward copy ends at Xd, Xs
+            src56, d56 = s.zext(s.trunc(src, 56), 64), s.zext(s.trunc(d, 56), 64)
+            backward = s.and_(s.ult(src56, d56), s.ugt(s.add(src56, size), d56))
+            end_d, end_s = s.select(backward, d, end_d), s.select(backward, src, end_s)
             s.flags_write(s.select(backward, s.c(0b1010, 4), s.c(0b0010, 4)))
+        s.x_write(F('Rd'), end_d)
+        s.x_write(F('Rs'), end_s)
+        s.x_write(F('Rn'), s.c(0, 64))
     else:
         # Remaining Xn bytes: forward from Xd/Xs, or backward below them (N set)
         back = s.bits(s.flags_read(), 3, 1)
@@ -309,7 +324,7 @@ def _cpy(s: S, e: Encoding, F):
 @sem(*SET_FILES, undef=_undef_mops)
 def _set(s: S, e: Encoding, F):
     d, n = s.x_read(F('Rd'), 64), s.x_read(F('Rn'), 64)
-    size = s.select(s.ugt(n, s.c(MOPS_MAX, 64)), s.c(MOPS_MAX, 64), n)
+    size = s.select(s.ugt(n, s.c(MOPS_SET_MAX, 64)), s.c(MOPS_SET_MAX, 64), n)
     s.env(s.ctx.envs['mem_set'], [d, size, s.x_read(F('Rs'), 8)])
     s.x_write(F('Rd'), s.add(d, size))
     s.x_write(F('Rn'), s.c(0, 64))
@@ -478,6 +493,22 @@ def _sysl(s: S, e: Encoding, F):
     s.x_write(F('Rt'), s.env(s.ctx.envs['sys_op_read'], _sysfields(F))[0])
 
 
-@sem('msr_imm')
+# op1:op2 of the PSTATE fields MSR (immediate) can write: UAO, PAN, SPSel, SSBS,
+# DIT, DAIFSet, DAIFClr. ALLINT (op1:op2 = 001:000) also needs CRm = 000x. The
+# fields of optional features that are not described (TCO/MTE, SVCR/SME, PM)
+# are UNDEFINED, like unallocated values; the EL checks are the environment's
+# (`pstate_write`)
+MSR_IMM_FIELDS = (0o03, 0o04, 0o05, 0o31, 0o32, 0o36, 0o37)
+MSR_IMM_ALLINT = 0o10
+
+
+def _undef_msr_imm(s: S, e: Encoding, F):
+    field = s.concat(F('op1'), F('op2'))
+    ok = [s.eqc(field, v) for v in MSR_IMM_FIELDS]
+    ok.append(s.and_(s.eqc(field, MSR_IMM_ALLINT), s.eqc(s.bits(F('CRm'), 1, 3), 0)))
+    return s.not_(s.or1(*ok))
+
+
+@sem('msr_imm', undef=_undef_msr_imm)
 def _msr_imm(s: S, e: Encoding, F):
     s.env(s.ctx.envs['pstate_write'], [F('op1'), F('op2'), F('CRm')])
