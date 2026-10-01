@@ -21,7 +21,7 @@ left out.
 from typing import Callable, Dict
 
 from python.lira.ir import Shape
-from python.lira.ir_ops import Add, Orr
+from python.lira.ir_ops import Add, And, Orr, Xor
 
 from . import insns
 from .insns import sem
@@ -29,7 +29,8 @@ from .insns_simd import _binop, _fits, ext, sat, smax, smin, umax, umin
 from .lib import S, VQ
 from .xmlspec import Encoding
 
-BASE_FEATURES = {'FEAT_SVE || FEAT_SME', 'FEAT_SVE', 'FEAT_SVE || FEAT_SSVE_FEXPA'}
+BASE_FEATURES = {'FEAT_SVE || FEAT_SME', 'FEAT_SVE', 'FEAT_SVE || FEAT_SSVE_FEXPA',
+                 'FEAT_SVE || FEAT_SME2p2'}
 SVE_FILES: set = set()
 insns.KEEP.append(lambda e: e.file not in SVE_FILES or e.feature in BASE_FEATURES)
 
@@ -900,3 +901,280 @@ def _dot_idx(s: S, e: Encoding, F):
     r = dot(s, s.z_read(F('Zda'), n), s.z_read(F('Zn'), n), b, e.mnemonic == 'SDOT')
     s.z_write(F('Zda'), r)
 
+
+# -----------------------------------------------------------------------------
+# Permutes
+# -----------------------------------------------------------------------------
+def pick(s: S, v, idx, default=None):
+    """v[idx[e]] in every element, `default` (zero) where idx is past the last element."""
+    if default is None:
+        default = s.c(0, v.width, idx.shape)
+    return s.b.gather(v, idx, default)
+
+
+def pick_scalar(s: S, v, idx):
+    """v[idx] for a scalar index (in range)."""
+    n = 128 // v.lanes
+    return s.b.extract_first(pick(s, v, rep(s, idx, n)), Shape(1, None))
+
+
+def p_raw(s: S, idx, esize: int):
+    """P(idx) as whole esize / 8-bit predicate elements."""
+    return s.b.read(s.ctx.rf_p, idx, zs(esize))
+
+
+def iconst(s: S, k: int, esize: int):
+    return s.c(k, IW, zs(esize))
+
+
+@sve('ext_z_zi')
+def _ext(s: S, e: Encoding, F):
+    pos = s.zext(s.concat(F('imm8h'), F('imm8l')), IW)       # in bytes
+    op1, op2 = s.z_read(F('Zdn'), 8), s.z_read(F('Zm'), 8)
+    n = rep(s, s.trunc(elements(s, 8), IW), 8)
+    idx = s.add(iota(s, 8), rep(s, pos, 8))
+    r = pick(s, op1, idx, pick(s, op2, s.sub(idx, n)))       # (op2:op1)[pos + VL - 1:pos]
+    s.z_write(F('Zdn'), s.select(s.uge(rep(s, pos, 8), n), op1, r))
+
+
+@sve('splice_z_p_zz', spec=size_spec())
+def _splice(s: S, e: Encoding, F):
+    n = es(e)
+    mask = s.p_read(F('Pv'), n)
+    first, last1 = first_index(s, mask), last_index_plus1(s, mask)
+    # elements first..last of the first operand, then the second operand
+    length = s.select(s.eqc(last1, 0), s.c(0, IW), s.sub(last1, first))
+    i = iota(s, n)
+    head = pick(s, s.z_read(F('Zdn'), n), s.add(i, rep(s, first, n)))
+    tail = pick(s, s.z_read(F('Zm'), n), s.sub(i, rep(s, length, n)))
+    s.z_write(F('Zdn'), s.select(s.ult(i, rep(s, length, n)), head, tail))
+
+
+def prefix_count(s: S, bits, esize: int):
+    """Number of set bits in elements 0..e (Hillis-Steele scan over <= 2048 / esize lanes)."""
+    c = s.zext(bits, IW)
+    k = 1
+    while k < 2048 // esize:
+        c = s.add(c, pick(s, c, s.sub(iota(s, esize), iconst(s, k, esize))))
+        k *= 2
+    return c
+
+
+def compact_index(s: S, bits, esize: int):
+    """For element j, the index of the (j + 1)-th set bit (a binary search for
+    the first e with prefix_count(e) > j)."""
+    c = prefix_count(s, bits, esize)
+    j = iota(s, esize)
+    pos = iconst(s, 0, esize)
+    step = 2048 // esize
+    while step > 1:
+        step //= 2
+        cand = s.add(pos, iconst(s, step, esize))
+        probe = pick(s, c, s.sub(cand, iconst(s, 1, esize)), iconst(s, NONE, esize))
+        pos = s.select(s.ule(probe, j), cand, pos)
+    return pos
+
+
+@sve('compact_z_p_z', spec=SZ_ELEM)
+def _compact(s: S, e: Encoding, F):
+    n = 32 << e.fixed('sz')
+    mask = s.p_read(F('Pg'), n)
+    total = rep(s, s.trunc(count(s, mask), IW), n)
+    r = pick(s, s.z_read(F('Zn'), n), compact_index(s, mask, n))
+    s.z_write(F('Zd'), s.select(s.ult(iota(s, n), total), r, s.c(0, n, zs(n))))
+
+
+DUP_TSZ = [('B', (1, 1)), ('H', (2, 3)), ('S', (4, 7)), ('D', (8, 15)), ('Q', (16, 31))]
+
+
+@sve('dup_z_zi', spec=lambda e: [(t, {'tsz': v}) for t, v in DUP_TSZ])
+def _dup_zi(s: S, e: Encoding, F):
+    t = e.name.rsplit('_', 1)[1]
+    n = 128 if t == 'Q' else ES[t]
+    lsb = n.bit_length() - 4                                # LowestSetBit(tsz)
+    index = s.lsr(s.concat(F('imm2'), F('tsz')), s.c(lsb + 1, 7))
+    s.z_write(F('Zd'), pick(s, s.z_read(F('Zn'), n), rep(s, s.zext(index, IW), n)))
+
+
+@sve('tbl_z_zz', spec=size_spec())
+def _tbl(s: S, e: Encoding, F):
+    n = es(e)
+    s.z_write(F('Zd'), pick(s, s.z_read(F('Zn'), n), s.z_read(F('Zm'), n)))
+
+
+def _zip_index(s: S, n: int, part: int):
+    """ZIP: element i comes from element base + i / 2 of operand 1 (even i) or 2."""
+    half = s.lsr(s.trunc(elements(s, n), IW), s.c(1, IW))
+    base = rep(s, s.mul(half, s.c(part, IW)), n)
+    return s.add(base, s.lsr(iota(s, n), iconst(s, 1, n)))
+
+
+def permute(s: S, kind: str, part: int, a, b, n: int):
+    """ZIP/UZP/TRN of two vectors of n-bit elements."""
+    i = iota(s, n)
+    odd = s.trunc(i, 1)
+    if kind == 'ZIP':
+        idx = _zip_index(s, n, part)
+        return s.select(odd, pick(s, b, idx), pick(s, a, idx))
+    if kind == 'TRN':
+        idx = s.add(s.and_(i, iconst(s, NONE ^ 1, n)), iconst(s, part, n))
+        return s.select(odd, pick(s, b, idx), pick(s, a, idx))
+    # UZP: 2i + part from the first operand, then from the second
+    idx = s.add(s.lsl(i, iconst(s, 1, n)), iconst(s, part, n))
+    total = rep(s, s.trunc(elements(s, n), IW), n)
+    return pick(s, a, idx, pick(s, b, s.sub(idx, total)))
+
+
+@sve('zip1_z_zz', 'uzp1_z_zz', 'trn1_z_zz', spec=size_spec())
+def _permute_z(s: S, e: Encoding, F):
+    n = es(e)
+    r = permute(s, e.mnemonic[:3], int(e.mnemonic[3]) - 1, s.z_read(F('Zn'), n), s.z_read(F('Zm'), n), n)
+    s.z_write(F('Zd'), r)
+
+
+@sve('zip1_p_pp', 'uzp1_p_pp', 'trn1_p_pp', spec=size_spec())
+def _permute_p(s: S, e: Encoding, F):
+    n = es(e)
+    r = permute(s, e.mnemonic[:3], int(e.mnemonic[3]) - 1, p_raw(s, F('Pn'), n), p_raw(s, F('Pm'), n), n)
+    s.b.write(s.ctx.rf_p, F('Pd'), r)
+
+
+def reverse_index(s: S, n: int):
+    last = rep(s, s.sub(s.trunc(elements(s, n), IW), s.c(1, IW)), n)
+    return s.sub(last, iota(s, n))
+
+
+@sve('rev_z_z', spec=size_spec())
+def _rev_z(s: S, e: Encoding, F):
+    n = es(e)
+    s.z_write(F('Zd'), pick(s, s.z_read(F('Zn'), n), reverse_index(s, n)))
+
+
+@sve('rev_p_p', spec=size_spec())
+def _rev_p(s: S, e: Encoding, F):
+    n = es(e)
+    s.b.write(s.ctx.rf_p, F('Pd'), pick(s, p_raw(s, F('Pn'), n), reverse_index(s, n)))
+
+
+def _half_index(s: S, n: int, hi: bool):
+    """Element e + (hi ? VL / n : 0): the low or high half of a vector of n / 2-bit elements."""
+    i = iota(s, n)
+    return s.add(i, rep(s, s.trunc(elements(s, n), IW), n)) if hi else i
+
+
+@sve('punpkhi_p_p')
+def _punpk(s: S, e: Encoding, F):
+    src = s.p_read(F('Pn'), 8)
+    s.p_write(F('Pd'), pick(s, src, _half_index(s, 16, e.fixed('H') == 1)))
+
+
+@sve('sunpkhi_z_z', 'uunpkhi_z_z', spec=size_spec((1, 2, 3)))
+def _unpk(s: S, e: Encoding, F):
+    n = es(e)
+    src = s.z_read(F('Zn'), n // 2)
+    v = pick(s, src, _half_index(s, n, e.fixed('H') == 1))
+    s.z_write(F('Zd'), ext(s, v, n, e.mnemonic[0] == 'S'))
+
+
+def insr(s: S, dest, src):
+    """dest[VL - esize - 1:0] : src"""
+    n = dest.width
+    return pick(s, dest, s.sub(iota(s, n), iconst(s, 1, n)), rep(s, src, n))
+
+
+@sve('insr_z_r', spec=size_spec())
+def _insr_r(s: S, e: Encoding, F):
+    n = es(e)
+    s.z_write(F('Zdn'), insr(s, s.z_read(F('Zdn'), n), s.x_read(F('Rm'), n)))
+
+
+@sve('insr_z_v', spec=size_spec())
+def _insr_v(s: S, e: Encoding, F):
+    n = es(e)
+    s.z_write(F('Zdn'), insr(s, s.z_read(F('Zdn'), n), s.v_read(F('Vm'), n)))
+
+
+# -----------------------------------------------------------------------------
+# LAST, CLAST, reductions
+# -----------------------------------------------------------------------------
+def last_element_index(s: S, mask, before: bool):
+    """(any active, element index) of LASTA/LASTB/CLASTA/CLASTB: the last active
+    element (B, or the last element if none is active) or the one after it (A,
+    wrapping to 0)."""
+    n = 128 // mask.lanes
+    last1 = last_index_plus1(s, mask)
+    found = s.not_(s.eqc(last1, 0))
+    total = s.trunc(elements(s, n), IW)
+    if before:
+        idx = s.select(found, s.sub(last1, s.c(1, IW)), s.sub(total, s.c(1, IW)))
+    else:
+        idx = s.select(s.uge(last1, total), s.c(0, IW), last1)
+    return found, idx
+
+
+@sve('lasta_r_p_z', 'lastb_r_p_z', 'lasta_v_p_z', 'lastb_v_p_z', spec=size_spec())
+def _last(s: S, e: Encoding, F):
+    n = es(e)
+    _, idx = last_element_index(s, s.p_read(F('Pg'), n), e.fixed('B') == 1)
+    v = pick_scalar(s, s.z_read(F('Zn'), n), idx)
+    if 'Rd' in e.fields:
+        s.x_write(F('Rd'), v)                              # X{rsize}: zero-extended
+    else:
+        s.v_write(F('Vd'), v)
+
+
+@sve('clasta_r_p_z', 'clastb_r_p_z', 'clasta_v_p_z', 'clastb_v_p_z', spec=size_spec())
+def _clast(s: S, e: Encoding, F):
+    n = es(e)
+    found, idx = last_element_index(s, s.p_read(F('Pg'), n), e.fixed('B') == 1)
+    v = pick_scalar(s, s.z_read(F('Zm'), n), idx)
+    if 'Rdn' in e.fields:
+        s.x_write(F('Rdn'), s.select(found, v, s.x_read(F('Rdn'), n)))
+    else:
+        s.v_write(F('Vdn'), s.select(found, v, s.v_read(F('Vdn'), n)))
+
+
+@sve('clasta_z_p_zz', 'clastb_z_p_zz', spec=size_spec())
+def _clast_z(s: S, e: Encoding, F):
+    n = es(e)
+    found, idx = last_element_index(s, s.p_read(F('Pg'), n), e.fixed('B') == 1)
+    old = s.z_read(F('Zdn'), n)
+    v = pick(s, s.z_read(F('Zm'), n), rep(s, idx, n))
+    s.z_write(F('Zdn'), s.select(rep(s, found, n), v, old))
+
+
+def reduce(s: S, op, init: int, mask, v):
+    """Fold the active elements of v (inactive ones are `init`)."""
+    return fold1(s, op, s.c(init, v.width), s.select(mask, v, s.cl(init, v)))
+
+
+REDUCE = {
+    'ANDV': lambda s, n: (And(n), (1 << n) - 1), 'ORV': lambda s, n: (Orr(n), 0),
+    'EORV': lambda s, n: (Xor(n), 0),
+    'SMAXV': lambda s, n: (_binop(s, 'smax', smax, n), 1 << (n - 1)),
+    'SMINV': lambda s, n: (_binop(s, 'smin', smin, n), (1 << (n - 1)) - 1),
+    'UMAXV': lambda s, n: (_binop(s, 'umax', umax, n), 0),
+    'UMINV': lambda s, n: (_binop(s, 'umin', umin, n), (1 << n) - 1),
+}
+
+
+@sve('andv_r_p_z', 'orv_r_p_z', 'eorv_r_p_z', 'smaxv_r_p_z', 'sminv_r_p_z', 'umaxv_r_p_z',
+     'uminv_r_p_z', spec=size_spec())
+def _reduce(s: S, e: Encoding, F):
+    n = es(e)
+    op, init = REDUCE[e.mnemonic](s, n)
+    s.v_write(F('Vd'), reduce(s, op, init, s.p_read(F('Pg'), n), s.z_read(F('Zn'), n)))
+
+
+@sve('saddv_r_p_z', spec=size_spec((0, 1, 2)))
+def _saddv(s: S, e: Encoding, F):
+    n = es(e)
+    v = s.sext(s.z_read(F('Zn'), n), 64)
+    s.v_write(F('Vd'), reduce(s, Add(64), 0, s.p_read(F('Pg'), n), v))
+
+
+@sve('uaddv_r_p_z', spec=size_spec())
+def _uaddv(s: S, e: Encoding, F):
+    n = es(e)
+    v = s.zext(s.z_read(F('Zn'), n), 64)
+    s.v_write(F('Vd'), reduce(s, Add(64), 0, s.p_read(F('Pg'), n), v))
