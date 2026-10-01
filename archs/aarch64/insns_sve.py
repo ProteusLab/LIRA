@@ -18,6 +18,7 @@ Only the FEAT_SVE encodings of the XML files are described; the encodings of
 later extensions in the same files (e.g. the FEAT_SVE2p2 zeroing forms) are
 left out.
 """
+import re
 from typing import Callable, Dict
 
 from python.lira.ir import Shape
@@ -1178,3 +1179,227 @@ def _uaddv(s: S, e: Encoding, F):
     n = es(e)
     v = s.zext(s.z_read(F('Zn'), n), 64)
     s.v_write(F('Vd'), reduce(s, Add(64), 0, s.p_read(F('Pg'), n), v))
+
+
+# -----------------------------------------------------------------------------
+# Loads and stores
+# -----------------------------------------------------------------------------
+# Element e of register r of a contiguous access is at base + (e * nreg + r) *
+# mbytes; the accesses of a vector are lane-wise `env`/`cond_env` statements,
+# performed in element order. Inactive elements are not accessed (loads give 0).
+MSIZE = {'B': 8, 'H': 16, 'W': 32, 'D': 64}
+
+
+def mem_kind(e: Encoding):
+    """(kind, nreg, msize, signed) of a load/store mnemonic, e.g. LDFF1SH -> ('LDFF1', 1, 16, True)."""
+    m = re.fullmatch(r'(LD1RQ|LD1R|LDFF1|LDNF1|LDNT1|STNT1|LD|ST|PRF)([1-4]?)(S?)([BHWD])', e.mnemonic)
+    kind, n, signed, size = m.groups()
+    return kind, int(n) if kind in ('LD', 'ST') else 1, MSIZE[size], bool(signed)
+
+
+def mem_esize(e: Encoding, msize: int) -> int:
+    """Element size: a B/H/S/D specialization, the _u<n>/_s<n> encodings of
+    contiguous loads, the _s/_d forms of gathers and scatters, else msize."""
+    parts = e.name.split('_')
+    if parts[-1] in ES:
+        return ES[parts[-1]]
+    m = re.search(r'_[us](8|16|32|64)$', e.name)
+    if m:
+        return int(m.group(1))
+    for k in ('bz', 'ai'):
+        if k in parts:
+            return {'s': 32, 'd': 64}[parts[parts.index(k) + 1]]
+    return msize
+
+
+def _store_spec(e: Encoding):
+    msize = mem_kind(e)[2]
+    if 'size' in {f.name for f in e.operands}:
+        return size_spec(tuple(sz for sz in range(4) if 8 << sz >= msize))(e)
+    return SZ_ELEM(e)
+
+
+def c64(s: S, k: int):
+    return s.c(k, 64)
+
+
+def load_lanes(s: S, active, addrs, msize: int):
+    f = s.ctx.envs[f'mem_read_{msize}']
+    return s.cond_env(f, active, [addrs], [s.c(0, msize, active.shape)])[0]
+
+
+def store_lanes(s: S, active, addrs, data):
+    s.cond_env(s.ctx.envs[f'mem_write_{data.width}'], active, [addrs, data], [])
+
+
+def contiguous_base(s: S, e: Encoding, F, kind: str, nreg: int, esize: int, msize: int):
+    """Address of the first element: X[n]|SP + the scaled immediate or X[m]."""
+    base = s.xsp_read(F('Rn'), 64)
+    mbytes = msize // 8
+    if e.file.endswith('_br'):
+        off = s.mul(s.x_read(F('Rm'), 64), c64(s, mbytes))
+    elif kind == 'LD1R':
+        off = s.mul(s.zext(F('imm6'), 64), c64(s, mbytes))
+    elif kind == 'LD1RQ':
+        off = s.mul(s.sext(F('imm4'), 64), c64(s, 16))
+    else:                                                  # imm4 * VL / esize * nreg * mbytes
+        off = s.mul(s.sext(F('imm4'), 64), s.mul(elements(s, esize), c64(s, nreg * mbytes)))
+    return s.add(base, off)
+
+
+def contiguous_addrs(s: S, addr0, esize: int, msize: int, nreg: int = 1, r: int = 0):
+    step = nreg * msize // 8
+    i = s.mul(s.zext(iota(s, esize), 64), s.c(step, 64, zs(esize)))
+    return s.add(rep(s, addr0, esize), s.add(i, s.c(r * msize // 8, 64, zs(esize))))
+
+
+def vector_addrs(s: S, e: Encoding, F, esize: int, msize: int):
+    """Gather/scatter addresses: Z[n] + imm5 * mbytes, or X[n]|SP + the
+    (extended, scaled) offsets in Z[m]."""
+    mbytes = msize // 8
+    if e.file.endswith('_ai'):
+        imm = s.mul(s.zext(F('imm5'), 64), c64(s, mbytes))
+        return s.add(s.zext(s.z_read(F('Zn'), esize), 64), rep(s, imm, esize))
+    off = s.z_read(F('Zm'), esize)
+    if '_x32_' in e.name:                                   # 32-bit offsets: xs = 1 sign-extends
+        low = s.trunc(off, 32)
+        off = s.select(rep(s, F('xs'), esize), s.sext(low, 64), s.zext(low, 64))
+    else:
+        off = s.zext(off, 64)
+    if not e.name.endswith('_unscaled') and mbytes > 1:
+        off = s.lsl(off, s.c(mbytes.bit_length() - 1, 64, zs(esize)))
+    return s.add(rep(s, s.xsp_read(F('Rn'), 64), esize), off)
+
+
+def nonfault_load(s: S, kind: str, mask, addrs, msize: int):
+    """LDFF1/LDNF1: (data, faulted). The first active element of LDFF1 is a
+    normal access; the others are non-faulting (MemNF). From the first element
+    whose access is not performed on, elements are `faulted`: FFR is cleared
+    there and the data is zero (one of the CONSTRAINED UNPREDICTABLE choices)."""
+    n = 128 // mask.lanes
+    zero = s.c(0, msize, mask.shape)
+    rest = mask
+    if kind == 'LDFF1':
+        first = s.eq(iota(s, n), rep(s, first_index(s, mask), n))
+        data1 = load_lanes(s, s.and_(mask, first), addrs, msize)
+        rest = s.and_(mask, s.not_(first))
+    nf = s.ctx.envs[f'mem_read_nf_{msize}']
+    data, ok = s.cond_env(nf, rest, [addrs], [zero, s.c(1, 1, mask.shape)])
+    if kind == 'LDFF1':
+        data = s.select(first, data1, data)
+    faulted = s.uge(iota(s, n), rep(s, first_index(s, s.not_(ok)), n))
+    return data, faulted
+
+
+@sve('ld1b_z_p_ai', 'ld1b_z_p_bi', 'ld1b_z_p_br', 'ld1b_z_p_bz', 'ld1d_z_p_ai', 'ld1d_z_p_bi',
+     'ld1d_z_p_br', 'ld1d_z_p_bz', 'ld1h_z_p_ai', 'ld1h_z_p_bi', 'ld1h_z_p_br', 'ld1h_z_p_bz',
+     'ld1sb_z_p_ai', 'ld1sb_z_p_bi', 'ld1sb_z_p_br', 'ld1sb_z_p_bz', 'ld1sh_z_p_ai', 'ld1sh_z_p_bi',
+     'ld1sh_z_p_br', 'ld1sh_z_p_bz', 'ld1sw_z_p_ai', 'ld1sw_z_p_bi', 'ld1sw_z_p_br', 'ld1sw_z_p_bz',
+     'ld1w_z_p_ai', 'ld1w_z_p_bi', 'ld1w_z_p_br', 'ld1w_z_p_bz',
+     'ld2b_z_p_bi', 'ld2b_z_p_br', 'ld2d_z_p_bi', 'ld2d_z_p_br', 'ld2h_z_p_bi', 'ld2h_z_p_br',
+     'ld2w_z_p_bi', 'ld2w_z_p_br', 'ld3b_z_p_bi', 'ld3b_z_p_br', 'ld3d_z_p_bi', 'ld3d_z_p_br',
+     'ld3h_z_p_bi', 'ld3h_z_p_br', 'ld3w_z_p_bi', 'ld3w_z_p_br', 'ld4b_z_p_bi', 'ld4b_z_p_br',
+     'ld4d_z_p_bi', 'ld4d_z_p_br', 'ld4h_z_p_bi', 'ld4h_z_p_br', 'ld4w_z_p_bi', 'ld4w_z_p_br',
+     'ldnt1b_z_p_bi', 'ldnt1b_z_p_br', 'ldnt1d_z_p_bi', 'ldnt1d_z_p_br', 'ldnt1h_z_p_bi',
+     'ldnt1h_z_p_br', 'ldnt1w_z_p_bi', 'ldnt1w_z_p_br',
+     'ldff1b_z_p_ai', 'ldff1b_z_p_br', 'ldff1b_z_p_bz', 'ldff1d_z_p_ai', 'ldff1d_z_p_br',
+     'ldff1d_z_p_bz', 'ldff1h_z_p_ai', 'ldff1h_z_p_br', 'ldff1h_z_p_bz', 'ldff1sb_z_p_ai',
+     'ldff1sb_z_p_br', 'ldff1sb_z_p_bz', 'ldff1sh_z_p_ai', 'ldff1sh_z_p_br', 'ldff1sh_z_p_bz',
+     'ldff1sw_z_p_ai', 'ldff1sw_z_p_br', 'ldff1sw_z_p_bz', 'ldff1w_z_p_ai', 'ldff1w_z_p_br',
+     'ldff1w_z_p_bz', 'ldnf1b_z_p_bi', 'ldnf1d_z_p_bi', 'ldnf1h_z_p_bi', 'ldnf1sb_z_p_bi',
+     'ldnf1sh_z_p_bi', 'ldnf1sw_z_p_bi', 'ldnf1w_z_p_bi')
+def _load(s: S, e: Encoding, F):
+    kind, nreg, msize, signed = mem_kind(e)
+    esize = mem_esize(e, msize)
+    mask = s.p_read(F('Pg'), esize)
+    if e.file.endswith(('_ai', '_bz')):
+        addrs = vector_addrs(s, e, F, esize, msize)
+    else:
+        addr0 = contiguous_base(s, e, F, kind, nreg, esize, msize)
+        addrs = contiguous_addrs(s, addr0, esize, msize)
+    if kind in ('LDFF1', 'LDNF1'):
+        data, faulted = nonfault_load(s, kind, mask, addrs, msize)
+        ffr = s.b.read(s.ctx.rf_ffr, s.c(0, 1), zs(esize))
+        s.b.write(s.ctx.rf_ffr, s.c(0, 1), s.select(faulted, s.c(0, ffr.width, ffr.shape), ffr))
+        v = s.select(faulted, s.c(0, esize, mask.shape), ext(s, data, esize, signed))
+        s.z_write(F('Zt'), v)
+        return
+    for r in range(nreg):
+        if nreg > 1:
+            addrs = contiguous_addrs(s, addr0, esize, msize, nreg, r)
+        v = ext(s, load_lanes(s, mask, addrs, msize), esize, signed)
+        s.z_write(s.add(F('Zt'), s.c(r, 5)) if r else F('Zt'), v)
+
+
+@sve('ld1rb_z_p_bi', 'ld1rd_z_p_bi', 'ld1rh_z_p_bi', 'ld1rsb_z_p_bi', 'ld1rsh_z_p_bi',
+     'ld1rsw_z_p_bi', 'ld1rw_z_p_bi')
+def _ld1r(s: S, e: Encoding, F):
+    kind, _, msize, signed = mem_kind(e)
+    esize = mem_esize(e, msize)
+    mask = s.p_read(F('Pg'), esize)
+    any_active = fold1(s, Orr(1), s.c(0, 1), mask)          # no access if no element is active
+    addr = contiguous_base(s, e, F, kind, 1, esize, msize)
+    data = s.cond_env(s.ctx.envs[f'mem_read_{msize}'], any_active, [addr], [s.c(0, msize)])[0]
+    v = rep(s, ext(s, data, esize, signed), esize)
+    s.z_write(F('Zt'), s.select(mask, v, s.c(0, esize, zs(esize))))
+
+
+@sve('ld1rqb_z_p_bi', 'ld1rqb_z_p_br', 'ld1rqd_z_p_bi', 'ld1rqd_z_p_br', 'ld1rqh_z_p_bi',
+     'ld1rqh_z_p_br', 'ld1rqw_z_p_bi', 'ld1rqw_z_p_br')
+def _ld1rq(s: S, e: Encoding, F):
+    kind, _, esize, _ = mem_kind(e)
+    q = 128 // esize
+    quad = Shape(q, None)
+    mask = s.b.extract_first(s.p_read(F('Pg'), esize), quad)   # the first quadword's predicate
+    addr0 = contiguous_base(s, e, F, kind, 1, esize, esize)
+    i = s.mul(s.zext(s.b.index(IW, quad), 64), s.c(esize // 8, 64, quad))
+    addrs = s.add(s.b.replicate(addr0, quad), i)
+    data = s.cond_env(s.ctx.envs[f'mem_read_{esize}'], mask, [addrs], [s.c(0, esize, quad)])[0]
+    s.z_write(F('Zt'), pick(s, data, s.and_(iota(s, esize), iconst(s, q - 1, esize))))
+
+
+@sve('st1b_z_p_ai', 'st1b_z_p_bi', 'st1b_z_p_br', 'st1b_z_p_bz', 'st1d_z_p_ai', 'st1d_z_p_bi',
+     'st1d_z_p_br', 'st1d_z_p_bz', 'st1h_z_p_ai', 'st1h_z_p_bi', 'st1h_z_p_br', 'st1h_z_p_bz',
+     'st1w_z_p_ai', 'st1w_z_p_bi', 'st1w_z_p_br', 'st1w_z_p_bz',
+     'st2b_z_p_bi', 'st2b_z_p_br', 'st2d_z_p_bi', 'st2d_z_p_br', 'st2h_z_p_bi', 'st2h_z_p_br',
+     'st2w_z_p_bi', 'st2w_z_p_br', 'st3b_z_p_bi', 'st3b_z_p_br', 'st3d_z_p_bi', 'st3d_z_p_br',
+     'st3h_z_p_bi', 'st3h_z_p_br', 'st3w_z_p_bi', 'st3w_z_p_br', 'st4b_z_p_bi', 'st4b_z_p_br',
+     'st4d_z_p_bi', 'st4d_z_p_br', 'st4h_z_p_bi', 'st4h_z_p_br', 'st4w_z_p_bi', 'st4w_z_p_br',
+     'stnt1b_z_p_bi', 'stnt1b_z_p_br', 'stnt1d_z_p_bi', 'stnt1d_z_p_br', 'stnt1h_z_p_bi',
+     'stnt1h_z_p_br', 'stnt1w_z_p_bi', 'stnt1w_z_p_br', spec=_store_spec)
+def _store(s: S, e: Encoding, F):
+    kind, nreg, msize, _ = mem_kind(e)
+    esize = mem_esize(e, msize)
+    mask = s.p_read(F('Pg'), esize)
+    if e.file.endswith(('_ai', '_bz')):
+        addrs = vector_addrs(s, e, F, esize, msize)
+        store_lanes(s, mask, addrs, s.trunc(s.z_read(F('Zt'), esize), msize))
+        return
+    addr0 = contiguous_base(s, e, F, kind, nreg, esize, msize)
+    for r in range(nreg):
+        t = s.add(F('Zt'), s.c(r, 5)) if r else F('Zt')
+        addrs = contiguous_addrs(s, addr0, esize, msize, nreg, r)
+        store_lanes(s, mask, addrs, s.trunc(s.z_read(t, esize), msize))
+
+
+@sve('ldr_z_bi', 'str_z_bi', 'ldr_p_bi', 'str_p_bi')
+def _ldr_str(s: S, e: Encoding, F):
+    pred = e.file.endswith('_p_bi')
+    shape = Shape(2, VQ) if pred else zs(8)                 # bytes of P or Z
+    rf = s.ctx.rf_p if pred else s.ctx.rf_z
+    nbytes = s.lsl(s.vq(), c64(s, 1)) if pred else vl_bytes(s)
+    off = s.mul(s.sext(s.concat(F('imm9h'), F('imm9l')), 64), nbytes)
+    addr0 = s.add(s.xsp_read(F('Rn'), 64), off)
+    addrs = s.add(s.b.replicate(addr0, shape), s.zext(s.b.index(IW, shape), 64))
+    t = F('Pt') if pred else F('Zt')
+    if e.mnemonic == 'LDR':
+        s.b.write(rf, t, s.env(s.ctx.envs['mem_read_8'], [addrs])[0])
+    else:
+        s.env(s.ctx.envs['mem_write_8'], [addrs, s.b.read(rf, t, shape)])
+
+
+@sve('prfb_i_p_ai', 'prfb_i_p_bi', 'prfb_i_p_br', 'prfb_i_p_bz', 'prfd_i_p_ai', 'prfd_i_p_bi',
+     'prfd_i_p_br', 'prfd_i_p_bz', 'prfh_i_p_ai', 'prfh_i_p_bi', 'prfh_i_p_br', 'prfh_i_p_bz',
+     'prfw_i_p_ai', 'prfw_i_p_bi', 'prfw_i_p_br', 'prfw_i_p_bz')
+def _prefetch(s: S, e: Encoding, F):
+    """Prefetch hints have no architectural effect."""

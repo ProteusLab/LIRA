@@ -73,6 +73,10 @@ class Ctx:
         for n in (8, 16, 32, 64, 128):
             self._env(f'mem_read_{n}', ['mem.read'], [64], [n])
             self._env(f'mem_write_{n}', ['mem.write'], [64, n], [])
+        # Non-faulting read (SVE MemNF): (data, 1), or (UNKNOWN, 0) when the
+        # access would fault or is not performed for any other reason
+        for n in (8, 16, 32, 64):
+            self._env(f'mem_read_nf_{n}', ['mem.read', 'mem.nofault'], [64], [n, 1])
         # Environment hooks for behaviour outside the instruction semantics
         # (memory system, pointer authentication keys, exceptions, system state)
         # Alignment rules of ordered/atomic (FEAT_LSE2: within 16 bytes) and
