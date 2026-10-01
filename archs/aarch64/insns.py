@@ -20,6 +20,9 @@ SEM: Dict[str, Tuple[Handler, Optional[Handler]]] = {}
 SPECS: Dict[str, List[Tuple[str, Dict[str, int]]]] = {}
 # Encodings of covered files that belong to features outside the modeled set
 EXCLUDE: set = set()
+# Predicates every encoding must pass, e.g. the architecture features modeled
+# for a file whose iclasses span several features
+KEEP: List[Callable[[Encoding], bool]] = []
 # Load/store files whose accesses are ordered (alignment-checked)
 LDST_ORDERED: set = set()
 
@@ -477,6 +480,9 @@ def _svc(s: S, e: Encoding, F):
     s.env(s.ctx.env_svc, [F('imm16')])
 
 
-from . import insns_fp, insns_simd, insns_simd2, insns_v8  # noqa: E402,F401  (register handlers)
+from . import insns_fp, insns_simd, insns_simd2, insns_v8, insns_sve  # noqa: E402,F401  (register handlers)
 
 FILES = list(SEM)
+# Files are generated group after group, so a new group (e.g. SVE) appends its
+# instructions, operations and snippets to the description
+GROUPS = [[f for f in FILES if f not in insns_sve.SVE_FILES], [f for f in FILES if f in insns_sve.SVE_FILES]]

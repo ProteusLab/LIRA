@@ -11,6 +11,12 @@ State model
            bits; writing a scalar clears the upper bits (FPCR.NEP = 0).
 * `FPCR`, `FPSR` - FP control/status (32 bits each). Their attributes bind the
            FPU state used by `fop` statements (see LIRA docs/float_ops.md).
+* `Z`    - 32 SVE vector registers of VL = 128 * VQ bits (shape `128VQ`, VQ = 1..16
+           is fixed by the implementation). `alias.V@0+128`: V[n] is Z[n]<127:0>,
+           and a write to V[n] zeroes the bits above (ASL `V[] =`).
+* `P`    - 16 SVE predicate registers, `FFR` - the first-fault register; VL / 8
+           bits each (shape `16VQ`). The predicate bit of element e of size esize
+           is bit e * esize / 8; a write clears the other bits of the element.
 * PC and memory are environment functions (`pc_read`, `pc_write`,
   `mem_read_<n>`, `mem_write_<n>`); if `pc_write` is not called, the
   environment advances PC by 4.
@@ -33,6 +39,10 @@ def _mask(w: int) -> int:
     return (1 << w) - 1
 
 
+# Lane multiplier of SVE shapes: the number of 128-bit quadwords in a vector
+VQ = 'VQ'
+
+
 class Ctx:
     """Collects everything that ends up in the Arch besides instructions."""
 
@@ -48,6 +58,11 @@ class Ctx:
         self.rf_fpsr = RegisterFile('FPSR', ['sysreg'], Shape(32, None), [Register('fpsr', [
             'fpu.status', 'fpu.flag.invalid@0', 'fpu.flag.divbyzero@1', 'fpu.flag.overflow@2',
             'fpu.flag.underflow@3', 'fpu.flag.inexact@4', 'fpu.flag.input_denormal@7'])])
+        self.rf_z = RegisterFile('Z', ['simdfp', 'alias.V@0+128'], Shape(128, VQ),
+                                 [Register(f'z{i}', []) for i in range(32)])
+        self.rf_p = RegisterFile('P', ['predicate'], Shape(16, VQ),
+                                 [Register(f'p{i}', []) for i in range(16)])
+        self.rf_ffr = RegisterFile('FFR', ['predicate'], Shape(16, VQ), [Register('ffr', [])])
         self.fops: Dict[str, FloatOperation] = {}
         self.tables: Dict[str, TableInt] = {}
 
@@ -299,6 +314,27 @@ class S:
     def v_write(self, idx: Value, v: Value):
         """V{w}(idx) = v: upper bits are cleared."""
         self.b.write(self.ctx.rf_v, idx, self.zext(v, 128))
+
+    def z_read(self, idx: Value, esize: int) -> Value:
+        """Z(idx) as VL / esize elements."""
+        return self.b.read(self.ctx.rf_z, idx, Shape(128 // esize, VQ))
+
+    def z_write(self, idx: Value, v: Value):
+        self.b.write(self.ctx.rf_z, idx, v)
+
+    def p_read(self, idx: Value, esize: int, rf: Optional[RegisterFile] = None) -> Value:
+        """The predicate bits of P(idx) (or FFR) for elements of esize bits."""
+        v = self.b.read(rf or self.ctx.rf_p, idx, Shape(128 // esize, VQ))
+        return self.trunc(v, 1)
+
+    def p_write(self, idx: Value, bits: Value, rf: Optional[RegisterFile] = None):
+        """P(idx) (or FFR) = predicate bits, one per element of the shape."""
+        esize = 128 // bits.lanes
+        self.b.write(rf or self.ctx.rf_p, idx, self.zext(bits, esize // 8))
+
+    def vq(self, w: int = 64) -> Value:
+        """VQ = VL / 128 as a scalar: the number of lanes of a `1VQ` vector."""
+        return self.b.fold(ir_ops.Add(w), [self.c(0, w)], [self.c(1, w, Shape(1, VQ))])[0]
 
     def sysreg_read(self, rf: RegisterFile) -> Value:
         return self.b.read(rf, self.c(0, 1))

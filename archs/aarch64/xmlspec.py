@@ -35,6 +35,7 @@ class Encoding:
     fields: Dict[str, Field]                  # every named field
     ne: List[Tuple[str, str]] = field(default_factory=list)  # (field, pattern) must not match
     docvars: Dict[str, str] = field(default_factory=dict)
+    feature: str = ''     # architecture feature of the iclass, e.g. `FEAT_SVE || FEAT_SME`
 
     def fixed(self, name: str) -> Optional[int]:
         """Value of a named field if it is fully fixed by the encoding."""
@@ -84,6 +85,7 @@ def parse_file(path: Path) -> List[Encoding]:
     root = ET.parse(path).getroot()
     result = []
     for ic in root.iter('iclass'):
+        feature = ' | '.join(av.get('feature') or av.get('name') for av in ic.iter('arch_variant'))
         bits = ['?'] * 32
         fields: Dict[str, Field] = {}
         ne_base = []
@@ -125,10 +127,11 @@ def parse_file(path: Path) -> List[Encoding]:
             operands = [f for f in fields.values() if (mask & f.mask) != f.mask]
             dv = {d.get('key'): d.get('value') for d in enc.iter('docvar')}
             result.append(Encoding(
-                name=enc.get('name'), file=path.stem, mnemonic=dv.get('mnemonic', ''),
+                # SVE encoding names end with `_` (e.g. add_z_zz_)
+                name=enc.get('name').rstrip('_'), file=path.stem, mnemonic=dv.get('mnemonic', ''),
                 iclass=ic.get('name'), asm=_text(enc.find('asmtemplate')).strip(),
                 const_value=value, const_mask=mask, operands=operands,
-                fields=fields, ne=ne, docvars=dv))
+                fields=fields, ne=ne, docvars=dv, feature=feature))
     return result
 
 
@@ -157,4 +160,5 @@ def specialize(e: Encoding, suffix: str, assignments: Dict[str, int]) -> Encodin
     operands = [f for f in e.operands if (mask & f.mask) != f.mask]
     return Encoding(name=f'{e.name}_{suffix}', file=e.file, mnemonic=e.mnemonic,
                     iclass=e.iclass, asm=e.asm, const_value=value, const_mask=mask,
-                    operands=operands, fields=e.fields, ne=list(e.ne), docvars=dict(e.docvars))
+                    operands=operands, fields=e.fields, ne=list(e.ne), docvars=dict(e.docvars),
+                    feature=e.feature)

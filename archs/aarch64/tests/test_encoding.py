@@ -48,7 +48,7 @@ def _llvm_mc():
 def _llvm_disasm(words):
     mc = _llvm_mc()
     text = '\n'.join(' '.join(f'0x{(w >> (8 * i)) & 0xff:02x}' for i in range(4)) for w in words)
-    p = subprocess.run([mc, '--disassemble', '-triple=aarch64', '-mattr=+v8.9a,+fullfp16,+fp16fml,+aes,+sha2', '-M', 'no-aliases'],
+    p = subprocess.run([mc, '--disassemble', '-triple=aarch64', '-mattr=+v8.9a,+fullfp16,+fp16fml,+aes,+sha2,+sve', '-M', 'no-aliases'],
                        input=text, capture_output=True, text=True)
     lines = [l.strip() for l in p.stdout.splitlines() if l.strip() and not l.strip().startswith('.')]
     # invalid words produce a warning on stderr and no output line

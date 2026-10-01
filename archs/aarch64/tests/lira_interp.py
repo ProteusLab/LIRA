@@ -1,8 +1,10 @@
-"""Minimal reference interpreter for scalar (shape 1) LIRA statement sequences.
+"""Minimal reference interpreter for LIRA statement sequences.
 
 Standard operations follow SMT-LIB bit-vector semantics (shifts by >= width give
-0 / sign fill, signed division truncates and wraps).
+0 / sign fill, signed division truncates and wraps). A scalable shape `<n>VQ`
+has n * vq lanes; `vq` (the SVE vector length in quadwords) is fixed per machine.
 """
+import re
 from typing import Callable, Dict, List
 
 from python.lira.arch import Arch, Instruction, Operation
@@ -70,9 +72,33 @@ def _std(base: str, op: Operation, a: List[int]) -> List[int]:
     return [int(r) & _m(o)]
 
 
+class LowBits:
+    """The registers of a file that is the low `w` bits of another file's
+    registers (`alias.<file>@0+<w>`); a write zeroes the bits above."""
+
+    def __init__(self, owner: List[int], w: int):
+        self.owner, self.mask = owner, _m(w)
+
+    def __len__(self):
+        return len(self.owner)
+
+    def __getitem__(self, i):
+        if isinstance(i, slice):
+            return [v & self.mask for v in self.owner[i]]
+        return self.owner[i] & self.mask
+
+    def __setitem__(self, i, v):
+        if isinstance(i, slice):
+            for k, x in zip(range(len(self.owner))[i], v):
+                self.owner[k] = x & self.mask
+        else:
+            self.owner[i] = v & self.mask
+
+
 class Machine:
-    def __init__(self, arch: Arch):
+    def __init__(self, arch: Arch, vq: int = 1):
         self.arch = arch
+        self.vq = vq
         self.ops = {o.name: o for o in arch.operations}
         self.snippets = {s.name: s for s in arch.snippets}
         self.tables = {t.name: t for t in arch.tables_int}
@@ -80,8 +106,19 @@ class Machine:
         self.fops = {f.name: f for f in arch.float_operations}
         self.fpu = float_ops.FPUBinding.from_arch(arch)
         self.regs: Dict[str, List[int]] = {rf.name: [0] * rf.regs_num() for rf in arch.register_files}
+        for rf in arch.register_files:
+            for a in rf.attributes:
+                m = re.fullmatch(r'alias\.(\w+)@0\+(\d+)', a)
+                if m and m.group(1) in self.regs:
+                    self.regs[m.group(1)] = LowBits(self.regs[rf.name], int(m.group(2)))
         self.env: Dict[str, Callable] = {}
         self.dyn: Dict[str, int] = {}
+
+    def lanes(self, shape) -> int:
+        if shape.lanes_mult is None:
+            return shape.lanes_base
+        assert shape.lanes_mult == 'VQ', shape
+        return shape.lanes_base * self.vq
 
     def run_op(self, op: Operation, args: List[int]) -> List[int]:
         """Evaluate an operation on scalar (single-lane) arguments."""
@@ -99,15 +136,14 @@ class Machine:
         return res
 
     def _rf_size(self, name):
-        return next(rf.reg_size.lanes_base for rf in self.arch.register_files if rf.name == name)
+        return next(self.lanes(rf.reg_size) for rf in self.arch.register_files if rf.name == name)
 
     def run(self, seq: StatementSeq, inputs: List[List[int]]) -> List[List[int]]:
         """Execute a sequence; every value is a list of lanes."""
         vals: Dict[str, List[int]] = {}
         outputs: Dict[int, List[int]] = {}
         for st in seq.stmts:
-            assert st.shape.lanes_mult is None
-            n = st.shape.lanes_base
+            n = self.lanes(st.shape)
             args = [vals[i] for i in st.inputs]
             k, spec = st.kind, st.specifier
 

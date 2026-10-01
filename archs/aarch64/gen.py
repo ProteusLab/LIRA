@@ -19,7 +19,7 @@ from python.lira.ir_builder import InstructionBuilder, SnippetBuilder, Value
 from python.lira import arch_ser_yaml
 
 from . import xmlspec
-from .insns import EXCLUDE, FILES, SEM, SPECS
+from .insns import EXCLUDE, GROUPS, KEEP, SEM, SPECS
 from .lib import Ctx, S
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -173,11 +173,14 @@ def build_instruction(ctx: Ctx, e: xmlspec.Encoding) -> Instruction:
     return instr
 
 
-def build_arch(xml_dir: Path) -> Arch:
-    ctx = Ctx()
-    encs = xmlspec.load(xml_dir, FILES)
-    for name in EXCLUDE:
+def load_encodings(xml_dir: Path, files) -> Dict[str, xmlspec.Encoding]:
+    """The encodings of `files`, specialized (SPECS) and filtered (EXCLUDE, KEEP)."""
+    encs = xmlspec.load(xml_dir, files)
+    for name in EXCLUDE & encs.keys():
         del encs[name]
+    for name, e in list(encs.items()):
+        if not all(keep(e) for keep in KEEP):
+            del encs[name]
     for name, e in list(encs.items()):
         spec_list = SPECS.get(e.file)
         if callable(spec_list):
@@ -187,12 +190,21 @@ def build_arch(xml_dir: Path) -> Arch:
             for suffix, fixed in spec_list:
                 spec = xmlspec.specialize(e, suffix, fixed)
                 encs[spec.name] = spec
+    return encs
+
+
+def build_arch(xml_dir: Path) -> Arch:
+    ctx = Ctx()
+    encs: Dict[str, xmlspec.Encoding] = {}
+    for files in GROUPS:                     # a later group appends its instructions
+        encs.update(load_encodings(xml_dir, files))
     resolve_overlaps(encs)
     instructions = [build_instruction(ctx, e) for e in encs.values()]
     return Arch(
         name='AArch64',
         attributes=['isa.A64', 'endianness.little'],
-        register_files=[ctx.rf_x, ctx.rf_nzcv, ctx.rf_v, ctx.rf_fpcr, ctx.rf_fpsr],
+        register_files=[ctx.rf_x, ctx.rf_nzcv, ctx.rf_v, ctx.rf_fpcr, ctx.rf_fpsr,
+                        ctx.rf_z, ctx.rf_p, ctx.rf_ffr],
         system_registers=[],
         environment_functions=list(ctx.envs.values()),
         tables_int=list(ctx.tables.values()),
