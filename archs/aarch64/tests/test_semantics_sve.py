@@ -48,7 +48,7 @@ M64 = (1 << 64) - 1
 # memory cases append the window image
 S_X, S_NZCV, S_FPCR, S_FPSR, S_FAULT = 0, 64, 72, 80, 88
 S_Z = 128
-WPAGE = 0x48000000          # mapped page holding the window; the next page is unmapped
+WPAGE = 0x7f000000          # mapped page holding the window, above the image; the next page is unmapped
 GUARD = WPAGE + 0x1000
 
 
@@ -73,7 +73,7 @@ FPCR_RANDOM = (3 << 22) | (1 << 24) | (1 << 19) | (1 << 25)
 FPSR_MASK = 0x0800009F
 
 REG_FIELDS = {'Zd', 'Zn', 'Zm', 'Za', 'Zda', 'Zdn', 'Zt', 'Pd', 'Pg', 'Pn', 'Pm', 'Pdm', 'Pdn', 'Pv',
-              'Pt', 'Rd', 'Rn', 'Rm', 'Rdn', 'Vn'}
+              'Pt', 'Rd', 'Rn', 'Rm', 'Rdn', 'Vd', 'Vn', 'Vm', 'Vdn'}
 
 RAM, LOAD = 0x40000000, 0x40080000
 
@@ -119,17 +119,31 @@ _start:
     blr x9
     subs x21, x21, #1
     b.ne 1b
-    // semihosting: write the state blocks to the output file and exit
+    // semihosting: write the state blocks to the output file (1 MiB at a
+    // time) and exit
     adrp x1, sh_open
     add x1, x1, :lo12:sh_open
     mov w0, #0x01
     hlt #0xf000
-    adrp x1, sh_write
-    add x1, x1, :lo12:sh_write
-    str x0, [x1]
+    adrp x19, sh_write
+    add x19, x19, :lo12:sh_write
+    str x0, [x19]
+    adrp x20, states
+    add x20, x20, :lo12:states
+    adrp x21, states_end
+    add x21, x21, :lo12:states_end
+3:  sub x22, x21, x20
+    cbz x22, 4f
+    mov x23, #0x100000
+    cmp x22, x23
+    csel x22, x22, x23, lo
+    stp x20, x22, [x19, #8]
+    mov x1, x19
     mov w0, #0x05
     hlt #0xf000
-    adrp x1, sh_write
+    add x20, x20, x22
+    b 3b
+4:  adrp x1, sh_write
     add x1, x1, :lo12:sh_write
     mov w0, #0x02
     hlt #0xf000

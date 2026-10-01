@@ -53,6 +53,7 @@ and they have not been checked on hardware:
 | `fmulx` | `N <- N N 3` | `fmul`, but `0 × ∞ = ±2` |
 | `frecps`, `frsqrts` | `N <- N N 3` | Newton-Raphson steps `2 − a·b`, `(3 − a·b) / 2` (fused) |
 | `frecpe`, `frsqrte`, `frecpx` | `N <- N` | reciprocal (square root) estimate, reciprocal exponent |
+| `fscale` | `N <- N N 3` | `a * 2^SInt(b)`, rounded (Arm FPScale) |
 | `frint32`, `frint64` | `N <- N 3` | round to an integral value that fits in 32/64 bits, else most negative integer |
 | `fjcvtzs` | `32 1 <- 64` | JavaScript conversion: modulo 2^32, flag = exact and in range |
 | `fmuladdh` | `32 <- 32 16 16 3` | `addend + a * b` with half-precision factors, single rounding |

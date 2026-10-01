@@ -173,31 +173,37 @@ def build_instruction(ctx: Ctx, e: xmlspec.Encoding) -> Instruction:
     return instr
 
 
-def load_encodings(xml_dir: Path, files) -> Dict[str, xmlspec.Encoding]:
-    """The encodings of `files`, specialized (SPECS) and filtered (EXCLUDE, KEEP)."""
+def load_encodings(xml_dir: Path, files, in_place: bool = True) -> Dict[str, xmlspec.Encoding]:
+    """The encodings of `files`, specialized (SPECS) and filtered (EXCLUDE, KEEP).
+    Specializations take the place of their encoding, so instructions follow the
+    file order; without `in_place` they come after all the other encodings (the
+    historical order of the first group)."""
     encs = xmlspec.load(xml_dir, files)
     for name in EXCLUDE & encs.keys():
         del encs[name]
-    for name, e in list(encs.items()):
+    out: Dict[str, xmlspec.Encoding] = {}
+    later: Dict[str, xmlspec.Encoding] = {}
+    for name, e in encs.items():
         if not all(keep(e) for keep in KEEP):
-            del encs[name]
-    for name, e in list(encs.items()):
+            continue
         spec_list = SPECS.get(e.file)
         if callable(spec_list):
             spec_list = spec_list(e)
-        if spec_list:
-            del encs[name]
-            for suffix, fixed in spec_list:
-                spec = xmlspec.specialize(e, suffix, fixed)
-                encs[spec.name] = spec
-    return encs
+        if not spec_list:
+            out[name] = e
+            continue
+        for suffix, fixed in spec_list:
+            spec = xmlspec.specialize(e, suffix, fixed)
+            (out if in_place else later)[spec.name] = spec
+    out.update(later)
+    return out
 
 
 def build_arch(xml_dir: Path) -> Arch:
     ctx = Ctx()
     encs: Dict[str, xmlspec.Encoding] = {}
-    for files in GROUPS:                     # a later group appends its instructions
-        encs.update(load_encodings(xml_dir, files))
+    for i, files in enumerate(GROUPS):       # a later group appends its instructions
+        encs.update(load_encodings(xml_dir, files, in_place=i > 0))
     resolve_overlaps(encs)
     instructions = [build_instruction(ctx, e) for e in encs.values()]
     return Arch(

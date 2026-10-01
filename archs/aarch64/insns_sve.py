@@ -21,11 +21,13 @@ left out.
 import re
 from typing import Callable, Dict
 
+from python.lira import float_ops as FO
 from python.lira.ir import Shape
 from python.lira.ir_ops import Add, And, Orr, Xor
 
 from . import insns
 from .insns import sem
+from .insns_fp import vfp_expand_imm
 from .insns_simd import _binop, _fits, ext, sat, smax, smin, umax, umin
 from .lib import S, VQ
 from .xmlspec import Encoding
@@ -1403,3 +1405,486 @@ def _ldr_str(s: S, e: Encoding, F):
      'prfw_i_p_ai', 'prfw_i_p_bi', 'prfw_i_p_br', 'prfw_i_p_bz')
 def _prefetch(s: S, e: Encoding, F):
     """Prefetch hints have no architectural effect."""
+
+
+# -----------------------------------------------------------------------------
+# Floating point
+# -----------------------------------------------------------------------------
+# A predicated float operation of the ASL runs only on active elements; a `fop`
+# statement runs on all lanes. Inactive lanes therefore compute on operands
+# that raise no exception (1.0, or 0 for integers) and their result is
+# discarded, so FPSR gets the flags of the active elements only.
+def fp_const(n: int, which: str) -> int:
+    e, f = FO.FORMATS[n]
+    bias = (1 << (e - 1)) - 1
+    return {'0.0': 0, '0.5': (bias - 1) << f, '1.0': bias << f, '2.0': (bias + 1) << f}[which]
+
+
+def quiet(s: S, pg, x, integer: bool = False):
+    """x in active lanes, an operand that raises no FP exception elsewhere."""
+    return s.select(pg, x, s.cl(0 if integer else fp_const(x.width, '1.0'), x))
+
+
+def rmv(s: S, mode: int, like):
+    return s.c(mode, 3, like.shape)
+
+
+def fneg(s: S, x):
+    return s.xor(x, s.cl(1 << (x.width - 1), x))
+
+
+def fabs(s: S, x):
+    return s.and_(x, s.cl((1 << (x.width - 1)) - 1, x))
+
+
+FBIN: Dict[str, Callable] = {
+    'FADD': lambda s, a, b: s.fop('fadd', a.width, [a, b, rmv(s, FO.DYN, a)]),
+    'FSUB': lambda s, a, b: s.fop('fsub', a.width, [a, b, rmv(s, FO.DYN, a)]),
+    'FMUL': lambda s, a, b: s.fop('fmul', a.width, [a, b, rmv(s, FO.DYN, a)]),
+    'FDIV': lambda s, a, b: s.fop('fdiv', a.width, [a, b, rmv(s, FO.DYN, a)]),
+    'FMULX': lambda s, a, b: s.fop('fmulx', a.width, [a, b, rmv(s, FO.DYN, a)]),
+    'FMAX': lambda s, a, b: s.fop('fmax', a.width, [a, b]),
+    'FMIN': lambda s, a, b: s.fop('fmin', a.width, [a, b]),
+    'FMAXNM': lambda s, a, b: s.fop('fmaxnm', a.width, [a, b]),
+    'FMINNM': lambda s, a, b: s.fop('fminnm', a.width, [a, b]),
+    'FABD': lambda s, a, b: fabs(s, s.fop('fsub', a.width, [a, b, rmv(s, FO.DYN, a)])),
+    'FRECPS': lambda s, a, b: s.fop('frecps', a.width, [a, b, rmv(s, FO.DYN, a)]),
+    'FRSQRTS': lambda s, a, b: s.fop('frsqrts', a.width, [a, b, rmv(s, FO.DYN, a)]),
+}
+FREVERSED = {'FSUBR': 'FSUB', 'FDIVR': 'FDIV'}
+
+
+def fbinop(s: S, mnemonic: str, a, b):
+    if mnemonic in FREVERSED:
+        return FBIN[FREVERSED[mnemonic]](s, b, a)
+    return FBIN[mnemonic](s, a, b)
+
+
+FP_SIZES = (1, 2, 3)                                       # H, S, D; size 00 is UNDEFINED
+
+
+@sve('fadd_z_zz', 'fsub_z_zz', 'fmul_z_zz', 'frecps_z_zz', 'frsqrts_z_zz', spec=size_spec(FP_SIZES))
+def _fzz(s: S, e: Encoding, F):
+    n = es(e)
+    s.z_write(F('Zd'), fbinop(s, e.mnemonic, s.z_read(F('Zn'), n), s.z_read(F('Zm'), n)))
+
+
+@sve('fabd_z_p_zz', 'fadd_z_p_zz', 'fdiv_z_p_zz', 'fdivr_z_p_zz', 'fmax_z_p_zz', 'fmaxnm_z_p_zz',
+     'fmin_z_p_zz', 'fminnm_z_p_zz', 'fmul_z_p_zz', 'fmulx_z_p_zz', 'fsub_z_p_zz', 'fsubr_z_p_zz',
+     spec=size_spec(FP_SIZES))
+def _fp_zz(s: S, e: Encoding, F):
+    n = es(e)
+    pg = s.p_read(F('Pg'), n)
+    a = s.z_read(F('Zdn'), n)
+    r = fbinop(s, e.mnemonic, quiet(s, pg, a), quiet(s, pg, s.z_read(F('Zm'), n)))
+    s.z_write(F('Zdn'), s.select(pg, r, a))
+
+
+@sve('fscale_z_p_zz', spec=size_spec(FP_SIZES))
+def _fscale(s: S, e: Encoding, F):
+    n = es(e)
+    pg = s.p_read(F('Pg'), n)
+    a = s.z_read(F('Zdn'), n)
+    b = quiet(s, pg, s.z_read(F('Zm'), n), integer=True)
+    r = s.fop('fscale', n, [quiet(s, pg, a), b, rmv(s, FO.DYN, a)])
+    s.z_write(F('Zdn'), s.select(pg, r, a))
+
+
+# immediate of FADD/FSUB/FSUBR, FMUL and FMAX/FMAXNM/FMIN/FMINNM: (i1 = 0, i1 = 1)
+FIMM = {'FADD': ('0.5', '1.0'), 'FSUB': ('0.5', '1.0'), 'FSUBR': ('0.5', '1.0'),
+        'FMUL': ('0.5', '2.0'), 'FMAX': ('0.0', '1.0'), 'FMAXNM': ('0.0', '1.0'),
+        'FMIN': ('0.0', '1.0'), 'FMINNM': ('0.0', '1.0')}
+
+
+@sve('fadd_z_p_zs', 'fmax_z_p_zs', 'fmaxnm_z_p_zs', 'fmin_z_p_zs', 'fminnm_z_p_zs', 'fmul_z_p_zs',
+     'fsub_z_p_zs', 'fsubr_z_p_zs', spec=size_spec(FP_SIZES))
+def _fp_zs(s: S, e: Encoding, F):
+    n = es(e)
+    lo, hi = FIMM[e.mnemonic]
+    imm = rep(s, s.select(F('i1'), s.c(fp_const(n, hi), n), s.c(fp_const(n, lo), n)), n)
+    pg = s.p_read(F('Pg'), n)
+    a = s.z_read(F('Zdn'), n)
+    r = fbinop(s, e.mnemonic, quiet(s, pg, a), quiet(s, pg, imm))
+    s.z_write(F('Zdn'), s.select(pg, r, a))
+
+
+FROUND = {'FRINTN': FO.RNE, 'FRINTP': FO.RTP, 'FRINTM': FO.RTN, 'FRINTZ': FO.RTZ,
+          'FRINTA': FO.RNA, 'FRINTI': FO.DYN}
+
+
+def funary(s: S, mnemonic: str, a):
+    n = a.width
+    if mnemonic == 'FSQRT':
+        return s.fop('fsqrt', n, [a, rmv(s, FO.DYN, a)])
+    if mnemonic == 'FRECPX':
+        return s.fop('frecpx', n, [a])
+    if mnemonic == 'FRINTX':
+        return s.fop('frintx', n, [a, rmv(s, FO.DYN, a)])
+    return s.fop('frint', n, [a, rmv(s, FROUND[mnemonic], a)])
+
+
+@sve('fabs_z_p_z', 'fneg_z_p_z', spec=size_spec(FP_SIZES))
+def _fabs_neg(s: S, e: Encoding, F):
+    n = es(e)
+    a = s.z_read(F('Zn'), n)
+    r = fabs(s, a) if e.mnemonic == 'FABS' else fneg(s, a)
+    s.z_write(F('Zd'), s.select(s.p_read(F('Pg'), n), r, s.z_read(F('Zd'), n)))
+
+
+@sve('fsqrt_z_p_z', 'frecpx_z_p_z', 'frinta_z_p_z', spec=size_spec(FP_SIZES))
+def _fp_z(s: S, e: Encoding, F):
+    n = es(e)
+    pg = s.p_read(F('Pg'), n)
+    r = funary(s, e.mnemonic, quiet(s, pg, s.z_read(F('Zn'), n)))
+    s.z_write(F('Zd'), s.select(pg, r, s.z_read(F('Zd'), n)))
+
+
+@sve('frecpe_z_z', 'frsqrte_z_z', spec=size_spec(FP_SIZES))
+def _frecpe(s: S, e: Encoding, F):
+    n = es(e)
+    s.z_write(F('Zd'), s.fop(e.mnemonic.lower(), n, [s.z_read(F('Zn'), n)]))
+
+
+# Conversions: <source><2><destination> encoding suffixes (h/s/d floats,
+# w/x/h integers of 32/64/16 bits, fp16), in an element of the larger size
+CVT_SIZE = {'h': 16, 's': 32, 'd': 64, 'w': 32, 'x': 64, 'fp16': 16}
+
+
+def cvt_sizes(e: Encoding):
+    src, dst = re.fullmatch(r'(fp16|[hsdwx])2(fp16|[hsdwx])', e.name.rsplit('_', 1)[1]).groups()
+    return CVT_SIZE[src], CVT_SIZE[dst]
+
+
+@sve('fcvt_z_p_z', 'fcvtzs_z_p_z', 'fcvtzu_z_p_z', 'scvtf_z_p_z', 'ucvtf_z_p_z')
+def _fcvt(s: S, e: Encoding, F):
+    src, dst = cvt_sizes(e)
+    n = max(src, dst)
+    pg = s.p_read(F('Pg'), n)
+    a = s.trunc(s.z_read(F('Zn'), n), src)
+    m = e.mnemonic
+    if m == 'FCVT':
+        r = s.zext(s.fop('fcvtf', src, [quiet(s, pg, a), rmv(s, FO.DYN, a)], dst), n)
+    elif m in ('FCVTZS', 'FCVTZU'):
+        base = 'ftosi' if m == 'FCVTZS' else 'ftoui'
+        r = s.fop(base, src, [quiet(s, pg, a), s.c(0, 8, a.shape), rmv(s, FO.RTZ, a)], dst)
+        r = ext(s, r, n, m == 'FCVTZS')
+    else:
+        base = 'sitof' if m == 'SCVTF' else 'uitof'
+        r = s.zext(s.fop(base, src, [quiet(s, pg, a, integer=True), s.c(0, 8, a.shape),
+                                     rmv(s, FO.DYN, a)], dst), n)
+    s.z_write(F('Zd'), s.select(pg, r, s.z_read(F('Zd'), n)))
+
+
+# (negate op1, negate op3) of FPMulAdd(op3, op1, op2)
+FMA_NEG = {'FMLA': (0, 0), 'FMLS': (1, 0), 'FNMLA': (1, 1), 'FNMLS': (0, 1),
+           'FMAD': (0, 0), 'FMSB': (1, 0), 'FNMAD': (1, 1), 'FNMSB': (0, 1)}
+
+
+def fmuladd(s: S, mnemonic: str, op1, op2, op3):
+    neg1, neg3 = FMA_NEG[mnemonic]
+    if neg1:
+        op1 = fneg(s, op1)
+    if neg3:
+        op3 = fneg(s, op3)
+    return s.fop('fmuladd', op1.width, [op3, op1, op2, rmv(s, FO.DYN, op1)])
+
+
+@sve('fmla_z_p_zzz', 'fmls_z_p_zzz', 'fnmla_z_p_zzz', 'fnmls_z_p_zzz', spec=size_spec(FP_SIZES))
+def _fmla(s: S, e: Encoding, F):
+    n = es(e)
+    pg = s.p_read(F('Pg'), n)
+    acc = s.z_read(F('Zda'), n)
+    q = lambda v: quiet(s, pg, v)
+    r = fmuladd(s, e.mnemonic, q(s.z_read(F('Zn'), n)), q(s.z_read(F('Zm'), n)), q(acc))
+    s.z_write(F('Zda'), s.select(pg, r, acc))
+
+
+@sve('fmad_z_p_zzz', 'fmsb_z_p_zzz', 'fnmad_z_p_zzz', 'fnmsb_z_p_zzz', spec=size_spec(FP_SIZES))
+def _fmad(s: S, e: Encoding, F):
+    n = es(e)
+    pg = s.p_read(F('Pg'), n)
+    a = s.z_read(F('Zdn'), n)
+    q = lambda v: quiet(s, pg, v)
+    r = fmuladd(s, e.mnemonic, q(a), q(s.z_read(F('Zm'), n)), q(s.z_read(F('Za'), n)))
+    s.z_write(F('Zdn'), s.select(pg, r, a))
+
+
+def segment_pick(s: S, v, index, per: int, unit: int = 1):
+    """Element `index` (of `unit` elements) of each 128-bit segment of v, for
+    every element: v[(e & ~(per - 1)) + index * unit + e % unit]."""
+    n = 128 // v.lanes
+    i = iota(s, n)
+    base = s.and_(i, iconst(s, NONE ^ (per - 1), n))
+    off = rep(s, s.mul(s.zext(index, IW), s.c(unit, IW)), n)
+    if unit > 1:
+        off = s.add(off, s.and_(i, iconst(s, unit - 1, n)))
+    return pick(s, v, s.add(base, off))
+
+
+@sve('fmla_z_zzzi', 'fmls_z_zzzi', 'fmul_z_zzi')
+def _fp_indexed(s: S, e: Encoding, F):
+    n = {'h': 16, 's': 32, 'd': 64}[e.name.rsplit('_', 1)[1]]
+    index = s.concat(F('i3h'), F('i3l')) if n == 16 else F('i2' if n == 32 else 'i1')
+    b = segment_pick(s, s.z_read(F('Zm'), n), index, 128 // n)
+    a = s.z_read(F('Zn'), n)
+    if e.mnemonic == 'FMUL':
+        s.z_write(F('Zd'), FBIN['FMUL'](s, a, b))
+    else:
+        s.z_write(F('Zda'), fmuladd(s, e.mnemonic, a, b, s.z_read(F('Zda'), n)))
+
+
+def _complex_operands(s: S, op1, op2, rot, n: int):
+    """FCMLA: elt1_a and elt2 (op2[2p + sel_a] for the real, op2[2p + sel_b]
+    for the imaginary element, negated by neg_r/neg_i) for every element."""
+    i = iota(s, n)
+    odd = s.trunc(i, 1)
+    base = s.and_(i, iconst(s, NONE ^ 1, n))
+    sel_a = s.zext(s.bits(rot, 0, 1), IW)
+    idx_a = s.add(base, rep(s, sel_a, n))
+    idx_b = s.add(base, rep(s, s.xor(sel_a, s.c(1, IW)), n))
+    elt1 = pick(s, op1, idx_a)
+    elt2 = s.select(odd, pick(s, op2, idx_b), pick(s, op2, idx_a))
+    neg_i = s.bits(rot, 1, 1)
+    neg_r = s.xor(s.bits(rot, 0, 1), neg_i)
+    neg = s.select(odd, rep(s, neg_i, n), rep(s, neg_r, n))
+    return elt1, s.select(neg, fneg(s, elt2), elt2)
+
+
+@sve('fcmla_z_p_zzz', spec=size_spec(FP_SIZES))
+def _fcmla(s: S, e: Encoding, F):
+    n = es(e)
+    pg = s.p_read(F('Pg'), n)
+    acc = s.z_read(F('Zda'), n)
+    elt1, elt2 = _complex_operands(s, s.z_read(F('Zn'), n), s.z_read(F('Zm'), n), F('rot'), n)
+    q = lambda v: quiet(s, pg, v)
+    r = s.fop('fmuladd', n, [q(acc), q(elt1), q(elt2), rmv(s, FO.DYN, acc)])
+    s.z_write(F('Zda'), s.select(pg, r, acc))
+
+
+@sve('fcmla_z_zzzi')
+def _fcmla_idx(s: S, e: Encoding, F):
+    n = 16 if e.name.endswith('_h') else 32
+    index = F('i2') if n == 16 else F('i1')
+    op2 = segment_pick(s, s.z_read(F('Zm'), n), index, 128 // n, unit=2)   # pair `index`
+    acc = s.z_read(F('Zda'), n)
+    elt1, elt2 = _complex_operands(s, s.z_read(F('Zn'), n), op2, F('rot'), n)
+    s.z_write(F('Zda'), s.fop('fmuladd', n, [acc, elt1, elt2, rmv(s, FO.DYN, acc)]))
+
+
+@sve('fcadd_z_p_zz', spec=size_spec(FP_SIZES))
+def _fcadd(s: S, e: Encoding, F):
+    n = es(e)
+    pg = s.p_read(F('Pg'), n)
+    acc = s.z_read(F('Zdn'), n)
+    i = iota(s, n)
+    other = pick(s, s.z_read(F('Zm'), n), s.xor(i, iconst(s, 1, n)))    # op2[2p + 1] / op2[2p]
+    neg = s.eq(s.trunc(i, 1), rep(s, F('rot'), n))           # real: rot == 0, imaginary: rot == 1
+    other = s.select(neg, fneg(s, other), other)
+    r = FBIN['FADD'](s, quiet(s, pg, acc), quiet(s, pg, other))
+    s.z_write(F('Zdn'), s.select(pg, r, acc))
+
+
+# FP compares: (quiet, swap operands, accepted fcmp results)
+FCMP = {'EQ': (True, False, (FO.CMP_EQ,)), 'NE': (True, False, (FO.CMP_LT, FO.CMP_GT, FO.CMP_UN)),
+        'UO': (True, False, (FO.CMP_UN,)), 'GE': (False, False, (FO.CMP_EQ, FO.CMP_GT)),
+        'GT': (False, False, (FO.CMP_GT,)), 'LE': (False, True, (FO.CMP_EQ, FO.CMP_GT)),
+        'LT': (False, True, (FO.CMP_GT,))}
+
+
+def fcompare(s: S, cond: str, a, b):
+    q, swap, accept = FCMP[cond]
+    if swap:
+        a, b = b, a
+    rel = s.fop('fcmpq' if q else 'fcmps', a.width, [a, b])
+    return s.or1(*[s.eq(rel, s.cl(k, rel)) for k in accept])
+
+
+def _fp_compare(s: S, e: Encoding, F, b):
+    n = es(e)
+    pg = s.p_read(F('Pg'), n)
+    a = s.z_read(F('Zn'), n)
+    cond = e.mnemonic[-2:]
+    if e.mnemonic.startswith('FAC'):
+        a, b = fabs(s, a), fabs(s, b)
+    res = s.and_(pg, fcompare(s, cond, quiet(s, pg, a), quiet(s, pg, b)))
+    s.p_write(F('Pd'), res)
+
+
+@sve('fcmeq_p_p_zz', 'facge_p_p_zz', spec=size_spec(FP_SIZES))
+def _fcmp_zz(s: S, e: Encoding, F):
+    _fp_compare(s, e, F, s.z_read(F('Zm'), es(e)))
+
+
+@sve('fcmeq_p_p_z0', spec=size_spec(FP_SIZES))
+def _fcmp_z0(s: S, e: Encoding, F):
+    n = es(e)
+    _fp_compare(s, e, F, s.c(0, n, zs(n)))
+
+
+@sve('fcpy_z_p_i', spec=size_spec(FP_SIZES))
+def _fcpy(s: S, e: Encoding, F):
+    n = es(e)
+    imm = rep(s, vfp_expand_imm(s, F('imm8'), n), n)
+    s.z_write(F('Zd'), s.select(s.p_read(F('Pg'), n), imm, s.z_read(F('Zd'), n)))
+
+
+@sve('fdup_z_i', spec=size_spec(FP_SIZES))
+def _fdup(s: S, e: Encoding, F):
+    n = es(e)
+    s.z_write(F('Zd'), rep(s, vfp_expand_imm(s, F('imm8'), n), n))
+
+
+# -----------------------------------------------------------------------------
+# FP reductions: FPReduce pairs elements recursively (lo, hi halves); for a
+# power-of-two VL that is the bottom-up tree e[2i] op e[2i + 1]. It takes
+# log2(2048 / esize) levels; lanes past the vector are the identity, so the
+# levels beyond the vector's raise no exception and their value is not used.
+# -----------------------------------------------------------------------------
+FREDUCE = {'FADDV': ('fadd', '0.0'), 'FMAXV': ('fmax', '-inf'), 'FMINV': ('fmin', '+inf'),
+           'FMAXNMV': ('fmaxnm', 'nan'), 'FMINNMV': ('fminnm', 'nan')}
+
+
+def fp_identity(n: int, which: str) -> int:
+    if which == '0.0':
+        return 0
+    if which == 'nan':
+        return FO.fp_default_nan(n)
+    return FO.fp_inf(n, int(which == '-inf'))
+
+
+@sve('faddv_v_p_z', 'fmaxv_v_p_z', 'fminv_v_p_z', 'fmaxnmv_v_p_z', 'fminnmv_v_p_z',
+     spec=size_spec(FP_SIZES))
+def _freduce(s: S, e: Encoding, F):
+    n = es(e)
+    base, ident = FREDUCE[e.mnemonic]
+    identity = s.c(fp_identity(n, ident), n, zs(n))
+    v = s.select(s.p_read(F('Pg'), n), s.z_read(F('Zn'), n), identity)
+    total = s.trunc(elements(s, n), IW)
+    i = iota(s, n)
+    two_i = s.lsl(i, iconst(s, 1, n))
+    result, width = s.extract_first(v, Shape(1, None)), 1  # one element: no level
+    for level in range(1, (2048 // n).bit_length()):
+        lo = pick(s, v, two_i, identity)
+        hi = pick(s, v, s.add(two_i, iconst(s, 1, n)), identity)
+        args = [lo, hi, rmv(s, FO.DYN, lo)] if base == 'fadd' else [lo, hi]
+        v = s.fop(base, n, args)
+        # after `level` levels, element 0 is the result of a vector of 2^level elements
+        done = s.eqc(total, 1 << level)
+        result = s.select(done, s.b.extract_first(v, Shape(1, None)), result)
+    s.v_write(F('Vd'), result)
+
+
+@sve('fadda_v_p_z', spec=size_spec(FP_SIZES))
+def _fadda(s: S, e: Encoding, F):
+    """Strictly ordered sum: the active elements, compacted, are added one by
+    one, unrolled for the largest vector (2048 / esize elements). After the
+    last active element the steps add a zero that leaves the sum unchanged and
+    raises nothing (+0 when rounding toward minus infinity, else -0); with no
+    active element the sum is not computed."""
+    n = es(e)
+    mask = s.p_read(F('Pg'), n)
+    k = count(s, mask)
+    none = s.eqc(k, 0)
+    rmode = s.bits(s.sysreg_read(s.ctx.rf_fpcr), 22, 2)
+    pad = s.select(s.eqc(rmode, 0b10), s.c(0, n), s.c(1 << (n - 1), n))
+    active = pick(s, s.z_read(F('Zm'), n), compact_index(s, mask, n))
+    active = s.select(s.ult(iota(s, n), rep(s, s.trunc(k, IW), n)), active, rep(s, pad, n))
+    most = Shape(2048 // n, None)
+    seq = s.b.gather(active, s.b.index(IW, most), s.b.replicate(pad, most))
+    acc = s.v_read(F('Vdn'), n)
+    x = s.select(none, s.c(0, n), acc)
+    rm = s.rm(FO.DYN)
+    for i in range(2048 // n):
+        x = s.fop('fadd', n, [x, s.b.gather(seq, s.c(i, IW), s.c(0, n)), rm])
+    s.v_write(F('Vdn'), s.select(none, acc, x))
+
+
+# -----------------------------------------------------------------------------
+# Trigonometric and exponential accelerators
+# -----------------------------------------------------------------------------
+# FEXPA coefficients (ASL FPExpCoefficient): the fraction bits
+FEXPA_COEFF = {
+    16: [0x000, 0x016, 0x02d, 0x045, 0x05d, 0x075, 0x08e, 0x0a8, 0x0c2, 0x0dc, 0x0f8, 0x114, 0x130,
+         0x14d, 0x16b, 0x189, 0x1a8, 0x1c8, 0x1e8, 0x209, 0x22b, 0x24e, 0x271, 0x295, 0x2ba, 0x2e0,
+         0x306, 0x32e, 0x356, 0x37f, 0x3a9, 0x3d4],
+    32: [0x000000, 0x0164d2, 0x02cd87, 0x043a29, 0x05aac3, 0x071f62, 0x08980f, 0x0a14d5, 0x0b95c2,
+         0x0d1adf, 0x0ea43a, 0x1031dc, 0x11c3d3, 0x135a2b, 0x14f4f0, 0x16942d, 0x1837f0, 0x19e046,
+         0x1b8d3a, 0x1d3eda, 0x1ef532, 0x20b051, 0x227043, 0x243516, 0x25fed7, 0x27cd94, 0x29a15b,
+         0x2b7a3a, 0x2d583f, 0x2f3b79, 0x3123f6, 0x3311c4, 0x3504f3, 0x36fd92, 0x38fbaf, 0x3aff5b,
+         0x3d08a4, 0x3f179a, 0x412c4d, 0x4346cd, 0x45672a, 0x478d75, 0x49b9be, 0x4bec15, 0x4e248c,
+         0x506334, 0x52a81e, 0x54f35b, 0x5744fd, 0x599d16, 0x5bfbb8, 0x5e60f5, 0x60ccdf, 0x633f89,
+         0x65b907, 0x68396a, 0x6ac0c7, 0x6d4f30, 0x6fe4ba, 0x728177, 0x75257d, 0x77d0df, 0x7a83b3,
+         0x7d3e0c],
+    64: [0x0000000000000, 0x02c9a3e778061, 0x059b0d3158574, 0x0874518759bc8, 0x0b5586cf9890f,
+         0x0e3ec32d3d1a2, 0x11301d0125b51, 0x1429aaea92de0, 0x172b83c7d517b, 0x1a35beb6fcb75,
+         0x1d4873168b9aa, 0x2063b88628cd6, 0x2387a6e756238, 0x26b4565e27cdd, 0x29e9df51fdee1,
+         0x2d285a6e4030b, 0x306fe0a31b715, 0x33c08b26416ff, 0x371a7373aa9cb, 0x3a7db34e59ff7,
+         0x3dea64c123422, 0x4160a21f72e2a, 0x44e086061892d, 0x486a2b5c13cd0, 0x4bfdad5362a27,
+         0x4f9b2769d2ca7, 0x5342b569d4f82, 0x56f4736b527da, 0x5ab07dd485429, 0x5e76f15ad2148,
+         0x6247eb03a5585, 0x6623882552225, 0x6a09e667f3bcd, 0x6dfb23c651a2f, 0x71f75e8ec5f74,
+         0x75feb564267c9, 0x7a11473eb0187, 0x7e2f336cf4e62, 0x82589994cce13, 0x868d99b4492ed,
+         0x8ace5422aa0db, 0x8f1ae99157736, 0x93737b0cdc5e5, 0x97d829fde4e50, 0x9c49182a3f090,
+         0xa0c667b5de565, 0xa5503b23e255d, 0xa9e6b5579fdbf, 0xae89f995ad3ad, 0xb33a2b84f15fb,
+         0xb7f76f2fb5e47, 0xbcc1e904bc1d2, 0xc199bdd85529c, 0xc67f12e57d14b, 0xcb720dcef9069,
+         0xd072d4a07897c, 0xd5818dcfba487, 0xda9e603db3285, 0xdfc97337b9b5f, 0xe502ee78b3ff6,
+         0xea4afa2a490da, 0xefa1bee615a27, 0xf50765b6e4540, 0xfa7c1819e90d8],
+}
+# FTMAD coefficients (ASL FPTrigMAddCoefficient), indexed by imm (+ 8 for a negative op2)
+FTMAD_COEFF = {
+    16: [0x3c00, 0xb155, 0x2030, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x3c00, 0xb800, 0x293a,
+         0x0000, 0x0000, 0x0000, 0x0000, 0x0000],
+    32: [0x3f800000, 0xbe2aaaab, 0x3c088886, 0xb95008b9, 0x36369d6d, 0x00000000, 0x00000000,
+         0x00000000, 0x3f800000, 0xbf000000, 0x3d2aaaa6, 0xbab60705, 0x37cd37cc, 0x00000000,
+         0x00000000, 0x00000000],
+    64: [0x3ff0000000000000, 0xbfc5555555555543, 0x3f8111111110f30c, 0xbf2a01a019b92fc6,
+         0x3ec71de351f3d22b, 0xbe5ae5e2b60f7b91, 0x3de5d8408868552f, 0x0000000000000000,
+         0x3ff0000000000000, 0xbfe0000000000000, 0x3fa5555555555536, 0xbf56c16c16c13a0b,
+         0x3efa01a019b1e8d8, 0xbe927e4f7282f468, 0x3e21ee96d2641b13, 0xbda8f76380fbb401],
+}
+
+
+def coeff_table(s: S, name: str, values, index, n: int):
+    """A coefficient table as an operation (lookup by index)."""
+    w = index.width
+    padded = list(values) + [0] * ((1 << w) - len(values))
+    return s.call(s.ctx.table_op(name, w, n, padded), [index])[0]
+
+
+@sve('fexpa_z_z', spec=size_spec(FP_SIZES))
+def _fexpa(s: S, e: Encoding, F):
+    n = es(e)
+    e_, f = FO.FORMATS[n]
+    a = s.z_read(F('Zn'), n)
+    ib = 5 if n == 16 else 6                                # index bits
+    coeff = coeff_table(s, f'fexpa_coeff_{n}', FEXPA_COEFF[n], s.trunc(a, ib), f)
+    exp = s.bits(a, ib, e_)                                 # op[ib + E - 1:ib]
+    s.z_write(F('Zd'), s.concat(s.c(0, 1, a.shape), exp, coeff))
+
+
+@sve('ftmad_z_zzi', spec=size_spec(FP_SIZES))
+def _ftmad(s: S, e: Encoding, F):
+    n = es(e)
+    a, b = s.z_read(F('Zdn'), n), s.z_read(F('Zm'), n)
+    # coefficient imm, or imm + 8 if op2 is negative; op2 is used as |op2|
+    idx = s.concat(s.bits(b, n - 1, 1), rep(s, F('imm3'), n))
+    coeff = coeff_table(s, f'ftmad_coeff_{n}', FTMAD_COEFF[n], idx, n)
+    s.z_write(F('Zdn'), s.fop('fmuladd', n, [coeff, a, fabs(s, b), rmv(s, FO.DYN, a)]))
+
+
+@sve('ftsmul_z_zz', spec=size_spec(FP_SIZES))
+def _ftsmul(s: S, e: Encoding, F):
+    n = es(e)
+    a, b = s.z_read(F('Zn'), n), s.z_read(F('Zm'), n)
+    r = FBIN['FMUL'](s, a, a)
+    is_nan = s.ugt(fabs(s, r), s.cl(FO.fp_inf(n, 0), r))
+    signed = s.orr(fabs(s, r), s.lsl(s.zext(s.trunc(b, 1), n), s.cl(n - 1, r)))   # sign = op2[0]
+    s.z_write(F('Zd'), s.select(is_nan, r, signed))
+
+
+@sve('ftssel_z_zz', spec=size_spec(FP_SIZES))
+def _ftssel(s: S, e: Encoding, F):
+    n = es(e)
+    a, b = s.z_read(F('Zn'), n), s.z_read(F('Zm'), n)
+    one = s.orr(s.cl(fp_const(n, '1.0'), a), s.lsl(s.zext(s.bits(b, 1, 1), n), s.cl(n - 1, a)))
+    r = s.select(s.bits(b, 1, 1), fneg(s, a), a)
+    s.z_write(F('Zd'), s.select(s.trunc(b, 1), one, r))

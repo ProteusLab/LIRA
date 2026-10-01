@@ -649,6 +649,24 @@ def frecpx(n, st, a):
     return (sign << (n - 1)) | (new << f)
 
 
+def fscale(n, st, a, scale, rm):
+    """FPScale: a * 2^SInt(scale), rounded once (the scale is clamped to the
+    range where it can change the result, FPClampScale)."""
+    rounding = _mode(rm, st)
+    e, f, _ = _fmt(n)
+    t, sign, v = unpack(a, n, st)
+    if _is_nan(t):
+        return _process_nan(t, a, n, st)
+    if t == ZERO:
+        return fp_zero(n, sign)
+    if t == INFINITY:
+        return fp_inf(n, sign)
+    exp = (a >> f) & ((1 << e) - 1)
+    k = scale - (1 << n) if scale >> (n - 1) else scale
+    k = max(-(f + 1) - exp, min(k, (1 << e) - 1 + f + 1 - exp))
+    return fp_round(v * Fraction(2) ** k, n, st, rounding)
+
+
 def _frint_n(n, st, a, rm, intsize):
     """FPRoundIntN (FRINT32*/FRINT64*)."""
     rounding = _mode(rm, st)
@@ -868,6 +886,7 @@ BASES: Dict[str, FloatBase] = {
     'frecpe': FloatBase('N', _same(['N']), frecpe),
     'frsqrte': FloatBase('N', _same(['N']), frsqrte),
     'frecpx': FloatBase('N', _same(['N']), frecpx),
+    'fscale': FloatBase('N', _same(['N', 'N', 3]), fscale),
     'frint32': FloatBase('N', _same(['N', 3]), frint32),
     'frint64': FloatBase('N', _same(['N', 3]), frint64),
     'fjcvtzs': FloatBase('N', lambda n: ([n], [32, 1]), fjcvtzs),
