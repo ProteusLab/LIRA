@@ -495,9 +495,10 @@ def _sysl(s: S, e: Encoding, F):
 
 # op1:op2 of the PSTATE fields MSR (immediate) can write: UAO, PAN, SPSel, SSBS,
 # DIT, DAIFSet, DAIFClr. ALLINT (op1:op2 = 001:000) also needs CRm = 000x. The
-# fields of optional features that are not described (TCO/MTE, SVCR/SME, PM)
-# are UNDEFINED, like unallocated values; the EL checks are the environment's
-# (`pstate_write`)
+# fields of optional features that are not described (TCO/MTE, PM) are
+# UNDEFINED, like unallocated values; the EL checks are the environment's
+# (`pstate_write`). The SVCR fields are SMSTART/SMSTOP (insns_sme), which win
+# over this encoding
 MSR_IMM_FIELDS = (0o03, 0o04, 0o05, 0o31, 0o32, 0o36, 0o37)
 MSR_IMM_ALLINT = 0o10
 

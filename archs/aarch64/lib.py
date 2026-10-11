@@ -17,6 +17,10 @@ State model
 * `P`    - 16 SVE predicate registers, `FFR` - the first-fault register; VL / 8
            bits each (shape `16VQ`). The predicate bit of element e of size esize
            is bit e * esize / 8; a write clears the other bits of the element.
+* `ZA`   - the SME array: VL / 8 vectors of VL bits in one register of shape
+           `2048VQVQ` (`VQVQ` = VQ * VQ), vector r in bits [r * VL, (r + 1) * VL).
+           The streaming vector length is the vector length (SVL = VL).
+* `SVCR` - PSTATE.SM (bit 0) and PSTATE.ZA (bit 1), as the SVCR system register.
 * PC and memory are environment functions (`pc_read`, `pc_write`,
   `mem_read_<n>`, `mem_write_<n>`); if `pc_write` is not called, the
   environment advances PC by 4.
@@ -41,6 +45,10 @@ def _mask(w: int) -> int:
 
 # Lane multiplier of SVE shapes: the number of 128-bit quadwords in a vector
 VQ = 'VQ'
+# Lane multiplier of the SME array ZA, VQ * VQ
+VQVQ = 'VQVQ'
+# SMEAccessTrap exception types (ISS[2:0] of the syndrome)
+SME_NOT_STREAMING, SME_INACTIVE_ZA = 2, 3
 
 
 class Ctx:
@@ -63,6 +71,8 @@ class Ctx:
         self.rf_p = RegisterFile('P', ['predicate'], Shape(16, VQ),
                                  [Register(f'p{i}', []) for i in range(16)])
         self.rf_ffr = RegisterFile('FFR', ['predicate'], Shape(16, VQ), [Register('ffr', [])])
+        self.rf_za = RegisterFile('ZA', ['matrix'], Shape(2048, VQVQ), [Register('za', [])])
+        self.rf_svcr = RegisterFile('SVCR', ['sysreg'], Shape(64, None), [Register('svcr', [])])
         self.fops: Dict[str, FloatOperation] = {}
         self.tables: Dict[str, TableInt] = {}
 
@@ -103,6 +113,9 @@ class Ctx:
         self._env('sysreg_read', ['sys.reg'], [1, 3, 4, 4, 3], [64])       # MRS: o0 op1 CRn CRm op2
         self._env('sysreg_write', ['sys.reg'], [1, 3, 4, 4, 3, 64], [])
         self._env('pstate_write', ['sys.pstate'], [3, 3, 4], [])           # MSR (imm): op1 op2 CRm
+        # SMEAccessTrap(type): an SME instruction in the wrong PSTATE.SM/ZA mode
+        # (SME_NOT_STREAMING, SME_INACTIVE_ZA); the exception is taken
+        self._env('sme_access_trap', ['exception'], [3], [])
 
         self.ops: Dict[str, Operation] = {}
         self.snippets: Dict[str, Snippet] = {}
@@ -336,6 +349,56 @@ class S:
         esize = 128 // bits.lanes
         self.b.write(rf or self.ctx.rf_p, idx, self.zext(bits, esize // 8))
 
+    def za_read(self, esize: int) -> Value:
+        """ZA as (VL / esize) * (VL / 8) elements of esize bits, row-major."""
+        return self.b.read(self.ctx.rf_za, self.c(0, 1), Shape(2048 // esize, VQVQ))
+
+    def za_write(self, v: Value):
+        self.b.write(self.ctx.rf_za, self.c(0, 1), v)
+
+    def svcr_read(self) -> Value:
+        return self.sysreg_read(self.ctx.rf_svcr)
+
+    def sme_check(self, streaming: bool = True):
+        """CheckStreamingSVEAndZAEnabled (CheckSMEAndZAEnabled without
+        `streaming`): an SME access trap unless PSTATE.SM and PSTATE.ZA are set.
+        SME itself is enabled (the CPACR/CPTR controls are the environment's)."""
+        svcr = self.svcr_read()
+        no_za = self.not_(self.bits(svcr, 1, 1))
+        cond, kind = no_za, self.c(SME_INACTIVE_ZA, 3)
+        if streaming:
+            no_sm = self.not_(self.bits(svcr, 0, 1))
+            cond = self.orr(no_sm, no_za)
+            kind = self.select(no_sm, self.c(SME_NOT_STREAMING, 3), kind)
+        self.cond_env(self.ctx.envs['sme_access_trap'], cond, [kind], [])
+
+    def svcr_write(self, sm: Optional[Value], za: Optional[Value]):
+        """SetPSTATE_SM(sm); SetPSTATE_ZA(za) (None: not written). Changing SM
+        resets the SVE state (ResetSVEState: Z, P and FFR zero, FPSR
+        0x0800009F); enabling ZA zeroes it (ResetSMEState). Disabling ZA makes
+        its contents ARBITRARY: they are kept."""
+        svcr = self.svcr_read()
+        old_sm, old_za = self.bits(svcr, 0, 1), self.bits(svcr, 1, 1)
+        if sm is not None:
+            change = self.ne(old_sm, sm)
+            shape = Shape(2, VQ)
+            c = self.b.replicate(change, shape)
+            for rf, count, idx_width in ((self.ctx.rf_z, 32, 5), (self.ctx.rf_p, 16, 4),
+                                         (self.ctx.rf_ffr, 1, 1)):
+                zero = self.c(0, rf.reg_size.lanes_base // shape.lanes_base, shape)
+                for i in range(count):
+                    idx = self.c(i, idx_width)
+                    self.b.write(rf, idx, self.select(c, zero, self.b.read(rf, idx, shape)))
+            fpsr = self.sysreg_read(self.ctx.rf_fpsr)
+            self.sysreg_write(self.ctx.rf_fpsr, self.select(change, self.c(0x0800009F, 32), fpsr))
+        if za is not None:
+            enable = self.and_(self.not_(old_za), za)
+            za_old = self.za_read(64)
+            c = self.b.replicate(enable, za_old.shape)
+            self.za_write(self.select(c, self.c(0, 64, za_old.shape), za_old))
+        self.sysreg_write(self.ctx.rf_svcr, self.zext(self.concat(
+            old_za if za is None else za, old_sm if sm is None else sm), 64))
+
     def vq(self, w: int = 64) -> Value:
         """VQ = VL / 128 as a scalar: the number of lanes of a `1VQ` vector."""
         return self.b.fold(ir_ops.Add(w), [self.c(0, w)], [self.c(1, w, Shape(1, VQ))])[0]
@@ -346,9 +409,10 @@ class S:
     def sysreg_write(self, rf: RegisterFile, v: Value):
         self.b.write(rf, self.c(0, 1), v)
 
-    def fop(self, base: str, n: int, args: List[Value], m: Optional[int] = None) -> Value:
+    def fop(self, base: str, n: int, args: List[Value], m: Optional[int] = None,
+            modifiers=()) -> Value:
         """Standard float operation `<base>_<n>[_to_<m>]` (one output)."""
-        fop = float_ops.make(base, n, m)
+        fop = float_ops.make(base, n, m, modifiers)
         assert [a.width for a in args] == fop.inputs, (fop.name, [a.width for a in args])
         return self.b.fop(fop, args)[0]
 

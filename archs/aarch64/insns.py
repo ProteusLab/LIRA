@@ -480,9 +480,11 @@ def _svc(s: S, e: Encoding, F):
     s.env(s.ctx.env_svc, [F('imm16')])
 
 
-from . import insns_fp, insns_simd, insns_simd2, insns_v8, insns_sve  # noqa: E402,F401  (register handlers)
+from . import insns_fp, insns_simd, insns_simd2, insns_v8, insns_sve, insns_sme  # noqa: E402,F401  (register handlers)
 
 FILES = list(SEM)
-# Files are generated group after group, so a new group (e.g. SVE) appends its
-# instructions, operations and snippets to the description
-GROUPS = [[f for f in FILES if f not in insns_sve.SVE_FILES], [f for f in FILES if f in insns_sve.SVE_FILES]]
+# Files are generated group after group, so a new group (e.g. SVE, SME) appends
+# its instructions, operations and snippets to the description
+_LATER = [insns_sve.SVE_FILES, insns_sme.SME_FILES]
+GROUPS = [[f for f in FILES if not any(f in g for g in _LATER)]] + \
+    [[f for f in FILES if f in g] for g in _LATER]

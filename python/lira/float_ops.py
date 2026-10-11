@@ -8,7 +8,8 @@ trapped exceptions and IEEE half precision (AHP = 0).
 
 A float operation reads the FPU *controls* and ORs exception *flags* into the
 FPU state; both live in `FPUState`, which an interpreter fills from/writes back
-to the architecture registers named by `FPUBinding`.
+to the architecture registers named by `FPUBinding`. Modifiers (`MODIFIERS`)
+derive variants of a base that force default NaNs or raise no flags.
 """
 import re
 from dataclasses import dataclass, field
@@ -840,6 +841,50 @@ def _bf_add(a, b):
     return fp_zero(32, 0) if r == 0 else _bf_round(r)
 
 
+def _convert_nan(op, n, m):
+    """FPConvertNaN: an N-bit NaN as a quiet M-bit NaN with the same payload."""
+    _, fn, _ = _fmt(n)
+    _, fm, _ = _fmt(m)
+    payload = op & ((1 << (fn - 1)) - 1)
+    payload = payload << (fm - fn) if fm > fn else payload >> (fn - fm)
+    return fp_inf(m, op >> (n - 1)) | (1 << (fm - 1)) | payload
+
+
+def _fpdot(st, ops, rounding):
+    """FPDot (half precision): op1_a * op2_a + op1_b * op2_b with a single
+    rounding to single precision; `ops` = (op1_a, op1_b, op2_a, op2_b)."""
+    un = [unpack(x, 16, st) for x in ops]
+    for kind in (SNAN, QNAN):                      # FPProcessNaNs4
+        for (t, _, _), op in zip(un, ops):
+            if t == kind:
+                return _convert_nan(_process_nan(t, op, 16, st), 16, 32)
+    (t1a, s1a, v1a), (t1b, s1b, v1b), (t2a, s2a, v2a), (t2b, s2b, v2b) = un
+    sign_a, sign_b = s1a ^ s2a, s1b ^ s2b
+    inf_a, inf_b = INFINITY in (t1a, t2a), INFINITY in (t1b, t2b)
+    zero_a, zero_b = ZERO in (t1a, t2a), ZERO in (t1b, t2b)
+    if ({t1a, t2a} == {INFINITY, ZERO} or {t1b, t2b} == {INFINITY, ZERO}
+            or (inf_a and inf_b and sign_a != sign_b)):
+        st.flags.add(INVALID)
+        return fp_default_nan(32)
+    if (inf_a and sign_a == 0) or (inf_b and sign_b == 0):
+        return fp_inf(32, 0)
+    if inf_a or inf_b:
+        return fp_inf(32, 1)
+    if zero_a and zero_b and sign_a == sign_b:
+        return fp_zero(32, sign_a)
+    r = v1a * v2a + v1b * v2b
+    if r == 0:
+        return fp_zero(32, _exact_zero_sign(rounding))
+    return fp_round(r, 32, st, rounding)
+
+
+def fdotadd(n, st, addend, a1, b1, a2, b2, rm):
+    """FPDotAdd: addend + (a1 * a2 + b1 * b2) on half-precision factors; the
+    dot product is rounded to single precision, then added (two roundings)."""
+    prod = _fpdot(st, (a1, b1, a2, b2), _mode(rm, st))
+    return fadd(32, st, addend, prod, rm)
+
+
 def bfdotadd(n, st, addend, a1, b1, a2, b2):
     """BFDotAdd (FEAT_EBF16 not implemented): no exceptions, default NaNs,
     round to odd, flush to zero; FPCR is not used."""
@@ -893,14 +938,21 @@ BASES: Dict[str, FloatBase] = {
     'fmuladdh': FloatBase('N', lambda n: ([32, 16, 16, 3], [32]), fmuladdh),
     'fcvtbf': FloatBase('NM', lambda n, m: ([n, 3], [m]), fcvtbf),
     'bfdotadd': FloatBase('N', lambda n: ([32, 16, 16, 16, 16], [32]), bfdotadd),
+    'fdotadd': FloatBase('N', lambda n: ([32, 16, 16, 16, 16, 3], [32]), fdotadd),
 }
+
+# Modifiers of a base, in this order in the name (`<base>_<N>[_to_<M>]_<modifier>...`)
+# and the attributes (`fpu.<modifier>`): `default_nan` computes as if the
+# default-NaN control were set, `no_flags` leaves the exception flags unchanged
+MODIFIERS = ('default_nan', 'no_flags')
 
 FLOAT_WIDTHS = (16, 32, 64)
 INT_WIDTHS = (16, 32, 64)
 
 
-def make(base: str, n: int, m: Optional[int] = None) -> FloatOperation:
-    """Standard float operation `<base>_<N>` or `<base>_<N>_to_<M>`."""
+def make(base: str, n: int, m: Optional[int] = None, modifiers=()) -> FloatOperation:
+    """Standard float operation `<base>_<N>` or `<base>_<N>_to_<M>`, with
+    `modifiers` (see MODIFIERS)."""
     b = BASES[base]
     if b.arity == 'N':
         assert m is None and n in FLOAT_WIDTHS
@@ -910,13 +962,23 @@ def make(base: str, n: int, m: Optional[int] = None) -> FloatOperation:
         assert m is not None
         ins, outs = b.signature(n, m)
         name = f'{base}_{n}_to_{m}'
-    return FloatOperation(name, [], ins, outs, base)
+    mods = [x for x in MODIFIERS if x in modifiers]
+    assert len(mods) == len(set(modifiers)), modifiers
+    return FloatOperation(name + ''.join(f'_{x}' for x in mods), [f'fpu.{x}' for x in mods],
+                          ins, outs, base)
+
+
+def modifiers_of(fop: FloatOperation) -> List[str]:
+    mods = [a[len('fpu.'):] for a in fop.attributes if a.startswith('fpu.')]
+    assert mods == [x for x in MODIFIERS if x in mods], f'bad modifiers of {fop.name}'
+    return mods
 
 
 def parse(fop: FloatOperation) -> Tuple[FloatBase, int, Optional[int]]:
     """Validate a float operation against its base; returns (base, N, M)."""
     b = BASES[fop.semantic_base]
-    m = re.fullmatch(rf'{fop.semantic_base}_(\d+)(?:_to_(\d+))?', fop.name)
+    suffix = ''.join(f'_{x}' for x in modifiers_of(fop))
+    m = re.fullmatch(rf'{fop.semantic_base}_(\d+)(?:_to_(\d+))?{suffix}', fop.name)
     assert m, f'unexpected float operation name {fop.name}'
     n, mm = int(m.group(1)), (int(m.group(2)) if m.group(2) else None)
     ins, outs = b.signature(n) if b.arity == 'N' else b.signature(n, mm)
@@ -926,7 +988,13 @@ def parse(fop: FloatOperation) -> Tuple[FloatBase, int, Optional[int]]:
 
 def evaluate(fop: FloatOperation, args: List[int], st: FPUState) -> List[int]:
     b, n, m = parse(fop)
-    r = b.fn(n, st, *args) if b.arity == 'N' else b.fn(n, m, st, *args)
+    mods = modifiers_of(fop)
+    run = st
+    if mods:
+        run = FPUState(st.rmode, st.fz, st.fz16, st.dn or 'default_nan' in mods)
+    r = b.fn(n, run, *args) if b.arity == 'N' else b.fn(n, m, run, *args)
+    if run is not st and 'no_flags' not in mods:
+        st.flags |= run.flags
     return r if isinstance(r, list) else [r]
 
 

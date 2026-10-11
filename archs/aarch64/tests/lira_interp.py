@@ -2,7 +2,8 @@
 
 Standard operations follow SMT-LIB bit-vector semantics (shifts by >= width give
 0 / sign fill, signed division truncates and wraps). A scalable shape `<n>VQ`
-has n * vq lanes; `vq` (the SVE vector length in quadwords) is fixed per machine.
+has n * vq lanes, `<n>VQVQ` n * vq * vq; `vq` (the SVE vector length in
+quadwords) is fixed per machine.
 """
 import re
 from typing import Callable, Dict, List
@@ -117,8 +118,7 @@ class Machine:
     def lanes(self, shape) -> int:
         if shape.lanes_mult is None:
             return shape.lanes_base
-        assert shape.lanes_mult == 'VQ', shape
-        return shape.lanes_base * self.vq
+        return shape.lanes_base * {'VQ': self.vq, 'VQVQ': self.vq * self.vq}[shape.lanes_mult]
 
     def run_op(self, op: Operation, args: List[int]) -> List[int]:
         """Evaluate an operation on scalar (single-lane) arguments."""

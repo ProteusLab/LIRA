@@ -290,7 +290,8 @@ def test_msr_immediate_fields(arch):
     # UAO, PAN, SPSel, SSBS, DIT, DAIFSet, DAIFClr, ALLINT (CRm = 000x)
     assert all(ok(*f) for f in ((0, 3), (0, 4), (0, 5), (3, 1), (3, 2), (3, 6, 0xF), (3, 7, 0xF),
                                 (1, 0, 1)))
-    # PM (ALLINT's op1:op2 with CRm = 001x), TCO, SVCR (optional features), unallocated
+    # PM (ALLINT's op1:op2 with CRm = 001x), TCO (optional features), SVCR
+    # (SMSTART/SMSTOP), unallocated
     assert not any(ok(*f) for f in ((1, 0, 2), (3, 4), (3, 3, 2), (2, 0), (7, 7), (0, 6)))
     r = Run(arch, 'MSR_SI_pstate', op1=3, CRm=0b0010, op2=6).go()          # MSR DAIFSet, #2
     assert ('pstate_write', 3, 6, 0b0010) in r.calls

@@ -1,13 +1,15 @@
 """Differential test of the SVE instructions: LIRA semantics vs. QEMU.
 
 The host CPU may lack SVE, so the reference is `qemu-system-aarch64 -cpu max`
-running a bare-metal image at EL1: it sets the vector length (ZCR_EL1), enables
-an identity-mapped MMU (Normal memory, so SVE accesses need no alignment), and
+running a bare-metal image at EL1: it sets the vector length (ZCR_EL1; SMCR_EL1
+gives streaming mode the same length and FEAT_SME_FA64), enables an
+identity-mapped MMU (Normal memory, so SVE accesses need no alignment), and
 runs one stub per (case, state). Each stub loads x0..x7, z0..z7, p0..p7, FFR,
 NZCV, FPCR and FPSR from a state block, executes the word and stores the state
 back; a synchronous exception is recorded (ESR) and the word skipped. The
 blocks come back through semihosting and are compared with the reference
-interpreter run at the same VQ.
+interpreter run at the same VQ. SME states (`Layout.sme`, see
+test_semantics_sme.py) also have x8..x15, SVCR and ZA.
 
 Loads and stores access a window at the end of a mapped page, followed by an
 unmapped guard page: a memory stub copies the state's window image in before
@@ -43,27 +45,33 @@ CASES_PER_INSN = 6
 STATES_PER_CASE = 8
 M64 = (1 << 64) - 1
 
-# State block (bytes): x0..x7, NZCV, FPCR, FPSR, fault ESR, then z0..z7
-# (VL / 8 bytes each), p0..p7 and FFR (16-byte aligned slots of VL / 64 bytes);
-# memory cases append the window image
-S_X, S_NZCV, S_FPCR, S_FPSR, S_FAULT = 0, 64, 72, 80, 88
-S_Z = 128
+# State block (bytes): x0..x7 (SME: x0..x15), NZCV, FPCR, FPSR, fault ESR,
+# (SME: SVCR), then z0..z7 (VL / 8 bytes each), p0..p7 and FFR (16-byte aligned
+# slots of VL / 64 bytes), (SME: ZA, VL / 8 rows of VL / 8 bytes); memory cases
+# append the window image
 WPAGE = 0x7f000000          # mapped page holding the window, above the image; the next page is unmapped
 GUARD = WPAGE + 0x1000
 
 
 class Layout:
-    def __init__(self, vq):
+    def __init__(self, vq, sme=False):
+        self.vq, self.sme = vq, sme
+        self.nx = 16 if sme else 8
+        self.nzcv = 8 * self.nx
+        self.fpcr, self.fpsr, self.fault, self.svcr = self.nzcv + 8, self.nzcv + 16, self.nzcv + 24, self.nzcv + 32
+        self.z0 = self.nzcv + 64
         self.zb, self.pb = 16 * vq, 2 * vq
         self.zslot, self.pslot = 16 * vq, max(16, 2 * vq)
-        self.p = S_Z + 8 * self.zslot
+        self.p = self.z0 + 8 * self.zslot
         self.ffr = self.p + 8 * self.pslot
-        self.size = (self.ffr + self.pslot + 63) // 64 * 64
+        self.za = self.ffr + self.pslot
+        end = self.za + (self.zb * self.zb if sme else 0)
+        self.size = (end + 63) // 64 * 64
         self.win = min(4096, 512 * vq)                    # window bytes
         self.w0 = GUARD - self.win
 
     def z(self, i):
-        return S_Z + self.zslot * i
+        return self.z0 + self.zslot * i
 
     def pr(self, i):
         return self.p + self.pslot * i
@@ -103,13 +111,16 @@ _start:
     bic x1, x1, #(1 << 1)              // no alignment checks
     msr sctlr_el1, x1
     isb
-    mov x0, #(3 << 20)                 // CPACR_EL1: FPEN, ZEN
+    mov x0, #(3 << 20)                 // CPACR_EL1: FPEN, ZEN, SMEN
     orr x0, x0, #(3 << 16)
+    orr x0, x0, #(3 << 24)
     msr cpacr_el1, x0
     isb
     adrp x0, vq_minus_1
     ldr x0, [x0, :lo12:vq_minus_1]
     msr S3_0_C1_C2_0, x0               // ZCR_EL1.LEN
+    orr x0, x0, #(1 << 31)             // SMCR_EL1: FA64, LEN (SVL = VL)
+    msr S3_0_C1_C2_6, x0
     isb
     adrp x19, run_table
     add x19, x19, :lo12:run_table
@@ -232,6 +243,13 @@ def _mov64(reg, value):
     return f'mov {reg}, #{value & 0xffff:#x}\n    movk {reg}, #{value >> 16:#x}, lsl #16'
 
 
+def _add16(reg, off):
+    """reg = x16 + off (an offset in the state block)."""
+    if off < 4096:
+        return f'add {reg}, x16, #{off}'
+    return f'{_mov64(reg, off)}\n    add {reg}, x16, {reg}'
+
+
 def _copy(src, dst, n):
     """Copy n (a multiple of 16) bytes; x9..x13 are scratch."""
     return [f'    {src}', f'    {dst}', f'    mov x11, #{n}',
@@ -239,33 +257,53 @@ def _copy(src, dst, n):
             '    subs x11, x11, #16', '    b.ne 1b']
 
 
+def _za_rows(L: Layout, op):
+    """LDR/STR of every ZA vector if PSTATE.ZA (the SVCR in the block) is set;
+    x12, x14, x17 are scratch."""
+    rows = L.zb
+    return [f'    ldr x17, [x16, #{L.svcr}]', '    tbz x17, #1, 5f',
+            f'    add x14, x16, #{L.za}', '    mov w12, #0',
+            f'4:  {op} za[w12, 0], [x14]', f'    add x14, x14, #{L.zb}',
+            '    add w12, w12, #1', f'    cmp w12, #{rows}', '    b.ne 4b', '5:']
+
+
 def _stub(label, word, L: Layout, mem: bool):
     lines = [f'.globl {label}', '.p2align 2', f'{label}:', '    mov x16, x0']
     if mem:
-        lines += _copy(f'add x9, x16, #{L.size}', _mov64('x10', L.w0), L.win)
-    lines += [f'    ldr x17, [x16, #{S_NZCV}]', '    msr nzcv, x17',
-              f'    ldr x17, [x16, #{S_FPCR}]', '    msr fpcr, x17',
-              f'    ldr x17, [x16, #{S_FPSR}]', '    msr fpsr, x17',
+        lines += _copy(_add16('x9', L.size), _mov64('x10', L.w0), L.win)
+    if L.sme:                                              # first: changing SM resets Z, P, FFR, FPSR
+        lines += [f'    ldr x17, [x16, #{L.svcr}]', '    msr svcr, x17']
+    lines += [f'    ldr x17, [x16, #{L.fpcr}]', '    msr fpcr, x17',
+              f'    ldr x17, [x16, #{L.fpsr}]', '    msr fpsr, x17',
               f'    add x17, x16, #{L.ffr}', '    ldr p0, [x17]', '    wrffr p0.b']
     for i in range(8):
         lines += [f'    add x17, x16, #{L.pr(i)}', f'    ldr p{i}, [x17]',
                   f'    add x17, x16, #{L.z(i)}', f'    ldr z{i}, [x17]']
-    lines += ['    adrp x17, fault_esr', '    str xzr, [x17, :lo12:fault_esr]']
-    lines += [f'    ldp x{i}, x{i + 1}, [x16, #{8 * i}]' for i in range(0, 8, 2)]
+    if L.sme:
+        lines += _za_rows(L, 'ldr')
+    lines += [f'    ldr x17, [x16, #{L.nzcv}]', '    msr nzcv, x17',
+              '    adrp x17, fault_esr', '    str xzr, [x17, :lo12:fault_esr]']
+    lines += [f'    ldp x{i}, x{i + 1}, [x16, #{8 * i}]' for i in range(0, L.nx, 2)]
     lines += [f'    .inst {word:#010x}']
-    lines += [f'    stp x{i}, x{i + 1}, [x16, #{8 * i}]' for i in range(0, 8, 2)]
-    lines += ['    mrs x17, nzcv', f'    str x17, [x16, #{S_NZCV}]',
-              '    mrs x17, fpcr', f'    str x17, [x16, #{S_FPCR}]',
-              '    mrs x17, fpsr', f'    str x17, [x16, #{S_FPSR}]']
+    lines += [f'    stp x{i}, x{i + 1}, [x16, #{8 * i}]' for i in range(0, L.nx, 2)]
+    lines += ['    mrs x17, nzcv', f'    str x17, [x16, #{L.nzcv}]',
+              '    mrs x17, fpcr', f'    str x17, [x16, #{L.fpcr}]',
+              '    mrs x17, fpsr', f'    str x17, [x16, #{L.fpsr}]']
+    if L.sme:
+        lines += ['    mrs x17, svcr', f'    str x17, [x16, #{L.svcr}]']
     for i in range(8):
         lines += [f'    add x17, x16, #{L.pr(i)}', f'    str p{i}, [x17]',
                   f'    add x17, x16, #{L.z(i)}', f'    str z{i}, [x17]']
-    lines += ['    rdffr p0.b', f'    add x17, x16, #{L.ffr}', '    str p0, [x17]',
-              '    adrp x17, fault_esr', '    ldr x17, [x17, :lo12:fault_esr]',
-              f'    str x17, [x16, #{S_FAULT}]',
+    lines += ['    rdffr p0.b', f'    add x17, x16, #{L.ffr}', '    str p0, [x17]']
+    if L.sme:
+        lines += _za_rows(L, 'str')
+    lines += ['    adrp x17, fault_esr', '    ldr x17, [x17, :lo12:fault_esr]',
+              f'    str x17, [x16, #{L.fault}]',
               '    msr fpcr, xzr', '    msr fpsr, xzr']
+    if L.sme:
+        lines += ['    smstop']
     if mem:
-        lines += _copy(_mov64('x9', L.w0), f'add x10, x16, #{L.size}', L.win)
+        lines += _copy(_mov64('x9', L.w0), _add16('x10', L.size), L.win)
     lines += ['    ret']
     return '\n'.join(lines) + '\n'
 
@@ -386,29 +424,36 @@ def pack_state(st, L: Layout):
     b = bytearray(L.size)
     for i, v in enumerate(st['X']):
         b[8 * i:8 * i + 8] = v.to_bytes(8, 'little')
-    for off, v in ((S_NZCV, st['NZCV'] << 28), (S_FPCR, st['FPCR']), (S_FPSR, st['FPSR'])):
+    for off, v in ((L.nzcv, st['NZCV'] << 28), (L.fpcr, st['FPCR']), (L.fpsr, st['FPSR'])):
         b[off:off + 8] = v.to_bytes(8, 'little')
     for i, v in enumerate(st['Z']):
         b[L.z(i):L.z(i) + L.zb] = v.to_bytes(L.zb, 'little')
     for i, v in enumerate(st['P']):
         b[L.pr(i):L.pr(i) + L.pb] = v.to_bytes(L.pb, 'little')
     b[L.ffr:L.ffr + L.pb] = st['FFR'].to_bytes(L.pb, 'little')
+    if L.sme:
+        b[L.svcr:L.svcr + 8] = st['SVCR'].to_bytes(8, 'little')
+        b[L.za:L.za + L.zb * L.zb] = st['ZA'].to_bytes(L.zb * L.zb, 'little')
     return bytes(b) + st.get('MEM', b'')
 
 
 def unpack_state(b, L: Layout, mem: bool):
     q = lambda off, n=8: int.from_bytes(b[off:off + n], 'little')
-    st = {'X': [q(8 * i) for i in range(8)], 'NZCV': q(S_NZCV) >> 28, 'FPCR': q(S_FPCR),
-          'FPSR': q(S_FPSR), 'Z': [q(L.z(i), L.zb) for i in range(8)],
-          'P': [q(L.pr(i), L.pb) for i in range(8)], 'FFR': q(L.ffr, L.pb), 'fault': q(S_FAULT)}
+    st = {'X': [q(8 * i) for i in range(L.nx)], 'NZCV': q(L.nzcv) >> 28, 'FPCR': q(L.fpcr),
+          'FPSR': q(L.fpsr), 'Z': [q(L.z(i), L.zb) for i in range(8)],
+          'P': [q(L.pr(i), L.pb) for i in range(8)], 'FFR': q(L.ffr, L.pb), 'fault': q(L.fault)}
+    if L.sme:
+        # QEMU (seen in 10.0.2) keeps the RES0 bits MSR SVCR writes; SVCR reads
+        # as Zeros(62):ZA:SM
+        st['SVCR'], st['ZA'] = q(L.svcr) & 3, q(L.za, L.zb * L.zb)
     if mem:
         st['MEM'] = bytes(b[L.size:L.size + L.win])
     return st
 
 
-def run_qemu(d: Path, cases, vq):
+def run_qemu(d: Path, cases, vq, sme=False):
     """cases: [(word, is_mem, [state, ...])] -> [[state after, ...]]"""
-    L = Layout(vq)
+    L = Layout(vq, sme)
     blobs, runs, off = [], [], 0
     for i, (_, _, sts) in enumerate(cases):
         for st in sts:
@@ -424,7 +469,7 @@ def run_qemu(d: Path, cases, vq):
     asm += ['.balign 16', 'states:', '    .incbin "states.bin"', 'states_end:']
     (d / 'cases.s').write_text('\n'.join(asm) + '\n')
     (d / 'link.ld').write_text(LINK)
-    subprocess.run([CC, '--target=aarch64-none-elf', '-march=armv8.2-a+sve', '-c', 'cases.s',
+    subprocess.run([CC, '--target=aarch64-none-elf', '-march=armv9-a+sme', '-c', 'cases.s',
                     '-o', 'cases.o'], cwd=d, check=True)
     subprocess.run([LD, '-T', 'link.ld', 'cases.o', '-o', 'cases.elf'], cwd=d, check=True)
     out = d / 'out.bin'
@@ -447,6 +492,18 @@ def run_qemu(d: Path, cases, vq):
 
 class Fault(Exception):
     """A synchronous data abort (an access to the guard page)."""
+
+
+class SmeTrap(Exception):
+    """An SME access trap (`sme_access_trap`): ESR EC 0x1D, ISS = the type."""
+
+    def __init__(self, kind):
+        super().__init__(kind)
+        self.esr = 0x1D << 26 | 1 << 25 | kind
+
+
+def _sme_trap(kind):
+    raise SmeTrap(kind)
 
 
 class OutOfWindow(Exception):
@@ -493,20 +550,26 @@ class Memory:
 
 
 def interp_sve(arch, ins, word, st, vq):
-    """The state after the word, or 'fault'; raises OutOfWindow."""
+    """The state after the word, 'fault', or ('sme', ESR) for an SME access
+    trap; raises OutOfWindow."""
     return _interp_sve(arch, ins, word, st, vq)[0]
 
 
+SCALARS = ('NZCV', 'FPCR', 'FPSR', 'SVCR', 'ZA')
+
+
 def _interp_sve(arch, ins, word, st, vq):
-    """(state after the word or 'fault', the Memory or None)."""
+    """(state after the word, 'fault' or ('sme', ESR), the Memory or None)."""
     from .lira_interp import Machine
     m = Machine(arch, vq)
-    m.regs['X'][:8] = st['X']
+    m.regs['X'][:len(st['X'])] = st['X']
     m.regs['Z'][:8] = st['Z']
     m.regs['P'][:8] = st['P']
     m.regs['FFR'][0] = st['FFR']
-    for k in ('NZCV', 'FPCR', 'FPSR'):
+    scalars = [k for k in SCALARS if k in st]
+    for k in scalars:
         m.regs[k][0] = st[k]
+    m.env['sme_access_trap'] = _sme_trap
     mem = Memory(Layout(vq), st['MEM']) if 'MEM' in st else None
     if mem:
         for n in (8, 16, 32, 64, 128):
@@ -517,14 +580,16 @@ def _interp_sve(arch, ins, word, st, vq):
         m.execute(ins, m.decode(ins, word))
     except Fault:
         return 'fault', mem
-    out = {'X': m.regs['X'][:8], 'Z': m.regs['Z'][:8], 'P': m.regs['P'][:8], 'FFR': m.regs['FFR'][0],
-           **{k: m.regs[k][0] for k in ('NZCV', 'FPCR', 'FPSR')}}
+    except SmeTrap as e:
+        return ('sme', e.esr), mem
+    out = {'X': m.regs['X'][:len(st['X'])], 'Z': m.regs['Z'][:8], 'P': m.regs['P'][:8],
+           'FFR': m.regs['FFR'][0], **{k: m.regs[k][0] for k in scalars}}
     if mem:
         out['MEM'] = bytes(mem.data)
     return out, mem
 
 
-def mem_case_states(arch, rng, vq, ins, ops, word, n):
+def mem_case_states(arch, rng, vq, ins, ops, word, n, make_state=random_mem_state):
     """n (state, expected) pairs of a load/store: accesses stay in the window or
     the guard page; about a quarter fault.
 
@@ -537,7 +602,7 @@ def mem_case_states(arch, rng, vq, ins, ops, word, n):
     out = []
     while len(out) < n:
         for _ in range(200):
-            st = random_mem_state(rng, vq, ins, ops)
+            st = make_state(rng, vq, ins, ops)
             try:
                 got, mem = _interp_sve(arch, ins, word, st, vq)
             except OutOfWindow:
@@ -555,7 +620,13 @@ def diff_state(a, b):
     d = []
     for k in ('X', 'Z', 'P'):
         d += [f'{k}{i}: {x:#x} vs {y:#x}' for i, (x, y) in enumerate(zip(a[k], b[k])) if x != y]
-    d += [f'{k}: {a[k]:#x} vs {b[k]:#x}' for k in ('FFR', 'NZCV', 'FPCR', 'FPSR') if a[k] != b[k]]
+    d += [f'{k}: {a[k]:#x} vs {b[k]:#x}' for k in ('FFR', 'NZCV', 'FPCR', 'FPSR', 'SVCR')
+          if k in a and a[k] != b[k]]
+    if 'ZA' in a and a['SVCR'] & 2 and a['ZA'] != b['ZA']:     # ZA is ARBITRARY when off
+        x = a['ZA'] ^ b['ZA']
+        bad = [i for i in range((x.bit_length() + 7) // 8) if x >> (8 * i) & 0xff]
+        d.append('ZA bytes: ' + ', '.join(f'{i:#x}: {a["ZA"] >> 8 * i & 0xff:#04x} vs '
+                                           f'{b["ZA"] >> 8 * i & 0xff:#04x}' for i in bad[:4]))
     if 'MEM' in a and a['MEM'] != b['MEM']:
         bad = [f'{i:#x}: {x:#04x} vs {y:#04x}' for i, (x, y) in enumerate(zip(a['MEM'], b['MEM'])) if x != y]
         d.append('memory: ' + ', '.join(bad[:4]))
@@ -579,18 +650,29 @@ def test_sve_semantics_match_qemu(arch, machine, vq, tmp_path):
             cases.append((word, is_mem(ins), [st for st, _ in pairs]))
             meta.append((ins, ops, [exp for _, exp in pairs]))
     assert cases, 'no SVE instruction selected'
-    results = run_qemu(tmp_path, cases, vq)
+    check_results(arch, vq, cases, meta, run_qemu(tmp_path, cases, vq))
+
+
+def _fault_mismatch(hw, got):
+    """None if QEMU and LIRA agree on taking an exception (an SME access trap
+    must have the same syndrome), else a description."""
+    lira = 'fault' if got == 'fault' else f'SME trap {got[1]:#x}' if isinstance(got, tuple) else None
+    if not hw['fault'] and lira is None:
+        return None
+    if hw['fault'] and (got == 'fault' or isinstance(got, tuple) and got[1] == hw['fault']):
+        return ''
+    return f'QEMU ESR {hw["fault"]:#x}, LIRA {lira or "no exception"}'
+
+
+def check_results(arch, vq, cases, meta, results):
     failures = []
     for (word, _, sts), (ins, ops, exps), outs in zip(cases, meta, results):
         for st, exp, hw in zip(sts, exps, outs):
             got = exp or interp_sve(arch, ins, word, st, vq)
-            if hw['fault'] or got == 'fault':
-                if not (hw['fault'] and got == 'fault'):
-                    failures.append((ins.name, hex(word), dict(zip(ins.operand_names, ops)),
-                                     f'QEMU ESR {hw["fault"]:#x}, LIRA {"fault" if got == "fault" else "no fault"}'))
-                    break
+            f = _fault_mismatch(hw, got)
+            if f == '':
                 continue
-            d = diff_state(hw, got)
+            d = [f] if f else diff_state(hw, got)
             if d:
                 failures.append((ins.name, hex(word), dict(zip(ins.operand_names, ops)),
                                  'qemu vs lira:', d[:6]))

@@ -281,9 +281,11 @@ def _ldr_lit_fp(s: S, e: Encoding, F_):
 # -----------------------------------------------------------------------------
 # (o0, op1, CRn, CRm, op2) of op0=3 system registers
 SYSREGS = {'NZCV': (1, 3, 4, 2, 0), 'FPCR': (1, 3, 4, 4, 0), 'FPSR': (1, 3, 4, 4, 1)}
-SYSREG_SPECS = [(name, dict(zip(('o0', 'op1', 'CRn', 'CRm', 'op2'), v))) for name, v in SYSREGS.items()]
-# Other system registers go to the environment; the specific ones above win
+_FIELDS = ('o0', 'op1', 'CRn', 'CRm', 'op2')
+SYSREG_SPECS = [(name, dict(zip(_FIELDS, v))) for name, v in SYSREGS.items()]
+# Other system registers go to the environment; the specific ones win
 SYSREG_SPECS.append(('SYSREG', {}))
+SYSREG_SPECS.append(('SVCR', dict(zip(_FIELDS, (1, 3, 4, 2, 2)))))     # FEAT_SME
 
 
 @sem('mrs', 'msr_reg', spec=SYSREG_SPECS)
@@ -295,6 +297,13 @@ def _mrs_msr(s: S, e: Encoding, F_):
             s.x_write(F_('Rt'), s.env(s.ctx.envs['sysreg_read'], fields)[0])
         else:
             s.env(s.ctx.envs['sysreg_write'], fields + [s.x_read(F_('Rt'), 64)])
+        return
+    if reg == 'SVCR':                                       # PSTATE.SM/ZA, see insns_sme
+        if e.file == 'mrs':
+            s.x_write(F_('Rt'), s.svcr_read())
+        else:
+            x = s.x_read(F_('Rt'), 64)
+            s.svcr_write(s.bits(x, 0, 1), s.bits(x, 1, 1))
         return
     if e.file == 'mrs':
         if reg == 'NZCV':

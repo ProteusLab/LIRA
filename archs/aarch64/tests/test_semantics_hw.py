@@ -32,7 +32,9 @@ HW_SKIP = re.compile(
     r'^(ABS|CNT|CTZ)_(32|64)_dp_1src|^(SMAX|SMIN|UMAX|UMIN)_\w+_(minmax_imm|dp_2src)|^BC_|'
     r'^(CPY|SET[PME])|^(PAC|AUT|XPAC|BLRA|BRA|RETA|ERET|LDRA)|'
     r'^(HINT|YIELD|WFE|WFI|SEV|SEVL|WFET|WFIT|BRK|HLT|HVC|SMC|UDF|DCPS|DRPS|SYS|SYSL)_|'
-    r'^MSR_SI_|_systemmove_SYSREG$')
+    r'^MSR_SI_|_systemmove_(SYSREG|SVCR)$|^SMST(ART|OP)_')
+# SME: the host harness has no ZA, Z or P state (test_semantics_asl.py, test_semantics_sme.py)
+HW_SKIP_CLASSES = ('instr-class.mortlach',)
 REG_FIELDS = ('Rd', 'Rn', 'Rm', 'Ra', 'Rt', 'Rt2', 'Rs')
 EDGE = [0, 1, 2, 0x7F, 0x80, 0xFF, 0x7FFF, 0x8000, 0xFFFF, 0x7FFFFFFF, 0x80000000,
         0xFFFFFFFF, 0x100000000, 0x7FFFFFFFFFFFFFFF, 0x8000000000000000,
@@ -165,7 +167,8 @@ def build_cases(arch, d):
     rng = random.Random(7)
     cases = []
     for ins in arch.instructions:
-        if ins.name.startswith(SKIP_FILES) or 'loadlit' in ins.name or HW_SKIP.search(ins.name):
+        if ins.name.startswith(SKIP_FILES) or 'loadlit' in ins.name or HW_SKIP.search(ins.name) \
+                or any(c in ins.attributes for c in HW_SKIP_CLASSES):
             continue
         for _ in range(CASES_PER_INSN):
             ops = _pick_operands(machine, ins, rng)

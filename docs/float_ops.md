@@ -43,6 +43,11 @@ unchanged.
 | `fcvtf` | `M <- N 3` | float to float |
 | `ftosi`, `ftoui` | `M <- N 8 3` | float to (un)signed fixed-point with `fbits`; saturating |
 | `sitof`, `uitof` | `M <- N 8 3` | (un)signed fixed-point with `fbits` to float |
+| `bfdotadd` | `32 <- 32 16 16 16 16` | `acc + a0·b0 + a1·b1` on BFloat16 (Arm BFDotAdd) |
+| `fdotadd` | `32 <- 32 16 16 16 16 3` | `acc + (a0·b0 + a1·b1)` on half-precision factors, the dot product rounded once (Arm FPDotAdd) |
+
+`bfdotadd` and `fdotadd` take their operands in the Arm order
+`acc, a0, a1, b0, b1`; AArch64 SME uses them for BFMOPA and the widening FMOPA.
 
 The following bases are defined for the remaining Arm instructions. They are
 in `lira/float_ops.py` but are not used by `archs/aarch64/aarch64.yaml` yet,
@@ -58,13 +63,27 @@ and they have not been checked on hardware:
 | `fjcvtzs` | `32 1 <- 64` | JavaScript conversion: modulo 2^32, flag = exact and in range |
 | `fmuladdh` | `32 <- 32 16 16 3` | `addend + a * b` with half-precision factors, single rounding |
 | `fcvtbf` | `16 <- 32 3` | single to BFloat16 |
-| `bfdotadd` | `32 <- 32 16 16 16 16` | `acc + a0·b0 + a1·b1` on BFloat16 (Arm BFDotAdd) |
 
 The last input of the rounding operations is a **rounding mode**:
 0 RNE, 1 RTP (+∞), 2 RTN (−∞), 3 RTZ, 4 RNA (ties away), 5 ODD (round to odd,
 for `FCVTXN`), and **7 = dynamic**
 (taken from the FPU state). An explicit mode covers instructions that fix
 their own rounding, such as AArch64 `FCVTZS` and `FRINTA`.
+
+## Modifiers
+
+A float operation can apply modifiers to its base. They are listed as
+attributes `fpu.<modifier>` and appended to the name in this order:
+
+| modifier | meaning |
+|---|---|
+| `default_nan` | NaN results are the default NaN, as if the default-NaN control were set |
+| `no_flags` | no exception flags are raised |
+
+For example, `fmuladd_32_default_nan_no_flags` with attributes
+`[fpu.default_nan, fpu.no_flags]` is Arm's `FPMulAdd_ZA`, which the SME
+outer products use: the other controls (rounding mode, flush-to-zero) still
+apply.
 
 ## FPU state
 

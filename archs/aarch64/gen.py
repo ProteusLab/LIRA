@@ -210,7 +210,7 @@ def build_arch(xml_dir: Path) -> Arch:
         name='AArch64',
         attributes=['isa.A64', 'endianness.little'],
         register_files=[ctx.rf_x, ctx.rf_nzcv, ctx.rf_v, ctx.rf_fpcr, ctx.rf_fpsr,
-                        ctx.rf_z, ctx.rf_p, ctx.rf_ffr],
+                        ctx.rf_z, ctx.rf_p, ctx.rf_ffr, ctx.rf_za, ctx.rf_svcr],
         system_registers=[],
         environment_functions=list(ctx.envs.values()),
         tables_int=list(ctx.tables.values()),
