@@ -370,12 +370,13 @@ def _undefined(*args):
     raise UndefinedFault(str(args))
 
 
-def interp_step(arch, ins, word, st, pc, mem_base, mem_init):
-    """Run one instruction word in the reference interpreter with memory
-    [mem_base, mem_base + len(mem_init)). `st` has 8 or 32 X/V registers.
-    Returns (state, memory, next_pc)."""
+def interp_step(arch, ins, word, st, pc, mem_base, mem_init, vq=1):
+    """Run one instruction word in the reference interpreter at VQ `vq` with
+    memory [mem_base, mem_base + len(mem_init)). `st` has 8 or 32 X/V
+    registers, NZCV, FPCR, FPSR and maybe Z, P (V is the low half of Z), FFR,
+    SVCR, ZA. Returns (state, memory, next_pc)."""
     from .lira_interp import Machine
-    m = Machine(arch)
+    m = Machine(arch, vq)
     smem = bytearray(mem_init)
     branch = []
 
@@ -427,20 +428,19 @@ def interp_step(arch, ins, word, st, pc, mem_base, mem_init):
     m.env['mem_set'] = lambda dst, n, byte: [wr(8)(dst + i, byte) for i in range(n)] and None
     for name in ('barrier', 'hint', 'branch_target', 'wait_timeout'):
         m.env[name] = lambda *a: None
-    for k in ('X', 'V'):                         # descriptions may lack V/FPCR/FPSR
-        if k in m.regs:
+    files = [k for k in ('X', 'V', 'Z', 'P') if k in st and k in m.regs]     # descriptions may lack V/FPCR/FPSR
+    singles = [k for k in ('NZCV', 'FPCR', 'FPSR', 'FFR', 'SVCR', 'ZA') if k in st and k in m.regs]
+    for k in files:
+        if k != 'V' or 'Z' not in files:
             m.regs[k][:len(st[k])] = st[k]
-    for k in ('NZCV', 'FPCR', 'FPSR'):
-        if k in m.regs:
-            m.regs[k][0] = st[k]
+    for k in singles:
+        m.regs[k][0] = st[k]
     m.execute(ins, m.decode(ins, word))
     out = dict(st)
-    for k in ('X', 'V'):
-        if k in m.regs:
-            out[k] = list(m.regs[k][:len(st[k])])
-    for k in ('NZCV', 'FPCR', 'FPSR'):
-        if k in m.regs:
-            out[k] = m.regs[k][0]
+    for k in files:
+        out[k] = list(m.regs[k][:len(st[k])])
+    for k in singles:
+        out[k] = m.regs[k][0]
     return out, bytes(smem), branch[-1] if branch else pc + 4
 
 

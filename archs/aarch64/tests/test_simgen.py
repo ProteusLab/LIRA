@@ -8,7 +8,9 @@ located via $LIRA_A64_CAPI (default: ../lira-simgen-lib/build/a64/...).
   no encoding accepts are rejected;
 * generated C++ vs. the host CPU (same cases as test_semantics_hw);
 * generated C++ vs. the reference interpreter on all encodings with fully
-  random fields (register 31 = SP/XZR, branches, literal loads included).
+  random fields (register 31 = SP/XZR, branches, literal loads included);
+  the instructions whose result depends on the vector length run at every VQ
+  of $LIRA_SIM_VQS (default 1,2,3,4,16) over the whole state.
 """
 import ctypes
 import os
@@ -35,6 +37,15 @@ pytestmark = pytest.mark.skipif(not (CAPI.exists() and SIM_YAML.exists()),
                                 reason=f'{CAPI} or {SIM_YAML} not found')
 
 U64P = ctypes.POINTER(ctypes.c_uint64)
+SIM_VQS = [int(v) for v in os.environ.get('LIRA_SIM_VQS', '1,2,3,4,16').split(',')]
+
+
+class SimState(ctypes.Structure):
+    """LiraA64State of the C API (lira_a64_run): the state at VL = 128 * VQ."""
+    _fields_ = [('x', ctypes.c_uint64 * 32), ('nzcv', ctypes.c_uint64), ('fpcr', ctypes.c_uint64),
+                ('fpsr', ctypes.c_uint64), ('svcr', ctypes.c_uint64), ('pc', ctypes.c_uint64),
+                ('z', (ctypes.c_uint8 * 256) * 32), ('p', (ctypes.c_uint8 * 32) * 16),
+                ('ffr', ctypes.c_uint8 * 32), ('za', ctypes.c_uint8 * 65536)]
 
 
 @pytest.fixture(scope='module')
@@ -60,6 +71,8 @@ def capi():
     lib = ctypes.CDLL(str(CAPI))
     lib.lira_a64_exec.argtypes = [ctypes.c_uint32, U64P, U64P, U64P, U64P, U64P, U64P]
     lib.lira_a64_decode.argtypes = [ctypes.c_uint32]
+    lib.lira_a64_run.argtypes = [ctypes.c_uint32, ctypes.c_uint, ctypes.POINTER(SimState),
+                                 ctypes.c_uint64, ctypes.c_uint64]
     return lib
 
 
@@ -78,6 +91,52 @@ def sim_exec(capi, word, st, pc):
     out = {'X': list(xs), 'V': [vs[2 * i] | vs[2 * i + 1] << 64 for i in range(32)],
            'NZCV': regs[0].value, 'FPCR': regs[1].value, 'FPSR': regs[2].value}
     return rc, out, regs[3].value
+
+
+def sim_run(capi, word, st, pc, vq, mem_base=0, mem_size=0):
+    """Run one word at VQ `vq` on `st` (X, Z or V, P, FFR, NZCV, FPCR, FPSR,
+    SVCR, ZA; the description may lack some) with the memory window
+    [mem_base, mem_base + mem_size): (rc, state after, pc after)."""
+    zb, pb = 16 * vq, 2 * vq
+    s = SimState()
+    s.x[:len(st['X'])] = st['X']
+    vecs, nb = (st['Z'], zb) if 'Z' in st else (st.get('V', []), 16)
+    for i, v in enumerate(vecs):
+        ctypes.memmove(s.z[i], v.to_bytes(nb, 'little'), nb)
+    for i, v in enumerate(st.get('P', [])):
+        ctypes.memmove(s.p[i], v.to_bytes(pb, 'little'), pb)
+    ctypes.memmove(s.ffr, st.get('FFR', 0).to_bytes(pb, 'little'), pb)
+    ctypes.memmove(s.za, st.get('ZA', 0).to_bytes(zb * zb, 'little'), zb * zb)
+    s.nzcv, s.fpcr, s.fpsr, s.svcr, s.pc = st['NZCV'], st['FPCR'], st['FPSR'], st.get('SVCR', 0), pc
+    rc = capi.lira_a64_run(word, vq, ctypes.byref(s), mem_base, mem_size)
+    out = dict(st, X=list(s.x[:len(st['X'])]), NZCV=s.nzcv, FPCR=s.fpcr, FPSR=s.fpsr)
+    if 'Z' in st:
+        out['Z'] = [int.from_bytes(bytes(s.z[i])[:zb], 'little') for i in range(len(st['Z']))]
+    if 'V' in st:
+        out['V'] = [int.from_bytes(bytes(s.z[i])[:16], 'little') for i in range(len(st['V']))]
+    if 'P' in st:
+        out['P'] = [int.from_bytes(bytes(s.p[i])[:pb], 'little') for i in range(len(st['P']))]
+    for k, raw, n in (('FFR', s.ffr, pb), ('ZA', s.za, zb * zb)):
+        if k in st:
+            out[k] = int.from_bytes(bytes(raw)[:n], 'little')
+    if 'SVCR' in st:
+        out['SVCR'] = s.svcr
+    return rc, out, s.pc
+
+
+def diff_full(a, b):
+    """Differences between two states of sim_run."""
+    d = []
+    for k in ('X', 'V', 'Z', 'P'):
+        if k in a:
+            d += [f'{k}{i}: {x:#x} vs {y:#x}' for i, (x, y) in enumerate(zip(a[k], b[k])) if x != y]
+    d += [f'{k}: {a[k]:#x} vs {b[k]:#x}' for k in ('NZCV', 'FPCR', 'FPSR', 'FFR', 'SVCR')
+          if k in a and a[k] != b[k]]
+    if 'ZA' in a and a['ZA'] != b['ZA']:
+        x = a['ZA'] ^ b['ZA']
+        d.append('ZA bytes: ' + ', '.join(f'{i:#x}' for i in range((x.bit_length() + 7) // 8)
+                                          if x >> (8 * i) & 0xff)[:200])
+    return d
 
 
 def sim_step(capi, word, st, pc):
@@ -158,6 +217,93 @@ def _pick(machine, ins, rng):
         return sample_operands(machine, ins, rng, fixed)
 
 
+def is_scalable(ins):
+    """Uses a scalable shape: depends on the vector length."""
+    return any(st.shape.lanes_mult for st in ins.semantic.stmts)
+
+
+def _random_case(rng, machine, ins, base):
+    """(operands, word, X registers, pc) of a random case; memory operands
+    point into the buffer at `base`."""
+    ops = _pick(machine, ins, rng)
+    word = machine.encode(ins, ops)
+    names = dict(zip(ins.operand_names, ops))
+    is_mem = _is_mem(ins)
+    x = [rng.getrandbits(64) if rng.random() < 0.7 else rng.choice([0, 1, (1 << 64) - 1, 1 << 63])
+         for _ in range(32)]
+    pc = base + MEM_BASE_OFF if is_mem else rng.getrandbits(62) << 2
+    if ins.name.startswith('SYS_'):   # DC ZVA stays in the buffer
+        x[names['Rt']] = base + MEM_BASE_OFF + rng.randrange(-256, 256)
+    if _is_mops(ins):          # Rd, Rs addresses (or Rs data), Rn size
+        x[names['Rd']] = base + MEM_BASE_OFF + rng.randrange(-256, 256)
+        if ins.name.startswith('CPY'):
+            x[names['Rs']] = base + MEM_BASE_OFF + rng.randrange(-256, 256)
+        x[names['Rn']] = rng.randrange(200)
+    elif is_mem:
+        if 'Rn' in names:
+            x[names['Rn']] = base + MEM_BASE_OFF + rng.randrange(-256, 256)
+        if 'Rm' in names and names['Rm'] != 31:
+            x[names['Rm']] = rng.randrange(64)     # scaled by up to 16
+    return ops, word, x, pc
+
+
+def random_sim_state(rng, arch, vq, x):
+    """The registers of the simulated description: X = `x`, Z (or V), P,
+    FFR, SVCR, ZA at VQ `vq`."""
+    from .test_semantics_sve import _lanes, _pred
+    rfs = {rf.name for rf in arch.register_files}
+    st = {'X': x, 'NZCV': rng.getrandbits(4), 'FPCR': rng.getrandbits(32), 'FPSR': rng.getrandbits(32)}
+    vl = 128 * vq
+    if 'Z' in rfs:
+        st['Z'] = [_lanes(rng, vl) for _ in range(32)]
+    elif 'V' in rfs:
+        st['V'] = [random_v(rng) for _ in range(32)]
+    if 'P' in rfs:
+        st['P'] = [_pred(rng, vl // 8) for _ in range(16)]
+    if 'FFR' in rfs:
+        st['FFR'] = _pred(rng, vl // 8)
+    if 'SVCR' in rfs:
+        st['SVCR'] = int(rng.random() < 0.85) | int(rng.random() < 0.85) << 1
+    if 'ZA' in rfs:
+        st['ZA'] = sum(_lanes(rng, vl) << (r * vl) for r in range(vl // 8))
+    return st
+
+
+@pytest.mark.parametrize('vq', SIM_VQS)
+def test_simgen_scalable_matches_interpreter(sim_arch, sim_machine, capi, vq):
+    """The instructions that depend on the vector length, at VQ `vq`."""
+    arch, machine = sim_arch, sim_machine
+    rng = random.Random(50 + vq)
+    mem = (ctypes.c_uint8 * MEM_SIZE)()
+    base = ctypes.addressof(mem)
+    failures = []
+    insns = [ins for ins in arch.instructions if is_scalable(ins)]
+    assert insns, 'no scalable instruction in the simulated description'
+    for ins in insns:
+        for _ in range(20 if vq <= 4 else 6):
+            ops, word, x, pc = _random_case(rng, machine, ins, base)
+            st = random_sim_state(rng, arch, vq, x)
+            init = bytes(rng.getrandbits(8) for _ in range(MEM_SIZE))
+            ctypes.memmove(mem, init, MEM_SIZE)
+            rc, sim, sim_pc = sim_run(capi, word, st, pc, vq, base, MEM_SIZE)
+            names = dict(zip(ins.operand_names, ops))
+            try:
+                out, ref_mem, ref_pc = interp_step(arch, ins, word, st, pc, base, init, vq)
+            except Fault as e:
+                if rc != SIM_FAULT:
+                    failures.append((ins.name, hex(word), names, f'reference faults ({e}), sim rc={rc}'))
+                    break
+                continue
+            assert rc == 0, (ins.name, hex(word), names, rc)
+            diff = diff_full(out, sim)
+            if diff or bytes(mem) != ref_mem or sim_pc != ref_pc:
+                failures.append((ins.name, hex(word), names, 'ref vs sim:', diff[:6],
+                                 f'pc ref={ref_pc:#x} sim={sim_pc:#x}',
+                                 'mem differs' if bytes(mem) != ref_mem else ''))
+                break
+    assert not failures, '\n'.join(map(str, failures[:25])) + f'\n({len(failures)} failing)'
+
+
 def test_simgen_matches_interpreter(sim_arch, sim_machine, capi):
     arch, machine = sim_arch, sim_machine
     rng = random.Random(5)
@@ -165,29 +311,12 @@ def test_simgen_matches_interpreter(sim_arch, sim_machine, capi):
     base = ctypes.addressof(mem)
     failures = []
     for ins in arch.instructions:
-        if ins.name.startswith('SVC_'):                 # effect defined by the runtime
+        if ins.name.startswith('SVC_') or is_scalable(ins):   # runtime effect; scalable: above
             continue
-        is_mem = _is_mem(ins)
         for _ in range(40):
-            ops = _pick(machine, ins, rng)
-            word = machine.encode(ins, ops)
+            ops, word, x, pc = _random_case(rng, machine, ins, base)
             names = dict(zip(ins.operand_names, ops))
-            x = [rng.getrandbits(64) if rng.random() < 0.7 else rng.choice([0, 1, (1 << 64) - 1, 1 << 63])
-                 for _ in range(32)]
             v = [random_v(rng) for _ in range(32)]
-            pc = base + MEM_BASE_OFF if is_mem else rng.getrandbits(62) << 2
-            if ins.name.startswith('SYS_'):   # DC ZVA stays in the buffer
-                x[names['Rt']] = base + MEM_BASE_OFF + rng.randrange(-256, 256)
-            if _is_mops(ins):          # Rd, Rs addresses (or Rs data), Rn size
-                x[names['Rd']] = base + MEM_BASE_OFF + rng.randrange(-256, 256)
-                if ins.name.startswith('CPY'):
-                    x[names['Rs']] = base + MEM_BASE_OFF + rng.randrange(-256, 256)
-                x[names['Rn']] = rng.randrange(200)
-            elif is_mem:
-                if 'Rn' in names:
-                    x[names['Rn']] = base + MEM_BASE_OFF + rng.randrange(-256, 256)
-                if 'Rm' in names and names['Rm'] != 31:
-                    x[names['Rm']] = rng.randrange(64)     # scaled by up to 16
             nzcv, fpcr, fpsr = rng.getrandbits(4), rng.getrandbits(32), rng.getrandbits(32)
             init = bytes(rng.getrandbits(8) for _ in range(MEM_SIZE))
 

@@ -221,9 +221,10 @@ def build_arch(xml_dir: Path) -> Arch:
     )
 
 
-# What lira-simgen-lib supports: these statements (scalar and vector shapes
-# without lanes_mult), register files and environment functions, and
-# operations defined by a base, a snippet or a table
+# What lira-simgen-lib supports: these statements (fixed shapes and the
+# scalable shapes of SIMGEN_MULTS), register files and environment functions,
+# and operations defined by a base, a snippet or a table
+SIMGEN_MULTS = {None, 'VQ', 'VQVQ'}
 SIMGEN_KINDS = {'input', 'output', 'const', 'dyn_const', 'read', 'write', 'op', 'fop', 'env', 'cond_env',
                 'index', 'gather', 'replicate', 'extract_first', 'extend_zero', 'fold'}
 SIMGEN_RFS = ('X', 'V', 'NZCV', 'FPCR', 'FPSR')
@@ -244,7 +245,7 @@ def simgen_subset(arch: Arch) -> Arch:
 
     def seq_ok(seq, used_ops, used_snippets):
         for st in seq.stmts:
-            if st.kind not in SIMGEN_KINDS or st.shape.lanes_mult:
+            if st.kind not in SIMGEN_KINDS or st.shape.lanes_mult not in SIMGEN_MULTS:
                 return False
             if st.kind in ('read', 'write') and st.specifier not in SIMGEN_RFS:
                 return False
