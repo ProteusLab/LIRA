@@ -1,9 +1,9 @@
 # AArch64 (A64) in LIRA
 
 LIRA description of the A64 base integer instructions, the mandatory ARMv8.x
-general-purpose and system extensions, scalar floating point, and Advanced SIMD
-(integer and crypto). It is generated from the Arm machine-readable
-specification (`ISA_A64_xml_A_profile-2026-06_mc`).
+general-purpose and system extensions, scalar floating point, Advanced SIMD
+(integer and crypto), SVE (FEAT_SVE) and SME (FEAT_SME). It is generated from
+the Arm machine-readable specification (`ISA_A64_xml_A_profile-2026-06_mc`).
 
 ```bash
 # from the repository root
@@ -11,18 +11,20 @@ python -m archs.aarch64.gen [--xml <ISA_A64_xml dir>] [--output archs/aarch64/aa
 python -m pytest archs/aarch64/tests
 ```
 
-The output is `aarch64.yaml`: 2670 instructions (676 mnemonics) from 578 XML
-files, one LIRA instruction per encoding and arrangement:
+The output is `aarch64.yaml`: 4138 instructions (940 mnemonics) from 1084 XML
+files, one LIRA instruction per encoding and arrangement (or element size):
 
 | Module | XML files | Instructions | Content |
 |---|---|---|---|
 | `insns.py` | 129 | 252 | base integer |
-| `insns_fp.py` | 61 | 295 | scalar FP, SIMD&FP loads/stores, MRS/MSR |
+| `insns_fp.py` | 61 | 297 | scalar FP, SIMD&FP loads/stores, MRS/MSR |
 | `insns_simd.py` | 158 | 1255 | Advanced SIMD integer, part 1 |
 | `insns_simd2.py` | 64 | 428 | Advanced SIMD integer, part 2, and crypto |
 | `insns_v8.py` | 166 | 440 | ARMv8.1–v8.9 general-purpose and system instructions |
+| `insns_sve.py` | 466 | 1405 | SVE |
+| `insns_sme.py` | 40 | 61 | SME: ZA outer products, tile moves, loads and stores, SMSTART/SMSTOP, REVD, PSEL, SCLAMP/UCLAMP |
 
-The description uses 72 float operations, 35 environment functions and 368
+The description uses 100 float operations, 40 environment functions and 433
 operations. `insns_vfp.py` (vector FP, FHM, FCMA, BF16, …) is a draft that is
 not imported yet.
 
@@ -229,6 +231,10 @@ The other SIMD statements are used as follows:
 | system registers and ops | env `sysreg_read`, `sysreg_write`, `sys_op`, `sys_op_read`, `pstate_write` |
 | `V[0..31]` (Q/D/S/H/B views) | register file `V`: 32 x 128-bit; scalar writes clear the upper bits |
 | `FPCR`, `FPSR` | register files `FPCR`, `FPSR` (32-bit). Attributes bind them to the FPU state of `fop`. MSR writes the architected fields only (`0x07FF9F00`, `0x0800009F`) |
+| `Z[0..31]`, `P[0..15]`, `FFR` | register files `Z` (`128VQ` bits, `alias.V@0+128`), `P` and `FFR` (`16VQ`); VQ = VL / 128 is the implementation's |
+| `ZA` | register file `ZA`: one register of VL / 8 vectors of VL bits (shape `2048VQVQ`, `VQVQ` = VQ²), row-major; tiles and slices are lane-wise index arithmetic and `gather` |
+| `PSTATE.{SM,ZA}` | register file `SVCR` (bit 0 SM, bit 1 ZA); SMSTART/SMSTOP and MSR SVCR reset Z/P/FFR/FPSR on an SM change and zero ZA when it is enabled |
+| `SMEAccessTrap` | env `sme_access_trap(type)`: an SME instruction without streaming mode (2) or ZA (3) |
 
 ## Decisions and simplifications
 
@@ -253,8 +259,15 @@ The other SIMD statements are used as follows:
   nothing. Overlapping register operands are UNDEFINED; the exception for a
   state left by the other option is not raised.
 * MSR (immediate) decodes the PSTATE fields UAO, PAN, SPSel, SSBS, DIT,
-  ALLINT, DAIFSet and DAIFClr. The fields of optional features that are not
-  described (TCO, SVCR, PM) are UNDEFINED, like unallocated fields.
+  ALLINT, DAIFSet and DAIFClr; its SVCR forms are SMSTART/SMSTOP. The fields of
+  optional features that are not described (TCO, PM) are UNDEFINED, like
+  unallocated fields.
+* SME: the streaming vector length is the vector length (SVL = VL), and
+  FEAT_SME_FA64 is enabled, so every other instruction behaves the same in
+  streaming mode. The SME access controls (CPACR/CPTR/SMCR) are the
+  environment's; disabling ZA keeps its contents (ARBITRARY). The SME outer
+  products use the float operation modifiers `default_nan`, `no_flags` (the
+  ASL `*_ZA` helpers).
 * The LRCPC3 writeback forms of LDAPR/STLR are excluded.
 * FP: FEAT_AFP (FPCR.AH/FIZ/NEP), FPCR.AHP and trapped FP exceptions are
   not modeled; they are treated as 0 and disabled. Loads/stores of a Q-register
@@ -264,7 +277,10 @@ The other SIMD statements are used as follows:
     (the float operations exist in `lira/float_ops.py`; the semantics are the
     `insns_vfp.py` draft);
   * FEAT_AFP (FPCR.AH/FIZ/NEP);
-  * optional extensions: SVE/SME, MTE, GCS, FP8, SHA3/SHA512/SM3/SM4, LS64,
+  * SVE2 (also the SVE2 instructions of streaming mode), SME2, the optional
+    parts of SVE/SME (F64MM, I8MM, BF16, SME_I16I64, SME_F64F64, SME_F16F16,
+    ...);
+  * other optional extensions: MTE, GCS, FP8, SHA3/SHA512/SM3/SM4, LS64,
     LRCPC3, THE, D128 and others.
 
 ## Verification (`tests/`)
@@ -294,6 +310,22 @@ The other SIMD statements are used as follows:
     FZ, FZ16, DN), FPSR and memory.
   * Random FP operands include zeros, subnormals, infinities, quiet and
     signalling NaNs, and rounding-boundary values in every format.
+* `test_semantics_asl.py` compares with the Arm ASL itself, run in Arm's
+  reference interpreter `aslref` (herdtools7) by `asl_oracle.py`: the spec of
+  the same release is extracted by herdtools7's `bundler.py`
+  (`herd/libdir/asl-pseudocode`, with `ISA_A64_xml_A_profile-2026-06` linked to
+  this XML: `make features.asl all_system_registers.asl shared_pseudocode.asl
+  all_instructions.asl pmu_event_types.asl`), `tests/asl/` sets up the machine
+  (a Linux EL0 process with SVE and SME, SVL = VL, FA64, a memory window) and
+  the MRS/MSR accessors come from the SysReg XML. It runs every SME
+  instruction and compares the whole state (X, SP, Z, P, FFR, NZCV, FPCR,
+  FPSR, SVCR, ZA, memory) and the exceptions (ESR). `$ASLREF` and
+  `$LIRA_ASL_BUNDLE` locate aslref and the generated files.
+* `test_semantics_sve.py` and `test_semantics_sme.py` compare SVE and SME with
+  `qemu-system-aarch64 -cpu max` running a bare-metal image, a further check
+  against an implementation. The states avoid documented QEMU 10.0.2
+  deviations (LDNF1/LDFF1, trailing inactive elements of vertical ZA slice
+  loads; RES0 bits of SVCR).
 * `test_semantics.py` covers branches, index 31 (SP vs XZR), literal loads,
   `SVC` and `NOP`. It also checks the instructions the host cannot compare:
   CSSC, BC.cond, exclusive pairs, MOPS and PAuth/system instructions (the
