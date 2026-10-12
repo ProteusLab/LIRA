@@ -317,10 +317,17 @@ The other SIMD statements are used as follows:
   this XML: `make features.asl all_system_registers.asl shared_pseudocode.asl
   all_instructions.asl pmu_event_types.asl`), `tests/asl/` sets up the machine
   (a Linux EL0 process with SVE and SME, SVL = VL, FA64, a memory window) and
-  the MRS/MSR accessors come from the SysReg XML. It runs every SME
+  the MRS/MSR accessors come from the SysReg XML. It runs every SVE and SME
   instruction and compares the whole state (X, SP, Z, P, FFR, NZCV, FPCR,
   FPSR, SVCR, ZA, memory) and the exceptions (ESR). `$ASLREF` and
   `$LIRA_ASL_BUNDLE` locate aslref and the generated files.
+  * The vector lengths are powers of two (`$LIRA_SVE_VQS`): the ASL rounds
+    any other length down to one.
+  * A non-fault access (LDNF1, LDFF1 after the first active element) outside
+    the window is not performed; the machine makes the description's
+    CONSTRAINED UNPREDICTABLE choice for the data after it (zero).
+  * What the ASL leaves ARBITRARY is not compared: FFR after WRFFR of a
+    predicate that is not monotonic, ZA while it is disabled.
 * `test_semantics_sve.py` and `test_semantics_sme.py` compare SVE and SME with
   `qemu-system-aarch64 -cpu max` running a bare-metal image, a further check
   against an implementation. The states avoid documented QEMU 10.0.2

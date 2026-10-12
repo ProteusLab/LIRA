@@ -395,8 +395,9 @@ def _vector_of(rng, vq, esize, gen):
     return sum((gen() & ((1 << esize) - 1)) << (i * esize) for i in range(128 * vq // esize))
 
 
-def random_mem_state(rng, vq, ins, ops):
-    """A state whose base registers and vector offsets point into the window."""
+def random_mem_state(rng, vq, ins, ops, qemu=True):
+    """A state whose base registers and vector offsets point into the window
+    (`qemu`: avoiding the QEMU deviations)."""
     L = Layout(vq)
     st = random_state(rng, vq)
     names = dict(zip(ins.operand_names, ops))
@@ -411,7 +412,7 @@ def random_mem_state(rng, vq, ins, ops):
             st['Z'][names['Zn']] = _vector_of(rng, vq, esize, lambda: L.w0 + rng.randrange(L.win))
         else:                                              # vector of offsets
             st['Z'][names['Zm']] = _vector_of(rng, vq, esize, lambda: rng.randrange(L.win // 8))
-    if re.match(r'LD(NF|FF)1', _mnemonic(ins)) and not m:
+    if qemu and re.match(r'LD(NF|FF)1', _mnemonic(ins)) and not m:
         # QEMU (seen in 10.0.2, sve_ldnfff1_r) tests the predicate of contiguous
         # LDNF1/LDFF1 at the wrong offset unless the first active element starts
         # a 64-bit predicate word: keep element 0 active
@@ -589,7 +590,7 @@ def _interp_sve(arch, ins, word, st, vq):
     return out, mem
 
 
-def mem_case_states(arch, rng, vq, ins, ops, word, n, make_state=random_mem_state):
+def mem_case_states(arch, rng, vq, ins, ops, word, n, make_state=random_mem_state, qemu=True):
     """n (state, expected) pairs of a load/store: accesses stay in the window or
     the guard page; about a quarter fault.
 
@@ -597,8 +598,8 @@ def mem_case_states(arch, rng, vq, ins, ops, word, n, make_state=random_mem_stat
     unmapped page: it takes a data abort if that is the first active element (a
     non-fault load must not fault) and otherwise suppresses all the elements
     (allowed, but not the per-element choice of the description). LDNF1 states
-    with such an element are not used."""
-    nf = _mnemonic(ins).startswith('LDNF1')
+    with such an element are not used (`qemu`)."""
+    nf = qemu and _mnemonic(ins).startswith('LDNF1')
     out = []
     while len(out) < n:
         for _ in range(200):

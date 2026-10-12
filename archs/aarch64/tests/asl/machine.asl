@@ -151,13 +151,39 @@ var LIRA_NormalMemory : MemoryAttributes = MemoryAttributes {
     xs = '0'
 };
 
+func LIRA_InWindow(va : bits(64), bytes : integer) => boolean
+begin
+    return UInt(va - LIRA_W0) + bytes <= LIRA_WIN;
+end;
+
 func LIRA_Offset(va : bits(64), bytes : integer) => integer
 begin
-    let off : integer = UInt(va - LIRA_W0);
-    if off + bytes > LIRA_WIN then
+    if !LIRA_InWindow(va, bytes) then
         throw LIRA_DataAbort {-};
     end;
-    return off;
+    return UInt(va - LIRA_W0);
+end;
+
+// A non-fault access of SVE (LDNF1, LDFF1 after the first active element)
+// outside the window is not performed: MemNF returns fault = TRUE
+var LIRA_NFFaulted : boolean;
+
+func LIRA_IsNonFault(accdesc : AccessDescriptor) => boolean
+begin
+    return accdesc.acctype == AccessType_SVE && (accdesc.nonfault || (accdesc.firstfault && !accdesc.first));
+end;
+
+// The CONSTRAINED UNPREDICTABLE data of an SVE non-fault load after an FFR
+// element is FALSE: the loaded data until an access was not performed, zero
+// from then on (LIRA's choice). The other choices are the shared defaults.
+implementation func ConstrainUnpredictableBool(which : Unpredictable) => boolean
+begin
+    if which == Unpredictable_SVELDNFDATA then
+        return !LIRA_NFFaulted;
+    end;
+    let c : Constraint = ConstrainUnpredictable(which);
+    assert c IN {Constraint_TRUE, Constraint_FALSE};
+    return (c == Constraint_TRUE);
 end;
 
 func LIRA_MemStatus() => PhysMemRetStatus
@@ -246,6 +272,7 @@ begin
         _ZA[[i]] = Zeros{MAX_VL};
     end;
     LIRA_WIN = 0;
+    LIRA_NFFaulted = FALSE;
     _PC = Zeros{64};
 end;
 
