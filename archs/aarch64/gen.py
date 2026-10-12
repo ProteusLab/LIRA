@@ -223,12 +223,13 @@ def build_arch(xml_dir: Path) -> Arch:
 
 # What lira-simgen-lib supports: these statements (fixed shapes and the
 # scalable shapes of SIMGEN_MULTS), register files and environment functions,
-# float operations of these bases without modifiers, and operations defined by
-# a base, a snippet or a table
+# float operations of these bases (with any modifiers), and operations defined
+# by a base, a snippet or a table
 SIMGEN_MULTS = {None, 'VQ', 'VQVQ'}
 SIMGEN_FOPS = {'fadd', 'fsub', 'fmul', 'fdiv', 'fmuladd', 'fsqrt', 'fmax', 'fmin', 'fmaxnm',
                'fminnm', 'fcmpq', 'fcmps', 'frint', 'frintx', 'fcvtf', 'ftosi', 'ftoui',
-               'sitof', 'uitof'}
+               'sitof', 'uitof', 'fmulx', 'frecps', 'frsqrts', 'frecpe', 'frsqrte', 'frecpx',
+               'fscale', 'fdotadd', 'bfdotadd'}
 SIMGEN_KINDS = {'input', 'output', 'const', 'dyn_const', 'read', 'write', 'op', 'fop', 'env', 'cond_env',
                 'index', 'gather', 'replicate', 'extract_first', 'extend_zero', 'fold'}
 SIMGEN_RFS = ('X', 'V', 'NZCV', 'FPCR', 'FPSR', 'Z', 'P', 'FFR')
@@ -259,8 +260,7 @@ def simgen_subset(arch: Arch) -> Arch:
                 return False
             if st.kind in ('op', 'fold') and not op_ok(ops[st.specifier], used_ops, used_snippets):
                 return False
-            if st.kind == 'fop' and (fops[st.specifier].semantic_base not in SIMGEN_FOPS
-                                     or fops[st.specifier].attributes):
+            if st.kind == 'fop' and fops[st.specifier].semantic_base not in SIMGEN_FOPS:
                 return False
         return True
 

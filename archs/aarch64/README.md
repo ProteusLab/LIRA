@@ -346,9 +346,8 @@ only the statements in `SIMGEN_KINDS` (with fixed shapes or the scalable shapes
 of `SIMGEN_MULTS`), the register files in `SIMGEN_RFS`, the environment
 functions in `SIMGEN_ENVS` and the float operation bases in `SIMGEN_FOPS`,
 which simgen and its AArch64 runtime implement. This is the description but
-for SME and the SVE instructions with the float operations simgen lacks (4070
-instructions); the lists keep the export correct when the description grows
-faster than simgen:
+for SME (4091 instructions); the lists keep the export correct when the
+description grows faster than simgen:
 
 ```bash
 python -m archs.aarch64.gen --simgen ../lira-simgen-lib/data/AArch64/aarch64.yaml
