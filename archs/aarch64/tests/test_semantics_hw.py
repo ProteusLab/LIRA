@@ -402,8 +402,19 @@ def interp_step(arch, ins, word, st, pc, mem_base, mem_init, vq=1, faults=False)
             smem[o:o + n // 8] = v.to_bytes(n // 8, 'little')
         return f
 
+    def rd_nf(n):
+        """Non-fault read: (data, 1), or (0, 0) where an access faults."""
+        def f(addr):
+            o = addr - mem_base
+            if not (0 <= o and o + n // 8 <= len(smem)):
+                return [0, 0]
+            return [int.from_bytes(smem[o:o + n // 8], 'little'), 1]
+        return f
+
     for n in (8, 16, 32, 64, 128):
         m.env[f'mem_read_{n}'], m.env[f'mem_write_{n}'] = rd(n), wr(n)
+    for n in (8, 16, 32, 64):
+        m.env[f'mem_read_nf_{n}'] = rd_nf(n)
     m.env['pc_read'] = lambda: [pc]
     m.env['pc_write'] = lambda t: branch.append(t)
     m.env['supervisor_call'] = lambda imm: None
