@@ -269,29 +269,43 @@ def random_sim_state(rng, arch, vq, x):
     return st
 
 
+SVE_MEM = 16384          # memory of the scalable cases; SVE loads/stores use its last window
+
+
 @pytest.mark.parametrize('vq', SIM_VQS)
 def test_simgen_scalable_matches_interpreter(sim_arch, sim_machine, capi, vq):
-    """The instructions that depend on the vector length, at VQ `vq`."""
+    """The instructions that depend on the vector length, at VQ `vq`. An
+    access outside the memory is a fault on both sides, and the memory must
+    be the same then too (partial stores)."""
+    from . import test_semantics_sve as sve
     arch, machine = sim_arch, sim_machine
     rng = random.Random(50 + vq)
-    mem = (ctypes.c_uint8 * MEM_SIZE)()
+    mem = (ctypes.c_uint8 * SVE_MEM)()
     base = ctypes.addressof(mem)
+    win = min(4096, 512 * vq)
     failures = []
     insns = [ins for ins in arch.instructions if is_scalable(ins)]
     assert insns, 'no scalable instruction in the simulated description'
     for ins in insns:
         for _ in range(20 if vq <= 4 else 6):
-            ops, word, x, pc = _random_case(rng, machine, ins, base)
-            st = random_sim_state(rng, arch, vq, x)
-            init = bytes(rng.getrandbits(8) for _ in range(MEM_SIZE))
-            ctypes.memmove(mem, init, MEM_SIZE)
-            rc, sim, sim_pc = sim_run(capi, word, st, pc, vq, base, MEM_SIZE)
+            if sve.is_mem(ins):
+                ops = sve.pick_operands(machine, ins, rng)
+                word = machine.encode(ins, ops)
+                pc = rng.getrandbits(62) << 2
+                st = random_sim_state(rng, arch, vq, [rng.getrandbits(64) for _ in range(32)])
+                sve.point_into_window(rng, st, vq, ins, ops, base + SVE_MEM - win, win)
+            else:
+                ops, word, x, pc = _random_case(rng, machine, ins, base + SVE_MEM // 2)
+                st = random_sim_state(rng, arch, vq, x)
+            init = bytes(rng.getrandbits(8) for _ in range(SVE_MEM))
+            ctypes.memmove(mem, init, SVE_MEM)
+            rc, sim, sim_pc = sim_run(capi, word, st, pc, vq, base, SVE_MEM)
             names = dict(zip(ins.operand_names, ops))
-            try:
-                out, ref_mem, ref_pc = interp_step(arch, ins, word, st, pc, base, init, vq)
-            except Fault as e:
-                if rc != SIM_FAULT:
-                    failures.append((ins.name, hex(word), names, f'reference faults ({e}), sim rc={rc}'))
+            out, ref_mem, ref_pc = interp_step(arch, ins, word, st, pc, base, init, vq, faults=True)
+            if out == 'fault':
+                if rc != SIM_FAULT or bytes(mem) != ref_mem:
+                    failures.append((ins.name, hex(word), names, f'reference faults, sim rc={rc}',
+                                     'mem differs' if bytes(mem) != ref_mem else ''))
                     break
                 continue
             assert rc == 0, (ins.name, hex(word), names, rc)

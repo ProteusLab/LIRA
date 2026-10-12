@@ -395,23 +395,32 @@ def _vector_of(rng, vq, esize, gen):
     return sum((gen() & ((1 << esize) - 1)) << (i * esize) for i in range(128 * vq // esize))
 
 
+def point_into_window(rng, st, vq, ins, ops, w0, win):
+    """Make the base register and the vector of addresses or offsets of a
+    load/store in `st` point into the window [w0, w0 + win). Returns whether
+    the addresses are a vector."""
+    names = dict(zip(ins.operand_names, ops))
+    if 'Rn' in names:
+        st['X'][names['Rn']] = w0 + rng.randrange(win)
+    if 'Rm' in names:
+        st['X'][names['Rm']] = rng.randrange(win // 16)
+    m = re.search(r'_(bz|ai)_([sd])', ins.name)
+    if m:
+        esize = 32 if m.group(2) == 's' else 64
+        if m.group(1) == 'ai':                             # vector of addresses
+            st['Z'][names['Zn']] = _vector_of(rng, vq, esize, lambda: w0 + rng.randrange(win))
+        else:                                              # vector of offsets
+            st['Z'][names['Zm']] = _vector_of(rng, vq, esize, lambda: rng.randrange(win // 8))
+    return bool(m)
+
+
 def random_mem_state(rng, vq, ins, ops, qemu=True):
     """A state whose base registers and vector offsets point into the window
     (`qemu`: avoiding the QEMU deviations)."""
     L = Layout(vq)
     st = random_state(rng, vq)
     names = dict(zip(ins.operand_names, ops))
-    if 'Rn' in names:
-        st['X'][names['Rn']] = L.w0 + rng.randrange(L.win)
-    if 'Rm' in names:
-        st['X'][names['Rm']] = rng.randrange(L.win // 16)
-    m = re.search(r'_(bz|ai)_([sd])', ins.name)
-    if m:
-        esize = 32 if m.group(2) == 's' else 64
-        if m.group(1) == 'ai':                             # vector of addresses
-            st['Z'][names['Zn']] = _vector_of(rng, vq, esize, lambda: L.w0 + rng.randrange(L.win))
-        else:                                              # vector of offsets
-            st['Z'][names['Zm']] = _vector_of(rng, vq, esize, lambda: rng.randrange(L.win // 8))
+    m = point_into_window(rng, st, vq, ins, ops, L.w0, L.win)
     if qemu and re.match(r'LD(NF|FF)1', _mnemonic(ins)) and not m:
         # QEMU (seen in 10.0.2, sve_ldnfff1_r) tests the predicate of contiguous
         # LDNF1/LDFF1 at the wrong offset unless the first active element starts

@@ -223,11 +223,15 @@ def build_arch(xml_dir: Path) -> Arch:
 
 # What lira-simgen-lib supports: these statements (fixed shapes and the
 # scalable shapes of SIMGEN_MULTS), register files and environment functions,
-# and operations defined by a base, a snippet or a table
+# float operations of these bases without modifiers, and operations defined by
+# a base, a snippet or a table
 SIMGEN_MULTS = {None, 'VQ', 'VQVQ'}
+SIMGEN_FOPS = {'fadd', 'fsub', 'fmul', 'fdiv', 'fmuladd', 'fsqrt', 'fmax', 'fmin', 'fmaxnm',
+               'fminnm', 'fcmpq', 'fcmps', 'frint', 'frintx', 'fcvtf', 'ftosi', 'ftoui',
+               'sitof', 'uitof'}
 SIMGEN_KINDS = {'input', 'output', 'const', 'dyn_const', 'read', 'write', 'op', 'fop', 'env', 'cond_env',
                 'index', 'gather', 'replicate', 'extract_first', 'extend_zero', 'fold'}
-SIMGEN_RFS = ('X', 'V', 'NZCV', 'FPCR', 'FPSR')
+SIMGEN_RFS = ('X', 'V', 'NZCV', 'FPCR', 'FPSR', 'Z', 'P', 'FFR')
 SIMGEN_ENVS = {'pc_read', 'pc_write', 'supervisor_call'} | \
     {f'mem_{d}_{n}' for d in ('read', 'write') for n in (8, 16, 32, 64, 128)} | \
     {'check_alignment', 'exclusive_mark', 'exclusive_check', 'exclusive_clear',
@@ -242,6 +246,7 @@ def simgen_subset(arch: Arch) -> Arch:
     lira-simgen-lib can generate a simulator for."""
     ops = {o.name: o for o in arch.operations}
     snippets = {s.name: s for s in arch.snippets}
+    fops = {f.name: f for f in arch.float_operations}
 
     def seq_ok(seq, used_ops, used_snippets):
         for st in seq.stmts:
@@ -252,6 +257,9 @@ def simgen_subset(arch: Arch) -> Arch:
             if st.kind in ('env', 'cond_env') and st.specifier not in SIMGEN_ENVS:
                 return False
             if st.kind in ('op', 'fold') and not op_ok(ops[st.specifier], used_ops, used_snippets):
+                return False
+            if st.kind == 'fop' and (fops[st.specifier].semantic_base not in SIMGEN_FOPS
+                                     or fops[st.specifier].attributes):
                 return False
         return True
 

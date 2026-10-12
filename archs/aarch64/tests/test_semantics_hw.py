@@ -370,27 +370,35 @@ def _undefined(*args):
     raise UndefinedFault(str(args))
 
 
-def interp_step(arch, ins, word, st, pc, mem_base, mem_init, vq=1):
+def interp_step(arch, ins, word, st, pc, mem_base, mem_init, vq=1, faults=False):
     """Run one instruction word in the reference interpreter at VQ `vq` with
     memory [mem_base, mem_base + len(mem_init)). `st` has 8 or 32 X/V
     registers, NZCV, FPCR, FPSR and maybe Z, P (V is the low half of Z), FFR,
-    SVCR, ZA. Returns (state, memory, next_pc)."""
+    SVCR, ZA. Returns (state, memory, next_pc). With `faults`, an access
+    outside the memory is a data abort, and a Fault gives ('fault', memory,
+    None) instead of raising."""
     from .lira_interp import Machine
     m = Machine(arch, vq)
     smem = bytearray(mem_init)
     branch = []
 
+    def inside(addr, n):
+        o = addr - mem_base
+        ok = 0 <= o and o + n // 8 <= len(smem)
+        if not ok and faults:
+            raise Fault(f'data abort at {addr:#x}')
+        assert ok, hex(addr)
+        return o
+
     def rd(n):
         def f(addr):
-            o = addr - mem_base
-            assert 0 <= o and o + n // 8 <= len(smem), hex(addr)
+            o = inside(addr, n)
             return [int.from_bytes(smem[o:o + n // 8], 'little')]
         return f
 
     def wr(n):
         def f(addr, v):
-            o = addr - mem_base
-            assert 0 <= o and o + n // 8 <= len(smem), hex(addr)
+            o = inside(addr, n)
             smem[o:o + n // 8] = v.to_bytes(n // 8, 'little')
         return f
 
@@ -435,7 +443,12 @@ def interp_step(arch, ins, word, st, pc, mem_base, mem_init, vq=1):
             m.regs[k][:len(st[k])] = st[k]
     for k in singles:
         m.regs[k][0] = st[k]
-    m.execute(ins, m.decode(ins, word))
+    try:
+        m.execute(ins, m.decode(ins, word))
+    except Fault:
+        if not faults:
+            raise
+        return 'fault', bytes(smem), None
     out = dict(st)
     for k in files:
         out[k] = list(m.regs[k][:len(st[k])])
