@@ -253,6 +253,18 @@ class UndefinedFault(Fault):
     """Undefined Instruction or debug exception at EL0."""
 
 
+class SmeTrap(Exception):
+    """An SME access trap (`sme_access_trap`, SIGILL at EL0) of a type."""
+
+    def __init__(self, kind):
+        super().__init__(kind)
+        self.kind = kind
+
+
+def _sme_trap(kind):
+    raise SmeTrap(kind)
+
+
 def check_alignment(addr, size, exclusive):
     """Exclusives are naturally aligned; ordered and atomic accesses stay
     within 16 bytes (FEAT_LSE2)."""
@@ -376,7 +388,8 @@ def interp_step(arch, ins, word, st, pc, mem_base, mem_init, vq=1, faults=False)
     registers, NZCV, FPCR, FPSR and maybe Z, P (V is the low half of Z), FFR,
     SVCR, ZA. Returns (state, memory, next_pc). With `faults`, an access
     outside the memory is a data abort, and a Fault gives ('fault', memory,
-    None) instead of raising."""
+    None) instead of raising, an SME access trap (('sme', type), memory,
+    None)."""
     from .lira_interp import Machine
     m = Machine(arch, vq)
     smem = bytearray(mem_init)
@@ -447,6 +460,7 @@ def interp_step(arch, ins, word, st, pc, mem_base, mem_init, vq=1, faults=False)
     m.env['mem_set'] = lambda dst, n, byte: [wr(8)(dst + i, byte) for i in range(n)] and None
     for name in ('barrier', 'hint', 'branch_target', 'wait_timeout'):
         m.env[name] = lambda *a: None
+    m.env['sme_access_trap'] = _sme_trap
     files = [k for k in ('X', 'V', 'Z', 'P') if k in st and k in m.regs]     # descriptions may lack V/FPCR/FPSR
     singles = [k for k in ('NZCV', 'FPCR', 'FPSR', 'FFR', 'SVCR', 'ZA') if k in st and k in m.regs]
     for k in files:
@@ -460,6 +474,10 @@ def interp_step(arch, ins, word, st, pc, mem_base, mem_init, vq=1, faults=False)
         if not faults:
             raise
         return 'fault', bytes(smem), None
+    except SmeTrap as e:
+        if not faults:
+            raise
+        return ('sme', e.kind), bytes(smem), None
     out = dict(st)
     for k in files:
         out[k] = list(m.regs[k][:len(st[k])])

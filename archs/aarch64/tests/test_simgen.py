@@ -45,7 +45,8 @@ class SimState(ctypes.Structure):
     _fields_ = [('x', ctypes.c_uint64 * 32), ('nzcv', ctypes.c_uint64), ('fpcr', ctypes.c_uint64),
                 ('fpsr', ctypes.c_uint64), ('svcr', ctypes.c_uint64), ('pc', ctypes.c_uint64),
                 ('z', (ctypes.c_uint8 * 256) * 32), ('p', (ctypes.c_uint8 * 32) * 16),
-                ('ffr', ctypes.c_uint8 * 32), ('za', ctypes.c_uint8 * 65536)]
+                ('ffr', ctypes.c_uint8 * 32), ('za', ctypes.c_uint8 * 65536),
+                ('trap', ctypes.c_uint64)]
 
 
 @pytest.fixture(scope='module')
@@ -77,6 +78,7 @@ def capi():
 
 
 SIM_FAULT = -2       # lira_a64_exec: runtime error (an Alignment or PAC fault)
+SIM_SME_TRAP = -3    # lira_a64_run: SME access trap, its type in the state's `trap`
 
 
 def sim_exec(capi, word, st, pc):
@@ -121,6 +123,8 @@ def sim_run(capi, word, st, pc, vq, mem_base=0, mem_size=0):
             out[k] = int.from_bytes(bytes(raw)[:n], 'little')
     if 'SVCR' in st:
         out['SVCR'] = s.svcr
+    if rc == SIM_SME_TRAP:
+        out = ('sme', s.trap)
     return rc, out, s.pc
 
 
@@ -306,6 +310,12 @@ def test_simgen_scalable_matches_interpreter(sim_arch, sim_machine, capi, vq):
                 if rc != SIM_FAULT or bytes(mem) != ref_mem:
                     failures.append((ins.name, hex(word), names, f'reference faults, sim rc={rc}',
                                      'mem differs' if bytes(mem) != ref_mem else ''))
+                    break
+                continue
+            if isinstance(out, tuple):                       # SME access trap
+                if rc != SIM_SME_TRAP or sim != out or bytes(mem) != ref_mem:
+                    failures.append((ins.name, hex(word), names, f'reference: SME trap {out[1]}',
+                                     f'sim rc={rc} {sim if rc == SIM_SME_TRAP else ""}'))
                     break
                 continue
             assert rc == 0, (ins.name, hex(word), names, rc)

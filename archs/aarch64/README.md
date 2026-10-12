@@ -345,9 +345,9 @@ supports. `gen.py --simgen <file>` writes the instructions whose semantics use
 only the statements in `SIMGEN_KINDS` (with fixed shapes or the scalable shapes
 of `SIMGEN_MULTS`), the register files in `SIMGEN_RFS`, the environment
 functions in `SIMGEN_ENVS` and the float operation bases in `SIMGEN_FOPS`,
-which simgen and its AArch64 runtime implement. This is the description but
-for SME (4091 instructions); the lists keep the export correct when the
-description grows faster than simgen:
+which simgen and its AArch64 runtime implement. This is the whole description
+(4138 instructions); the lists keep the export correct when the description
+grows faster than simgen:
 
 ```bash
 python -m archs.aarch64.gen --simgen ../lira-simgen-lib/data/AArch64/aarch64.yaml
@@ -372,7 +372,8 @@ or `$LIRA_A64_SIM_YAML`).
     `1,2,3,4,16`) and match the reference interpreter at the same VQ over the
     whole state. SVE loads and stores access a window at the end of the
     memory; an access outside the memory is a fault on both sides, and the
-    memory must match then too (partial stores).
+    memory must match then too (partial stores). An SME access trap must be
+    one in the simulator too, of the same type.
 * `test_programs.py` cross-compiles `programs/*.c` (integer algorithms,
   division, `__int128`, bit manipulation, bitfields, jump tables, function
   pointers, narrow loads, struct copies, MOPS copy/set sequences, pointer
