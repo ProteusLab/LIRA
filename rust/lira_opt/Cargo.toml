@@ -1,0 +1,16 @@
+[package]
+name = "lira_opt"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+lira = { path = "../lira" }
+lira_trs = { path = "../lira_trs" }
+dateg.workspace = true
+log = { workspace = true }
+anyhow = { workspace = true }
+ahash = { workspace = true }
+
+[dev-dependencies]
+rayon.workspace = true
+du_utils_timed = { git = "https://github.com/belovdv/du_utils.git", rev = "6adc494d430bfebe6debccf4dca9c38a69cbb1e6" }

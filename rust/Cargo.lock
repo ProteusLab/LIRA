@@ -247,7 +247,7 @@ dependencies = [
 [[package]]
 name = "dateg"
 version = "0.1.0"
-source = "git+https://github.com/belovdv/dateg.git?rev=7abed4601dc5987263f3517bd829f6f1afd833e6#7abed4601dc5987263f3517bd829f6f1afd833e6"
+source = "git+https://github.com/belovdv/dateg.git?rev=abad7b4ce1e677515781306575a11930b6bfd9c4#abad7b4ce1e677515781306575a11930b6bfd9c4"
 dependencies = [
  "ahash",
  "dateg_macro",
@@ -261,7 +261,7 @@ dependencies = [
 [[package]]
 name = "dateg_extractors"
 version = "0.1.0"
-source = "git+https://github.com/belovdv/dateg.git?rev=7abed4601dc5987263f3517bd829f6f1afd833e6#7abed4601dc5987263f3517bd829f6f1afd833e6"
+source = "git+https://github.com/belovdv/dateg.git?rev=abad7b4ce1e677515781306575a11930b6bfd9c4#abad7b4ce1e677515781306575a11930b6bfd9c4"
 dependencies = [
  "ahash",
  "anyhow",
@@ -277,7 +277,7 @@ dependencies = [
 [[package]]
 name = "dateg_extractors_macro"
 version = "0.1.0"
-source = "git+https://github.com/belovdv/dateg.git?rev=7abed4601dc5987263f3517bd829f6f1afd833e6#7abed4601dc5987263f3517bd829f6f1afd833e6"
+source = "git+https://github.com/belovdv/dateg.git?rev=abad7b4ce1e677515781306575a11930b6bfd9c4#abad7b4ce1e677515781306575a11930b6bfd9c4"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -287,7 +287,7 @@ dependencies = [
 [[package]]
 name = "dateg_macro"
 version = "0.1.0"
-source = "git+https://github.com/belovdv/dateg.git?rev=7abed4601dc5987263f3517bd829f6f1afd833e6#7abed4601dc5987263f3517bd829f6f1afd833e6"
+source = "git+https://github.com/belovdv/dateg.git?rev=abad7b4ce1e677515781306575a11930b6bfd9c4#abad7b4ce1e677515781306575a11930b6bfd9c4"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -320,8 +320,8 @@ dependencies = [
 
 [[package]]
 name = "egglog-bridge"
-version = "2.0.0"
-source = "git+https://github.com/egraphs-good/egglog.git?rev=60eed0d81849a56d5032b473cb9cb374d4082458#60eed0d81849a56d5032b473cb9cb374d4082458"
+version = "3.0.0"
+source = "git+https://github.com/egraphs-good/egglog.git?rev=8879605cafad303db25787406163a7e5bc845f5d#8879605cafad303db25787406163a7e5bc845f5d"
 dependencies = [
  "anyhow",
  "dyn-clone",
@@ -343,8 +343,8 @@ dependencies = [
 
 [[package]]
 name = "egglog-concurrency"
-version = "2.0.0"
-source = "git+https://github.com/egraphs-good/egglog.git?rev=60eed0d81849a56d5032b473cb9cb374d4082458#60eed0d81849a56d5032b473cb9cb374d4082458"
+version = "3.0.0"
+source = "git+https://github.com/egraphs-good/egglog.git?rev=8879605cafad303db25787406163a7e5bc845f5d#8879605cafad303db25787406163a7e5bc845f5d"
 dependencies = [
  "arc-swap",
  "bumpalo",
@@ -355,8 +355,8 @@ dependencies = [
 
 [[package]]
 name = "egglog-core-relations"
-version = "2.0.0"
-source = "git+https://github.com/egraphs-good/egglog.git?rev=60eed0d81849a56d5032b473cb9cb374d4082458#60eed0d81849a56d5032b473cb9cb374d4082458"
+version = "3.0.0"
+source = "git+https://github.com/egraphs-good/egglog.git?rev=8879605cafad303db25787406163a7e5bc845f5d#8879605cafad303db25787406163a7e5bc845f5d"
 dependencies = [
  "anyhow",
  "bumpalo",
@@ -383,13 +383,13 @@ dependencies = [
 
 [[package]]
 name = "egglog-numeric-id"
-version = "2.0.0"
-source = "git+https://github.com/egraphs-good/egglog.git?rev=60eed0d81849a56d5032b473cb9cb374d4082458#60eed0d81849a56d5032b473cb9cb374d4082458"
+version = "3.0.0"
+source = "git+https://github.com/egraphs-good/egglog.git?rev=8879605cafad303db25787406163a7e5bc845f5d#8879605cafad303db25787406163a7e5bc845f5d"
 
 [[package]]
 name = "egglog-reports"
-version = "2.0.0"
-source = "git+https://github.com/egraphs-good/egglog.git?rev=60eed0d81849a56d5032b473cb9cb374d4082458#60eed0d81849a56d5032b473cb9cb374d4082458"
+version = "3.0.0"
+source = "git+https://github.com/egraphs-good/egglog.git?rev=8879605cafad303db25787406163a7e5bc845f5d#8879605cafad303db25787406163a7e5bc845f5d"
 dependencies = [
  "clap",
  "hashbrown 0.16.1",
@@ -402,13 +402,19 @@ dependencies = [
 
 [[package]]
 name = "egglog-union-find"
-version = "2.0.0"
-source = "git+https://github.com/egraphs-good/egglog.git?rev=60eed0d81849a56d5032b473cb9cb374d4082458#60eed0d81849a56d5032b473cb9cb374d4082458"
+version = "3.0.0"
+source = "git+https://github.com/egraphs-good/egglog.git?rev=8879605cafad303db25787406163a7e5bc845f5d#8879605cafad303db25787406163a7e5bc845f5d"
 dependencies = [
  "crossbeam",
  "egglog-concurrency",
  "egglog-numeric-id",
 ]
+
+[[package]]
+name = "either"
+version = "1.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "252afb9ae5eaa683babdc6a068b3f5726eb19e05070c731f9b2a23a7c3e8ed34"
 
 [[package]]
 name = "equivalent"
@@ -577,6 +583,7 @@ version = "0.1.0"
 dependencies = [
  "ahash",
  "anyhow",
+ "dateg",
  "log",
  "regex",
  "serde",
@@ -590,6 +597,20 @@ dependencies = [
  "anyhow",
  "copy",
  "lira",
+]
+
+[[package]]
+name = "lira_opt"
+version = "0.1.0"
+dependencies = [
+ "ahash",
+ "anyhow",
+ "dateg",
+ "du_utils_timed",
+ "lira",
+ "lira_trs",
+ "log",
+ "rayon",
 ]
 
 [[package]]
@@ -816,6 +837,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "76afc826de14238e6e8c374ddcc1fa19e374fd8dd986b0d2af0d02377261d83c"
 dependencies = [
  "getrandom",
+]
+
+[[package]]
+name = "rayon"
+version = "1.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fb39b166781f92d482534ef4b4b1b2568f42613b53e5b6c160e24cfbfa30926d"
+dependencies = [
+ "either",
+ "rayon-core",
+]
+
+[[package]]
+name = "rayon-core"
+version = "1.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "22e18b0f0062d30d4230b2e85ff77fdfe4326feb054b9783a3460d8435c8ab91"
+dependencies = [
+ "crossbeam-deque",
+ "crossbeam-utils",
 ]
 
 [[package]]

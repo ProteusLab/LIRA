@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use ahash::{AHashMap, AHashSet};
-use lira::StatementSeq;
+use lira::{StatementSeq, StatementSeqBuilder};
 
 use crate::dfg::*;
 
@@ -39,15 +39,15 @@ impl State {
 }
 
 impl State {
-    pub fn from_lira(seq: &StatementSeq, implicit: impl Fn(&str) -> ImplicitKind) -> Self {
+    pub fn from_lira(seq: &StatementSeq, implicit: impl Fn(&str) -> Implicitness) -> Self {
         let mut state = State::Initial;
         let mut name2sel: AHashMap<String, Selector> = AHashMap::new();
         for stmt in seq.iter() {
             let inputs = stmt.inputs.iter().map(|i| name2sel[i].clone()).collect();
             let implicit = match implicit(&stmt.kind) {
-                ImplicitKind::Pure => Implicit::Pure,
-                ImplicitKind::Implicit => Implicit::Implicit(std::mem::take(&mut state)),
-                ImplicitKind::ImplicitRead => Implicit::ImplicitRead(state.clone()),
+                Implicitness::Pure => Implicit::Pure,
+                Implicitness::Write => Implicit::Implicit(std::mem::take(&mut state)),
+                Implicitness::Read => Implicit::ImplicitRead(state.clone()),
             };
             let is_write = matches!(implicit, Implicit::Implicit(_));
             let s = Rc::new(Statement::from_lira(stmt, inputs, implicit));
@@ -64,7 +64,7 @@ impl State {
     pub fn to_lira(&self) -> StatementSeq {
         #[derive(Default)]
         struct Ser {
-            seq: StatementSeq,
+            seq: StatementSeqBuilder,
             counter: usize,
             cache: AHashMap<*const Statement, usize>,
             followed_by: AHashMap<Option<*const Statement>, Vec<Rc<Statement>>>,
@@ -154,7 +154,7 @@ impl State {
         ser.state(self);
         let mut ser = ser.inner;
         ser.state(self);
-        ser.seq
+        ser.seq.finish()
     }
 }
 
@@ -182,8 +182,8 @@ fn dfg_round_trip() {
 ";
     let ir = StatementSeq::parse(text).unwrap();
     let dfg = State::from_lira(&ir, |kind| match kind {
-        "input" | "op" | "const" => ImplicitKind::Pure,
-        _ => ImplicitKind::Implicit,
+        "input" | "op" | "const" => Implicitness::Pure,
+        _ => Implicitness::Write,
     });
     let ir = dfg.to_lira();
     let text2 = ir.to_string();

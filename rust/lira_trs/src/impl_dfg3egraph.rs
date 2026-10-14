@@ -38,9 +38,7 @@ impl dfg::State {
                     return *token;
                 }
 
-                let shape = self
-                    .lira
-                    .add_primitive_value(theory::Shape(stmt.shape.clone()));
+                let shape = self.lira.add_primitive_value(stmt.shape.clone());
 
                 let outputs = theory::OutputsMany(stmt.outputs.clone());
                 let outputs = self.lira.add_primitive_value(outputs);
@@ -123,7 +121,7 @@ impl dfg::State {
                     }
                 };
                 let statement = Rc::new(dfg::Statement {
-                    shape: shape.get(self.lira).0,
+                    shape: shape.get(self.lira),
                     outputs: self.index.value(outputs).0.get(self.lira).0,
                     kind: kind.get(self.lira),
                     spec: spec.get(self.lira),
@@ -159,9 +157,9 @@ fn optimize(
     post_init: impl FnOnce(&mut theory::Lira),
 ) -> lira::StatementSeq {
     let dfg = dfg::State::from_lira(&ir, |kind| match kind {
-        "input" | "op" | "const" => dfg::ImplicitKind::Pure,
-        "read" => dfg::ImplicitKind::ImplicitRead,
-        _ => dfg::ImplicitKind::Implicit,
+        "input" | "op" | "const" => dfg::Implicitness::Pure,
+        "read" => dfg::Implicitness::Read,
+        _ => dfg::Implicitness::Write,
     });
 
     let mut lira = theory::Lira::default();
@@ -219,10 +217,9 @@ fn dfg3egraph() {
     let ir = lira::StatementSeq::parse(input).unwrap();
     let output = optimize(&ir, |lira| {
         let stmt_pure = lira.stmt_p;
-        let sel = lira.sel;
+        let sel0 = lira.sel0;
         let in2 = lira.in2;
         let s_op = lira.s_op;
-        let c0 = lira.c0;
 
         dateg::execute! {lira;
             (val add (String) {"add_64".to_string()})
@@ -234,13 +231,13 @@ fn dfg3egraph() {
                 (stmt_pure h o {s_op} {add} (in2 b a))
             )
             (rewrite
-                (sel {c0} (stmt_pure h o {s_op} {add} (in2
-                    (sel {c0} (stmt_pure h o {s_op} {sub} (in2 a b))) b
+                (sel0 (stmt_pure h o {s_op} {add} (in2
+                    (sel0 (stmt_pure h o {s_op} {sub} (in2 a b))) b
                 )))
                 a
             )
         }
-        while lira.run_ruleset("factorize vector arguments") {}
+        lira.enrich();
         while lira.run_ruleset("opt") {}
     })
     .to_string();
