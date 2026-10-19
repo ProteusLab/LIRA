@@ -101,6 +101,17 @@ class TestArchSerYaml < Minitest::Test
     assert_equal ['x0', 'x1', 'x2'], arch2.tables_str[0].values
   end
 
+  def test_empty_statement_seq
+    ab = ArchBuilder.new('empty_seq', [])
+    ab.add_snippet(SnippetBuilder.new('empty').build)
+    enc = InstructionEncoding.new(32, 0, 0, [], '', '', '')
+    ab.add_instruction(InstructionBuilder.new('empty', [], [], enc).build)
+    ArchSerYaml.write_arch(ab.build, @tmp.path)
+    arch2 = ArchSerYaml.read_arch(@tmp.path)
+    assert_equal [], arch2.snippets[0].seq.stmts
+    assert_equal [], arch2.instructions[0].semantic.stmts
+  end
+
   def test_instruction_syntaxes
     rf = RegisterFile.new('X', [], Shape.new(32, nil), [Register.new('x0')])
     enc = InstructionEncoding.new(32, 0, 0, [], '', '', '')

@@ -161,24 +161,24 @@ impl State {
 #[test]
 fn dfg_round_trip() {
     let text = "\
-1 5 ra = input 0;
-1 64 delta = input 1;
-1 5 rd = input 2;
-1 0 unused = const 0;
-1 64 base = read X ra;
-1 64 addr = op add_64 base delta;
-1 64 val = env load64 addr;
-1 = write X rd val;
+1 5 ra = input 0
+1 64 delta = input 1
+1 5 rd = input 2
+1 0 unused = const 0
+1 64 base = read X ra
+1 64 addr = op add_64 base delta
+1 64 val = env load64 addr
+1 = write X rd val
 ";
     // Reorder basing on dataflow, remove unused pure statement.
     let text_expected = "\
-1 5 t0 = input 2;
-1 5 t1 = input 0;
-1 64 t2 = read X t1;
-1 64 t3 = input 1;
-1 64 t4 = op add_64 t2 t3;
-1 64 t5 = env load64 t4;
-1 = write X t0 t5;
+1 5 t0 = input 2
+1 5 t1 = input 0
+1 64 t2 = read X t1
+1 64 t3 = input 1
+1 64 t4 = op add_64 t2 t3
+1 64 t5 = env load64 t4
+1 = write X t0 t5
 ";
     let ir = StatementSeq::parse(text).unwrap();
     let dfg = State::from_lira(&ir, |kind| match kind {

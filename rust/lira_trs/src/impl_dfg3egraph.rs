@@ -173,7 +173,7 @@ fn optimize(
 
     let ir = dfg.to_lira();
     for stmt in ir.iter() {
-        eprintln!("{stmt};");
+        eprintln!("{stmt}");
     }
     ir
 }
@@ -181,17 +181,17 @@ fn optimize(
 #[test]
 fn dfg3egraph_simple() {
     let input = "\
-1 64 a = get a;
-1 64 b = get b;
-1 64 val = op add_64 a b;
-1 = output _ val;
+1 64 a = get a
+1 64 b = get b
+1 64 val = op add_64 a b
+1 = output _ val
 ";
     // Variable renaming
     let expected = "\
-1 64 t0 = get a;
-1 64 t1 = get b;
-1 64 t2 = op add_64 t0 t1;
-1 = output _ t2;
+1 64 t0 = get a
+1 64 t1 = get b
+1 64 t2 = op add_64 t0 t1
+1 = output _ t2
 ";
 
     let ir = lira::StatementSeq::parse(input).unwrap();
@@ -202,18 +202,18 @@ fn dfg3egraph_simple() {
 #[test]
 fn dfg3egraph() {
     let input = "\
-1 64 a = get a;
-1 64 b = get b;
-1 64 add_a_b = op add_64 a b;
-1 64 sub_a_b = op sub_64 a b;
-1 64 val = op add_64 b sub_a_b;
-1 = output _ val;
+1 64 a = get a
+1 64 b = get b
+1 64 add_a_b = op add_64 a b
+1 64 sub_a_b = op sub_64 a b
+1 64 val = op add_64 b sub_a_b
+1 = output _ val
 ";
     // Optimize. Note, that commutativity is necessary
     let expected = "\
-1 64 t0 = get a;
-1 64 t1 = get b;
-1 = output _ t0;
+1 64 t0 = get a
+1 64 t1 = get b
+1 = output _ t0
 ";
 
     let ir = lira::StatementSeq::parse(input).unwrap();

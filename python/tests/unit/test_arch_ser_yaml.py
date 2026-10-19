@@ -245,6 +245,17 @@ class TestArchSerYaml:
         arch2 = arch_ser_yaml.read_arch(tmp_yaml)
         assert arch2.tables_str[0].values == ["x0", "x1", "x2"]
 
+    def test_empty_statement_seq(self, tmp_yaml):
+        ab = ArchBuilder("empty_seq", [])
+        ab.add_snippet(SnippetBuilder("empty").build())
+        enc = InstructionEncoding(32, 0, 0, [], "", "", "")
+        ab.add_instruction(InstructionBuilder("empty", [], [], enc).build())
+        arch = ab.build()
+        arch_ser_yaml.write_arch(arch, tmp_yaml)
+        arch2 = arch_ser_yaml.read_arch(tmp_yaml)
+        assert arch2.snippets[0].seq.stmts == []
+        assert arch2.instructions[0].semantic.stmts == []
+
     def test_instruction_syntaxes(self, tmp_yaml):
         rf = RegisterFile("X", [], Shape(32, None), [Register("x0")])
         enc = InstructionEncoding(32, 0, 0, [], "", "", "")

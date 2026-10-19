@@ -123,24 +123,34 @@ module Lira
     end
 
     def self.deserialize_statement(s)
-      m = s.match(/\A(\w+)\s+(.*?)\s*=\s*(\w+)\s+(\S+)\s*(.*)\z/)
-      raise "invalid statement: #{s}" unless m
-      shape_str, outputs_str, kind, specifier, inputs_str = m.captures
-      shape = deserialize_shape(shape_str)
-      pairs = outputs_str.split
-      outputs_types = (0...pairs.length).step(2).map { |i| pairs[i].to_i }
-      outputs = (0...pairs.length).step(2).map { |i| pairs[i+1] }
-      inputs = inputs_str.empty? ? [] : inputs_str.split
-      Statement.new(shape, outputs, outputs_types, kind, specifier, inputs)
+      tokens = s.split
+      eq = tokens.index('=')
+      raise "invalid statement: #{s}: missing \"=\"" unless eq
+
+      left = tokens[0...eq]
+      right = tokens[(eq + 1)..]
+      raise "invalid statement: #{s}: missing shape" if left.empty?
+      raise "invalid statement: #{s}: missing kind or specifier" if right.length < 2
+
+      shape = deserialize_shape(left[0])
+      output_tokens = left[1..]
+      raise "invalid statement: #{s}: outputs must be type/name pairs" if output_tokens.length.odd?
+
+      outputs_types = output_tokens.each_slice(2).map { |typ, _name| typ.to_i }
+      outputs = output_tokens.each_slice(2).map { |_typ, name| name }
+      Statement.new(shape, outputs, outputs_types, right[0], right[1], right.drop(2))
     end
 
     def self.serialize_statement_seq(seq)
-      seq.stmts.map { |s| serialize_statement(s) + ";\n" }.join
+      seq.stmts.map { |s| serialize_statement(s) + "\n" }.join
     end
 
     def self.deserialize_statement_seq(s)
-      raw_stmts = s.split(';').map(&:strip).reject(&:empty?)
-      stmts = raw_stmts.map { |raw| deserialize_statement(raw) }
+      stmts = s.each_line.filter_map do |raw|
+        line = raw.strip
+        next if line.empty? || line.start_with?('#')
+        deserialize_statement(line)
+      end
       StatementSeq.new(stmts)
     end
   end

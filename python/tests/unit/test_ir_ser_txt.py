@@ -1,3 +1,5 @@
+import pytest
+
 from python.lira.ir import Shape
 from python.lira.arch import Register, RegisterFile, EnvironmentFunction
 from python.lira.ir_ser_txt import serialize_statement_seq, deserialize_statement_seq
@@ -85,3 +87,44 @@ class TestIrSerTxt:
         text = serialize_statement_seq(snip.seq)
         seq2 = deserialize_statement_seq(text)
         assert len(seq2.stmts) == 6
+
+    def test_no_semicolons_and_newline_separated(self):
+        seq = SeqBuilder()
+        seq.const(1, 32)
+        seq.const(2, 32)
+        text = serialize_statement_seq(seq.build())
+        assert text == "1 32 _t1 = const 1\n1 32 _t2 = const 2\n"
+        assert ";" not in text
+        assert len(text.splitlines()) == 2
+
+    def test_comments_blank_lines_and_trailing_whitespace(self):
+        text = (
+            "# comment\n"
+            "\n"
+            "   # indented comment\n"
+            "1 32 x = const 1   \n"
+            "1 32 y = const 2\t\n"
+        )
+        seq = deserialize_statement_seq(text)
+        assert len(seq.stmts) == 2
+        assert serialize_statement_seq(seq) == "1 32 x = const 1\n1 32 y = const 2\n"
+
+    def test_flexible_whitespace_around_equals(self):
+        text = "1 32 x\t=\tconst 1\n1  32  x =  const 1\n"
+        seq = deserialize_statement_seq(text)
+        assert len(seq.stmts) == 2
+        assert serialize_statement_seq(seq) == "1 32 x = const 1\n1 32 x = const 1\n"
+
+    def test_semicolon_is_an_ordinary_character(self):
+        seq = deserialize_statement_seq("1 = const 1;\n")
+        assert seq.stmts[0].specifier == "1;"
+
+    def test_missing_equals_is_rejected(self):
+        with pytest.raises(ValueError):
+            deserialize_statement_seq("1 const 1\n")
+        with pytest.raises(ValueError):
+            deserialize_statement_seq("= const 1\n")
+
+    def test_odd_output_tokens_are_rejected(self):
+        with pytest.raises(ValueError):
+            deserialize_statement_seq("1 32 x 3 = op add x x\n")

@@ -16,18 +16,37 @@ def serialize_statement(stmt: Statement) -> str:
     return " ".join(parts)
 
 def deserialize_statement(s: str) -> Statement:
-    m = re.match(r'^(\w+)\s+(.*?)\s*=\s*(\w+)\s+(\S+)\s*(.*)$', s)
-    shape_str, outputs_str, kind, specifier, inputs_str = m.groups()
-    shape = deserialize_shape(shape_str)
-    pairs = outputs_str.split()
-    outputs_types = [int(pairs[i]) for i in range(0, len(pairs), 2)]
-    outputs = [pairs[i+1] for i in range(0, len(pairs), 2)]
-    inputs = inputs_str.split() if inputs_str else []
+    tokens = s.split()
+    try:
+        eq = tokens.index('=')
+    except ValueError:
+        raise ValueError(f'invalid statement: {s!r}: missing "="') from None
+
+    left = tokens[:eq]
+    right = tokens[eq + 1:]
+    if not left:
+        raise ValueError(f'invalid statement: {s!r}: missing shape')
+    if len(right) < 2:
+        raise ValueError(f'invalid statement: {s!r}: missing kind or specifier')
+
+    shape = deserialize_shape(left[0])
+    output_tokens = left[1:]
+    if len(output_tokens) % 2 != 0:
+        raise ValueError(f'invalid statement: {s!r}: outputs must be type/name pairs')
+    outputs_types = [int(t) for t in output_tokens[0::2]]
+    outputs = output_tokens[1::2]
+    kind, specifier = right[0], right[1]
+    inputs = right[2:]
     return Statement(shape, outputs, outputs_types, kind, specifier, inputs)
 
 def serialize_statement_seq(seq: StatementSeq) -> str:
-    return ''.join(f'{serialize_statement(s)};\n' for s in seq.stmts)
+    return ''.join(f'{serialize_statement(s)}\n' for s in seq.stmts)
 
 def deserialize_statement_seq(s: str) -> StatementSeq:
-    raw_stmts = [part.strip() for part in s.split(";") if part.strip()]
-    return StatementSeq([deserialize_statement(raw) for raw in raw_stmts])
+    stmts = []
+    for raw in s.splitlines():
+        line = raw.strip()
+        if not line or line.startswith('#'):
+            continue
+        stmts.append(deserialize_statement(line))
+    return StatementSeq(stmts)

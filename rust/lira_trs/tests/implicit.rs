@@ -59,7 +59,7 @@ fn optimize(ir: &lira::StatementSeq) -> lira::StatementSeq {
 
     let ir = dfg.to_lira();
     for stmt in ir.iter() {
-        eprintln!("{stmt};");
+        eprintln!("{stmt}");
     }
     ir
 }
@@ -67,21 +67,21 @@ fn optimize(ir: &lira::StatementSeq) -> lira::StatementSeq {
 #[test]
 fn implicit1() {
     let input = "\
-1 64 ra = input ra;
-1 64 rb = input rb;
-1 64 rc = input rc;
-1 64 va = read gpr ra;
-1 64 vb = read gpr rb;
-1 = write gpr ra va;
-1 64 vb2 = read gpr rb;
-1 64 va2 = read gpr ra;
-1 = write gpr ra vb2;
+1 64 ra = input ra
+1 64 rb = input rb
+1 64 rc = input rc
+1 64 va = read gpr ra
+1 64 vb = read gpr rb
+1 = write gpr ra va
+1 64 vb2 = read gpr rb
+1 64 va2 = read gpr ra
+1 = write gpr ra vb2
 ";
     let expected = "\
-1 64 t0 = input ra;
-1 64 t1 = input rb;
-1 64 t2 = read gpr t1;
-1 = write gpr t0 t2;
+1 64 t0 = input ra
+1 64 t1 = input rb
+1 64 t2 = read gpr t1
+1 = write gpr t0 t2
 ";
 
     let ir = lira::StatementSeq::parse(input).unwrap();
@@ -92,22 +92,22 @@ fn implicit1() {
 #[test]
 fn implicit2() {
     let input = "\
-1 5 ra = input ra;
-1 5 rb = input rb;
-1 64 v = input v;
-1 64 u = input u;
-1 = write gpr ra u;
-1 64 va = read gpr ra;
-1 = write gpr ra v;
-1 = write gpr rb va;
+1 5 ra = input ra
+1 5 rb = input rb
+1 64 v = input v
+1 64 u = input u
+1 = write gpr ra u
+1 64 va = read gpr ra
+1 = write gpr ra v
+1 = write gpr rb va
 ";
     let expected = "\
-1 5 t0 = input rb;
-1 64 t1 = input u;
-1 5 t2 = input ra;
-1 64 t3 = input v;
-1 = write gpr t2 t3;
-1 = write gpr t0 t1;
+1 5 t0 = input rb
+1 64 t1 = input u
+1 5 t2 = input ra
+1 64 t3 = input v
+1 = write gpr t2 t3
+1 = write gpr t0 t1
 ";
 
     let ir = lira::StatementSeq::parse(input).unwrap();

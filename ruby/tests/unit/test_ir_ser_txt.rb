@@ -92,4 +92,41 @@ class TestIrSerTxt < Minitest::Test
     seq2 = IrSerTxt.deserialize_statement_seq(text)
     assert_equal 6, seq2.stmts.length
   end
+
+  def test_no_semicolons_and_newline_separated
+    text = "1 32 x = const 1\n1 32 y = const 2\n"
+    seq = IrSerTxt.deserialize_statement_seq(text)
+    out = IrSerTxt.serialize_statement_seq(seq)
+    assert_equal text, out
+    refute_includes out, ';'
+    assert_equal 2, out.lines.length
+  end
+
+  def test_comments_blank_lines_and_trailing_whitespace
+    text = "# comment\n\n   # indented comment\n1 32 x = const 1   \n1 32 y = const 2\t\n"
+    seq = IrSerTxt.deserialize_statement_seq(text)
+    assert_equal 2, seq.stmts.length
+    assert_equal "1 32 x = const 1\n1 32 y = const 2\n", IrSerTxt.serialize_statement_seq(seq)
+  end
+
+  def test_flexible_whitespace_around_equals
+    text = "1 32 x\t=\tconst 1\n1  32  x =  const 1\n"
+    seq = IrSerTxt.deserialize_statement_seq(text)
+    assert_equal 2, seq.stmts.length
+    assert_equal "1 32 x = const 1\n1 32 x = const 1\n", IrSerTxt.serialize_statement_seq(seq)
+  end
+
+  def test_semicolon_is_an_ordinary_character
+    seq = IrSerTxt.deserialize_statement_seq("1 = const 1;\n")
+    assert_equal '1;', seq.stmts[0].specifier
+  end
+
+  def test_missing_equals_is_rejected
+    assert_raises(RuntimeError) { IrSerTxt.deserialize_statement_seq("1 const 1\n") }
+    assert_raises(RuntimeError) { IrSerTxt.deserialize_statement_seq("= const 1\n") }
+  end
+
+  def test_odd_output_tokens_are_rejected
+    assert_raises(RuntimeError) { IrSerTxt.deserialize_statement_seq("1 32 x 3 = op add x x\n") }
+  end
 end

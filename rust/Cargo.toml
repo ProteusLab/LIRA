@@ -9,7 +9,6 @@ log = "0.4.29"
 env_logger = "0.11.10"
 clap = "4.6.1"
 ahash = "0.8.12"
-regex = "1.12.3"
 serde = "1.0.228"
 serde_yaml = "0.8"
 
