@@ -2,6 +2,30 @@
 require 'set'
 
 module Lira
+  class Attribute
+    attr_accessor :name, :value
+
+    def initialize(name, value)
+      @name = name
+      @value = value
+    end
+
+    def to_h
+      { name: name, value: value }
+    end
+
+    def self.from_h(hash)
+      return hash if hash.is_a?(Attribute)
+      return new(hash, '') if hash.is_a?(String)
+
+      new(hash[:name] || hash['name'], hash[:value] || hash['value'] || '')
+    end
+
+    def ==(other)
+      other.is_a?(Attribute) && name == other.name && value == other.value
+    end
+  end
+
   class Component
     attr_accessor :name, :attributes
 
@@ -10,12 +34,17 @@ module Lira
       @attributes = attributes
     end
 
+    def self.attributes_from_h(value)
+      (value || []).map { |a| Attribute.from_h(a) }
+    end
+
     def to_h
       { name: name, attributes: attributes }
     end
 
     def self.from_h(hash)
-      new(hash[:name] || hash['name'], hash[:attributes] || hash['attributes'] || [])
+      new(hash[:name] || hash['name'],
+          attributes_from_h(hash[:attributes] || hash['attributes'] || []))
     end
 
     def ==(other)
@@ -23,30 +52,32 @@ module Lira
     end
   end
 
-  class Snippet
-    attr_accessor :name, :seq
+  class Snippet < Component
+    attr_accessor :seq
 
-    def initialize(name, seq)
-      @name = name
+    def initialize(name, attributes, seq)
+      super(name, attributes)
       @seq = seq
     end
 
     def to_h
-      { name: name, seq: seq }
+      super.merge(seq: seq)
     end
 
     def self.from_h(hash)
       seq = StatementSeq.from_h(hash[:seq] || hash['seq'])
-      new(hash[:name] || hash['name'], seq)
+      new(hash[:name] || hash['name'],
+          attributes_from_h(hash[:attributes] || hash['attributes'] || []),
+          seq)
     end
 
     def ==(other)
-      other.is_a?(Snippet) && name == other.name && seq == other.seq
+      super(other) && other.is_a?(Snippet) && seq == other.seq
     end
   end
 
   class Operation < Component
-    attr_accessor :inputs, :outputs, :semantic_base, :semantic_func, :semantic_func_128, :semantic_table
+    attr_accessor :inputs, :outputs, :semantic_base, :semantic_func, :semantic_table
 
     @typed_ops = {}
 
@@ -63,19 +94,17 @@ module Lira
       self.name = other.name
       self.attributes = other.attributes
       self.semantic_func = other.semantic_func
-      self.semantic_func_128 = other.semantic_func_128
       self.semantic_table = other.semantic_table
       self
     end
 
     def initialize(name, attributes, inputs, outputs,
-                   semantic_base: nil, semantic_func: nil, semantic_func_128: nil, semantic_table: nil)
+                   semantic_base: nil, semantic_func: nil, semantic_table: nil)
       super(name, attributes)
       @inputs = inputs
       @outputs = outputs
       @semantic_base = semantic_base
       @semantic_func = semantic_func
-      @semantic_func_128 = semantic_func_128
       @semantic_table = semantic_table
     end
 
@@ -85,29 +114,25 @@ module Lira
         outputs: outputs,
         semantic_base: semantic_base,
         semantic_func: semantic_func,
-        semantic_func_128: semantic_func_128,
         semantic_table: semantic_table
       )
     end
 
     def self.from_h(hash)
       name = hash[:name] || hash['name']
-      attributes = hash[:attributes] || hash['attributes'] || []
+      attributes = attributes_from_h(hash[:attributes] || hash['attributes'] || [])
       inputs = hash[:inputs] || hash['inputs']
       outputs = hash[:outputs] || hash['outputs']
 
       semantic_base = hash[:semantic_base] || hash['semantic_base']
       semantic_base = nil if semantic_base == {}
       semantic_func = hash[:semantic_func] || hash['semantic_func']
-      semantic_func_128 = hash[:semantic_func_128] || hash['semantic_func_128']
-      semantic_func_128 = nil if semantic_func_128 == {}
       semantic_table = hash[:semantic_table] || hash['semantic_table']
       semantic_table = nil if semantic_table == {}
 
       op = new(name, attributes, inputs, outputs,
                semantic_base: semantic_base,
                semantic_func: semantic_func,
-               semantic_func_128: semantic_func_128,
                semantic_table: semantic_table)
 
       return op unless Lira.respond_to?(:from_operation)
@@ -122,7 +147,6 @@ module Lira
         outputs == other.outputs &&
         semantic_base == other.semantic_base &&
         semantic_func == other.semantic_func &&
-        semantic_func_128 == other.semantic_func_128 &&
         semantic_table == other.semantic_table
     end
   end
@@ -138,7 +162,7 @@ module Lira
 
     def self.from_h(hash)
       name = hash[:name] || hash['name']
-      attributes = hash[:attributes] || hash['attributes'] || []
+      attributes = attributes_from_h(hash[:attributes] || hash['attributes'] || [])
       new(name, attributes)
     end
 
@@ -170,7 +194,7 @@ module Lira
 
     def self.from_h(hash)
       name = hash[:name] || hash['name']
-      attributes = hash[:attributes] || hash['attributes'] || []
+      attributes = attributes_from_h(hash[:attributes] || hash['attributes'] || [])
       reg_size = Shape.from_h(hash[:reg_size] || hash['reg_size'])
       regs_data = hash[:regs] || hash['regs'] || []
       regs = regs_data.map { |r| Register.from_h(r) }
@@ -201,7 +225,7 @@ module Lira
 
     def self.from_h(hash)
       name = hash[:name] || hash['name']
-      attributes = hash[:attributes] || hash['attributes'] || []
+      attributes = attributes_from_h(hash[:attributes] || hash['attributes'] || [])
       inputs = hash[:inputs] || hash['inputs']
       outputs = hash[:outputs] || hash['outputs']
       new(name, attributes, inputs, outputs)
@@ -230,7 +254,7 @@ module Lira
 
     def self.from_h(hash)
       name = hash[:name] || hash['name']
-      attributes = hash[:attributes] || hash['attributes'] || []
+      attributes = attributes_from_h(hash[:attributes] || hash['attributes'] || [])
       lsb = hash[:lsb] || hash['lsb']
       msb = hash[:msb] || hash['msb']
       new(name, attributes, lsb, msb)
@@ -259,7 +283,7 @@ module Lira
 
     def self.from_h(hash)
       name = hash[:name] || hash['name']
-      attributes = hash[:attributes] || hash['attributes'] || []
+      attributes = attributes_from_h(hash[:attributes] || hash['attributes'] || [])
       size = hash[:size] || hash['size']
       fields_data = hash[:fields] || hash['fields']
       fields = fields_data.map { |f| SystemRegisterField.from_h(f) }
@@ -288,7 +312,7 @@ module Lira
 
     def self.from_h(hash)
       name = hash[:name] || hash['name']
-      attributes = hash[:attributes] || hash['attributes'] || []
+      attributes = attributes_from_h(hash[:attributes] || hash['attributes'] || [])
       values = hash[:values] || hash['values']
       new(name, attributes, values)
     end
@@ -370,7 +394,7 @@ module Lira
 
     def self.from_h(hash)
       name = hash[:name] || hash['name']
-      attributes = hash[:attributes] || hash['attributes'] || []
+      attributes = attributes_from_h(hash[:attributes] || hash['attributes'] || [])
       operand_sizes = hash[:operand_sizes] || hash['operand_sizes']
       operand_names = hash[:operand_names] || hash['operand_names']
       encoding = InstructionEncoding.from_h(hash[:encoding] || hash['encoding'])
@@ -425,7 +449,7 @@ module Lira
 
     def self.from_h(hash)
       name = hash[:name] || hash['name']
-      attributes = hash[:attributes] || hash['attributes'] || []
+      attributes = attributes_from_h(hash[:attributes] || hash['attributes'] || [])
       register_files = (hash[:register_files] || hash['register_files']).map { |rf| RegisterFile.from_h(rf) }
       system_registers = (hash[:system_registers] || hash['system_registers']).map { |sr| SystemRegister.from_h(sr) }
       environment_functions = (hash[:environment_functions] || hash['environment_functions']).map { |ef| EnvironmentFunction.from_h(ef) }

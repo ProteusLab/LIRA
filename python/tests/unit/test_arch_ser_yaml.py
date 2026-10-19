@@ -5,6 +5,7 @@ import pytest
 
 from python.lira.ir import Shape
 from python.lira.arch import (
+    Attribute,
     Operation,
     Register,
     RegisterFile,
@@ -76,7 +77,8 @@ def rv32i_arch_lite():
         "XRegs",
         [],
         Shape(32, None),
-        [Register("x0", ["zero"])] + [Register(f"x{i}") for i in range(1, 32)],
+        [Register("x0", [Attribute("zero", "")])] +
+        [Register(f"x{i}") for i in range(1, 32)],
     )
 
     ab = ArchBuilder("rv32i_lite", [])
@@ -203,14 +205,15 @@ class TestArchSerYaml:
 
     def test_register_attributes(self, tmp_yaml):
         rf = RegisterFile(
-            "R", [], Shape(32, None), [Register("x0", ["zero"]), Register("x1", [])]
+            "R", [], Shape(32, None),
+            [Register("x0", [Attribute("zero", "")]), Register("x1", [])],
         )
         ab = ArchBuilder("attrs", [])
         ab.add_register_file(rf)
         arch = ab.build()
         arch_ser_yaml.write_arch(arch, tmp_yaml)
         arch2 = arch_ser_yaml.read_arch(tmp_yaml)
-        assert arch2.register_files[0].regs[0].attributes == ["zero"]
+        assert arch2.register_files[0].regs[0].attributes == [Attribute("zero", "")]
 
     def test_system_register(self, tmp_yaml):
         field = SystemRegisterField("f", [], 0, 7)
@@ -230,6 +233,17 @@ class TestArchSerYaml:
         arch_ser_yaml.write_arch(arch, tmp_yaml)
         arch2 = arch_ser_yaml.read_arch(tmp_yaml)
         assert arch2.tables_int[0].values == [1, 2, 3]
+
+    def test_snippet_attributes(self, tmp_yaml):
+        sb = SnippetBuilder("s", [Attribute("kind", "test")])
+        a = sb.input(0, 32)
+        sb.output(a, 0)
+        ab = ArchBuilder("snip_attrs", [])
+        ab.add_snippet(sb.build())
+        arch = ab.build()
+        arch_ser_yaml.write_arch(arch, tmp_yaml)
+        arch2 = arch_ser_yaml.read_arch(tmp_yaml)
+        assert arch2.snippets[0].attributes == [Attribute("kind", "test")]
 
     def test_rv32i_lite_roundtrip(self, rv32i_arch_lite, tmp_yaml):
         arch_ser_yaml.write_arch(rv32i_arch_lite, tmp_yaml)
@@ -271,27 +285,25 @@ class TestArchSerYaml:
     def test_from_operation_restores_fields(self):
         op = Operation(
             name="custom_add",
-            attributes=["volatile"],
+            attributes=[Attribute("volatile", "")],
             inputs=[32, 32],
             outputs=[32],
             semantic_base="add",
             semantic_func="add_func",
-            semantic_func_128="add_func_128",
             semantic_table="add_table",
         )
         typed = Add.from_operation(op)
         assert isinstance(typed, Add)
         assert typed.name == "custom_add"
-        assert typed.attributes == ["volatile"]
+        assert typed.attributes == [Attribute("volatile", "")]
         assert typed.semantic_base == "add"
         assert typed.semantic_func == "add_func"
-        assert typed.semantic_func_128 == "add_func_128"
         assert typed.semantic_table == "add_table"
 
     def test_typed_operation_roundtrip_preserves_fields(self, tmp_yaml):
         op = Operation(
             name="custom_add",
-            attributes=["volatile"],
+            attributes=[Attribute("volatile", "")],
             inputs=[32, 32],
             outputs=[32],
             semantic_base="add",
@@ -306,6 +318,6 @@ class TestArchSerYaml:
         op2 = arch2.operations[0]
         assert isinstance(op2, Add)
         assert op2.name == "custom_add"
-        assert op2.attributes == ["volatile"]
+        assert op2.attributes == [Attribute("volatile", "")]
         assert op2.semantic_func == "add_func"
         assert op2.semantic_table == "add_table"

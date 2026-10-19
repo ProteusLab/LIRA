@@ -588,15 +588,16 @@ module Lira
   end
 
   class SnippetBuilder < BaseBuilder
-    attr_reader :name
+    attr_reader :name, :attributes
 
-    def initialize(name)
+    def initialize(name, attributes = [])
       super()
       @name = name
+      @attributes = attributes
     end
 
     def build
-      Snippet.new(@name, @seq.build)
+      Snippet.new(@name, @attributes, @seq.build)
     end
   end
 

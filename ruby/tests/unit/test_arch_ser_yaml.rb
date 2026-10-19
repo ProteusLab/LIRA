@@ -60,13 +60,14 @@ class TestArchSerYaml < Minitest::Test
   end
 
   def test_register_attributes
-    rf = RegisterFile.new('R', [], Shape.new(32, nil), [Register.new('x0', ['zero']), Register.new('x1', [])])
+    rf = RegisterFile.new('R', [], Shape.new(32, nil),
+                          [Register.new('x0', [Attribute.new('zero', '')]), Register.new('x1', [])])
     ab = ArchBuilder.new('attrs', [])
     ab.add_register_file(rf)
     arch = ab.build
     ArchSerYaml.write_arch(arch, @tmp.path)
     arch2 = ArchSerYaml.read_arch(@tmp.path)
-    assert_equal ['zero'], arch2.register_files[0].regs[0].attributes
+    assert_equal [Attribute.new('zero', '')], arch2.register_files[0].regs[0].attributes
   end
 
   def test_system_register
@@ -90,9 +91,22 @@ class TestArchSerYaml < Minitest::Test
     assert_equal [1, 2, 3], arch2.tables_int[0].values
   end
 
+  def test_snippet_attributes
+    sb = SnippetBuilder.new('s', [Attribute.new('kind', 'test')])
+    a = sb.input(0, 32)
+    sb.output(a, 0)
+    ab = ArchBuilder.new('snip_attrs', [])
+    ab.add_snippet(sb.build)
+    arch = ab.build
+    ArchSerYaml.write_arch(arch, @tmp.path)
+    arch2 = ArchSerYaml.read_arch(@tmp.path)
+    assert_equal [Attribute.new('kind', 'test')], arch2.snippets[0].attributes
+  end
+
   def test_rv32i_lite_roundtrip
     rf = RegisterFile.new('XRegs', [], Shape.new(32, nil),
-                          [Register.new('x0', ['zero'])] + (1...32).map { |i| Register.new("x#{i}") })
+                          [Register.new('x0', [Attribute.new('zero', '')])] +
+                          (1...32).map { |i| Register.new("x#{i}") })
 
     ab = ArchBuilder.new('rv32i_lite', [])
     ab.add_register_file(rf)
@@ -178,21 +192,20 @@ class TestArchSerYaml < Minitest::Test
   end
 
   def test_from_operation_restores_fields
-    op = Operation.new('custom_add', ['volatile'], [32, 32], [32],
+    op = Operation.new('custom_add', [Attribute.new('volatile', '')], [32, 32], [32],
                        semantic_base: 'add', semantic_func: 'add_func',
-                       semantic_func_128: 'add_func_128', semantic_table: 'add_table')
+                       semantic_table: 'add_table')
     typed = Add.from_operation(op)
     assert_instance_of Add, typed
     assert_equal 'custom_add', typed.name
-    assert_equal ['volatile'], typed.attributes
+    assert_equal [Attribute.new('volatile', '')], typed.attributes
     assert_equal 'add', typed.semantic_base
     assert_equal 'add_func', typed.semantic_func
-    assert_equal 'add_func_128', typed.semantic_func_128
     assert_equal 'add_table', typed.semantic_table
   end
 
   def test_typed_operation_roundtrip_preserves_fields
-    op = Operation.new('custom_add', ['volatile'], [32, 32], [32],
+    op = Operation.new('custom_add', [Attribute.new('volatile', '')], [32, 32], [32],
                        semantic_base: 'add', semantic_func: 'add_func',
                        semantic_table: 'add_table')
     ab = ArchBuilder.new('fields', [])
@@ -203,7 +216,7 @@ class TestArchSerYaml < Minitest::Test
     op2 = arch2.operations[0]
     assert_instance_of Add, op2
     assert_equal 'custom_add', op2.name
-    assert_equal ['volatile'], op2.attributes
+    assert_equal [Attribute.new('volatile', '')], op2.attributes
     assert_equal 'add_func', op2.semantic_func
     assert_equal 'add_table', op2.semantic_table
   end
