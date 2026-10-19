@@ -2,6 +2,7 @@ import pytest
 
 from python.lira.ir import Shape
 from python.lira.arch import (
+    Attribute,
     Register,
     RegisterFile,
     EnvironmentFunction,
@@ -22,7 +23,8 @@ def rv32i_rf():
         "XRegs",
         [],
         Shape(32, None),
-        [Register("x0", ["zero"])] + [Register(f"x{i}") for i in range(1, 32)],
+        [Register("x0", [Attribute("zero", "")])] +
+        [Register(f"x{i}") for i in range(1, 32)],
     )
 
 
@@ -227,7 +229,7 @@ class TestInstructionBuilder:
 
 class TestArchBuilder:
     def test_build_arch(self, rv32i_rf):
-        ab = ArchBuilder("test", ["attr"])
+        ab = ArchBuilder("test", [Attribute("key", "value")])
         ab.add_register_file(rv32i_rf)
         arch = ab.build()
         assert arch.name == "test"
@@ -235,7 +237,7 @@ class TestArchBuilder:
 
     def test_add_env_operation_snippet(self):
         ab = ArchBuilder("test", [])
-        env = EnvironmentFunction("ld", ["mem"], [32], [32])
+        env = EnvironmentFunction("ld", [Attribute("kind", "mem")], [32], [32])
         op = Add(32)
         sb = SnippetBuilder("s1")
         a = sb.input(0, 32)

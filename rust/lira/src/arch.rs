@@ -3,33 +3,39 @@ use serde::{Deserialize, Serialize};
 use crate::*;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct Attribute {
+    pub name: String,
+    pub value: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct Snippet {
     pub name: String,
+    pub attributes: Vec<Attribute>,
     pub seq: StatementSeq,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct Operation {
     pub name: String,
-    pub attributes: Vec<String>,
+    pub attributes: Vec<Attribute>,
     pub inputs: Vec<usize>,
     pub outputs: Vec<usize>,
     pub semantic_base: Option<String>,
     pub semantic_func: Option<String>,
-    pub semantic_func_128: Option<String>,
     pub semantic_table: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct Register {
     pub name: String,
-    pub attributes: Vec<String>,
+    pub attributes: Vec<Attribute>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct RegisterFile {
     pub name: String,
-    pub attributes: Vec<String>,
+    pub attributes: Vec<Attribute>,
     pub reg_size: Shape,
     pub regs: Vec<Register>,
 }
@@ -47,7 +53,7 @@ impl RegisterFile {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct EnvironmentFunction {
     pub name: String,
-    pub attributes: Vec<String>,
+    pub attributes: Vec<Attribute>,
     pub inputs: Vec<usize>,
     pub outputs: Vec<usize>,
 }
@@ -55,7 +61,7 @@ pub struct EnvironmentFunction {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct SystemRegisterField {
     pub name: String,
-    pub attributes: Vec<String>,
+    pub attributes: Vec<Attribute>,
     pub lsb: usize,
     pub msb: usize,
 }
@@ -63,7 +69,7 @@ pub struct SystemRegisterField {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct SystemRegister {
     pub name: String,
-    pub attributes: Vec<String>,
+    pub attributes: Vec<Attribute>,
     pub size: usize,
     pub fields: Vec<SystemRegisterField>,
 }
@@ -71,7 +77,7 @@ pub struct SystemRegister {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct TableInt {
     pub name: String,
-    pub attributes: Vec<String>,
+    pub attributes: Vec<Attribute>,
     pub values: Vec<usize>,
 }
 
@@ -101,7 +107,7 @@ pub struct InstructionEncoding {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct Instruction {
     pub name: String,
-    pub attributes: Vec<String>,
+    pub attributes: Vec<Attribute>,
     pub operand_sizes: Vec<usize>,
     pub operand_names: Vec<String>,
     pub encoding: InstructionEncoding,
@@ -111,7 +117,7 @@ pub struct Instruction {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct Arch {
     pub name: String,
-    pub attributes: Vec<String>,
+    pub attributes: Vec<Attribute>,
     pub register_files: Vec<RegisterFile>,
     pub system_registers: Vec<SystemRegister>,
     pub environment_functions: Vec<EnvironmentFunction>,

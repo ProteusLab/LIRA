@@ -1,20 +1,22 @@
 from typing import ClassVar, Dict, Optional, TypeVar
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from .ir import *
 
 OperationT = TypeVar("OperationT", bound="Operation")
 
 @dataclass
-class Component:
+class Attribute:
     name: str
-    # Common interpretation of an argument: `$(<part>).*`
-    #  e.g. `pc.read`, `pc.write`, `kind.float`, `kind.mem.read`
-    attributes: list[str] # = field(default_factory=list)
+    value: str
 
 @dataclass
-class Snippet:
+class Component:
     name: str
+    attributes: list[Attribute]
+
+@dataclass
+class Snippet(Component):
     seq: StatementSeq
 
 @dataclass
@@ -23,7 +25,6 @@ class Operation(Component):
     outputs: list[int]
     semantic_base: Optional[str] = None
     semantic_func: Optional[str] = None # Snippet
-    semantic_func_128: Optional[str] = None # Snippet
     semantic_table: Optional[str] = None # TableInt
 
     typed_ops: ClassVar[Dict[str, type]] = {}
@@ -38,7 +39,6 @@ class Operation(Component):
         self.name = other.name
         self.attributes = other.attributes
         self.semantic_func = other.semantic_func
-        self.semantic_func_128 = other.semantic_func_128
         self.semantic_table = other.semantic_table
         return self
 
@@ -47,16 +47,16 @@ class Operation(Component):
             return NotImplemented
         return (self.name, self.attributes, self.inputs, self.outputs,
                 self.semantic_base, self.semantic_func,
-                self.semantic_func_128, self.semantic_table) == \
+                self.semantic_table) == \
                (other.name, other.attributes, other.inputs, other.outputs,
                 other.semantic_base, other.semantic_func,
-                other.semantic_func_128, other.semantic_table)
+                other.semantic_table)
 
 
 @dataclass
 class Register(Component):
-    def __init__(self, name, attributes: list[str] = []):
-        super().__init__(name=name, attributes=attributes)
+    def __init__(self, name, attributes: Optional[list[Attribute]] = None):
+        super().__init__(name=name, attributes=attributes if attributes is not None else [])
 
 @dataclass
 class RegisterFile(Component):
@@ -108,8 +108,6 @@ class Instruction(Component):
     operand_names: list[str]
 
     encoding: InstructionEncoding
-    # disassemble is relatively simple, but defining assembling...
-    # syntax: InstructionSyntax
 
     semantic: StatementSeq
 

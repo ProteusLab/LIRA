@@ -524,12 +524,13 @@ class BaseBuilder:
 
 
 class SnippetBuilder(BaseBuilder):
-    def __init__(self, name: str):
+    def __init__(self, name: str, attributes: Optional[List[Attribute]] = None):
         super().__init__()
         self.name = name
+        self.attributes = attributes or []
 
     def build(self) -> Snippet:
-        return Snippet(self.name, self.seq.build())
+        return Snippet(self.name, self.attributes, self.seq.build())
 
 
 class InstructionBuilder(BaseBuilder):
@@ -563,7 +564,7 @@ class InstructionBuilder(BaseBuilder):
 
 
 class ArchBuilder:
-    def __init__(self, name: str, attributes: List[str] = None):
+    def __init__(self, name: str, attributes: Optional[List[Attribute]] = None):
         self.name = name
         self.attributes = attributes or []
         self.register_files: List[RegisterFile] = []
