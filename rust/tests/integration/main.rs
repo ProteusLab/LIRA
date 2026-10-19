@@ -39,6 +39,7 @@ fn test_roundtrip_from_reference() {
     assert_eq!(ref_arch.system_registers, arch2.system_registers);
     assert_eq!(ref_arch.environment_functions, arch2.environment_functions);
     assert_eq!(ref_arch.tables_int, arch2.tables_int);
+    assert_eq!(ref_arch.tables_str, arch2.tables_str);
     assert_eq!(ref_arch.operations, arch2.operations);
     assert_eq!(ref_arch.snippets, arch2.snippets);
     assert_eq!(ref_arch.instructions, arch2.instructions);

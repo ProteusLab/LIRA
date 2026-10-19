@@ -88,6 +88,10 @@ class TableInt(Component):
     values: list[int]
 
 @dataclass
+class TableStr(Component):
+    values: list[str]
+
+@dataclass
 class InstructionEncoding:
     encoded_size: int
     # Used to reuse same encode/constraint_decode for multiple instructions
@@ -103,11 +107,18 @@ class InstructionEncoding:
     constraint_encode: str # Snippet
 
 @dataclass
+class InstructionSyntax:
+    mnemonic: str
+    condition: str # Snippet
+    syntax: str # Snippet
+
+@dataclass
 class Instruction(Component):
     operand_sizes: list[int]
     operand_names: list[str]
 
     encoding: InstructionEncoding
+    syntaxes: list[InstructionSyntax]
 
     semantic: StatementSeq
 
@@ -122,6 +133,7 @@ class Arch(Component):
     # Variable Architecture part
     # Same architecture can be defined with different instruction grouping
     tables_int: list[TableInt]
+    tables_str: list[TableStr]
     operations: list[Operation]
     snippets: list[Snippet]
     instructions: list[Instruction]

@@ -13,6 +13,7 @@ from python.lira.arch import (
     EnvironmentFunction,
     InstructionEncoding,
     Operation,
+    TableStr,
 )
 from python.lira.ir_builder import ArchBuilder, SnippetBuilder, InstructionBuilder
 
@@ -34,6 +35,7 @@ def build_test_arch() -> ArchBuilder:
     pc_write = EnvironmentFunction(
         "pc_write", [Attribute("kind", "pc.write")], [32], []
     )
+    reg_names = TableStr("reg_names", [], [f"x{i}" for i in range(32)])
 
     # ------------------------------------------------------------------
     # op_extend_sign_inner_32
@@ -199,6 +201,7 @@ def build_test_arch() -> ArchBuilder:
         .add_env_func(st32)
         .add_env_func(pc_read)
         .add_env_func(pc_write)
+        .add_table_str(reg_names)
         .add_operation(op_extend_sign)
         .add_operation(op_extract_inner)
         .add_operation(op_orr_shifted)

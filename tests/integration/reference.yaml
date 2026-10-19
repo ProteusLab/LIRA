@@ -66,6 +66,42 @@ environment_functions:
       - 32
     outputs: []
 tables_int: []
+tables_str:
+  - name: reg_names
+    attributes: []
+    values:
+      - x0
+      - x1
+      - x2
+      - x3
+      - x4
+      - x5
+      - x6
+      - x7
+      - x8
+      - x9
+      - x10
+      - x11
+      - x12
+      - x13
+      - x14
+      - x15
+      - x16
+      - x17
+      - x18
+      - x19
+      - x20
+      - x21
+      - x22
+      - x23
+      - x24
+      - x25
+      - x26
+      - x27
+      - x28
+      - x29
+      - x30
+      - x31
 operations:
   - name: add_32
     attributes: []
@@ -646,6 +682,70 @@ snippets:
       1 32 _t4 = const 115;
       1 1 _t5 = op eq_32 _t3 _t4;
       1 = output 0 _t5;
+  - name: syntax_cond_true
+    attributes:
+      - name: kind
+        value: syntax
+    seq: |
+      1 1 _t1 = const 1;
+      1 = output 0 _t1;
+  - name: syntax_rd_rs1_rs2
+    attributes:
+      - name: kind
+        value: syntax
+    seq: |
+      1 32 _rs2 = input 0;
+      1 32 _rs1 = input 1;
+      1 32 _rd = input 2;
+      1 = dyn_string mnemonic;
+      1 = whitespace _;
+      1 = table reg_names _rd;
+      1 = string ,;
+      1 = whitespace _;
+      1 = table reg_names _rs1;
+      1 = string ,;
+      1 = whitespace _;
+      1 = table reg_names _rs2;
+  - name: syntax_rs1_rs2_imm
+    attributes:
+      - name: kind
+        value: syntax
+    seq: |
+      1 32 _imm = input 0;
+      1 32 _rs1 = input 1;
+      1 32 _rs2 = input 2;
+      1 = dyn_string mnemonic;
+      1 = whitespace _;
+      1 = table reg_names _rs1;
+      1 = string ,;
+      1 = whitespace _;
+      1 = table reg_names _rs2;
+      1 = string ,;
+      1 = whitespace _;
+      1 = format dec _imm;
+  - name: syntax_reg_imm_mem
+    attributes:
+      - name: kind
+        value: syntax
+    seq: |
+      1 32 _imm = input 0;
+      1 32 _rs1 = input 1;
+      1 32 _reg = input 2;
+      1 = dyn_string mnemonic;
+      1 = whitespace _;
+      1 = table reg_names _reg;
+      1 = string ,;
+      1 = whitespace _;
+      1 = format dec _imm;
+      1 = string (;
+      1 = table reg_names _rs1;
+      1 = string );
+  - name: syntax_no_operands
+    attributes:
+      - name: kind
+        value: syntax
+    seq: |
+      1 = dyn_string mnemonic;
 instructions:
   - name: add
     attributes: []
@@ -668,6 +768,10 @@ instructions:
       encode: encode_0
       constraint_decode: constraint_0
       constraint_encode: ''
+    syntaxes:
+      - mnemonic: add
+        condition: syntax_cond_true
+        syntax: syntax_rd_rs1_rs2
     semantic: |
       1 32 _t3 = input 1;
       1 32 _t4 = read XRegs _t3;
@@ -697,6 +801,10 @@ instructions:
       encode: encode_1
       constraint_decode: constraint_1
       constraint_encode: ''
+    syntaxes:
+      - mnemonic: beq
+        condition: syntax_cond_true
+        syntax: syntax_rs1_rs2_imm
     semantic: |
       1 32 _t3 = input 1;
       1 32 _t4 = read XRegs _t3;
@@ -731,6 +839,10 @@ instructions:
       encode: encode_2
       constraint_decode: constraint_2
       constraint_encode: ''
+    syntaxes:
+      - mnemonic: jalr
+        condition: syntax_cond_true
+        syntax: syntax_reg_imm_mem
     semantic: |
       1 32 _t2 = env getPC;
       1 32 _t3 = const 4;
@@ -765,6 +877,10 @@ instructions:
       encode: encode_3
       constraint_decode: constraint_3
       constraint_encode: ''
+    syntaxes:
+      - mnemonic: sh
+        condition: syntax_cond_true
+        syntax: syntax_reg_imm_mem
     semantic: |
       1 32 _t3 = input 1;
       1 32 _t4 = read XRegs _t3;
@@ -797,6 +913,10 @@ instructions:
       encode: encode_4
       constraint_decode: constraint_4
       constraint_encode: ''
+    syntaxes:
+      - mnemonic: lh
+        condition: syntax_cond_true
+        syntax: syntax_reg_imm_mem
     semantic: |
       1 32 _t3 = input 1;
       1 32 _t4 = read XRegs _t3;
@@ -827,6 +947,10 @@ instructions:
       encode: encode_5
       constraint_decode: constraint_5
       constraint_encode: ''
+    syntaxes:
+      - mnemonic: lhu
+        condition: syntax_cond_true
+        syntax: syntax_reg_imm_mem
     semantic: |
       1 32 _t3 = input 1;
       1 32 _t4 = read XRegs _t3;
@@ -848,5 +972,9 @@ instructions:
       encode: ''
       constraint_decode: constraint_6
       constraint_encode: ''
+    syntaxes:
+      - mnemonic: ecall
+        condition: syntax_cond_true
+        syntax: syntax_no_operands
     semantic: |
       1 = env sysCall;

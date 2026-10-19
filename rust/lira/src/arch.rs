@@ -82,6 +82,13 @@ pub struct TableInt {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct TableStr {
+    pub name: String,
+    pub attributes: Vec<Attribute>,
+    pub values: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct InstructionEncoding {
     pub encoded_size: usize,
     pub const_encoding_part: usize,
@@ -105,12 +112,20 @@ pub struct InstructionEncoding {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct InstructionSyntax {
+    pub mnemonic: String,
+    pub condition: String,
+    pub syntax: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct Instruction {
     pub name: String,
     pub attributes: Vec<Attribute>,
     pub operand_sizes: Vec<usize>,
     pub operand_names: Vec<String>,
     pub encoding: InstructionEncoding,
+    pub syntaxes: Vec<InstructionSyntax>,
     pub semantic: StatementSeq,
 }
 
@@ -122,6 +137,7 @@ pub struct Arch {
     pub system_registers: Vec<SystemRegister>,
     pub environment_functions: Vec<EnvironmentFunction>,
     pub tables_int: Vec<TableInt>,
+    pub tables_str: Vec<TableStr>,
     pub operations: Vec<Operation>,
     pub snippets: Vec<Snippet>,
     pub instructions: Vec<Instruction>,
