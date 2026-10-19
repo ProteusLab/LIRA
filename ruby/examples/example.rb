@@ -15,6 +15,7 @@ def build_test_arch
   st32 = EnvironmentFunction.new('st32', [Attribute.new('kind', 'mem.write')], [32,32], [])
   pc_read = EnvironmentFunction.new('pc_read', [Attribute.new('kind', 'pc.read')], [], [32])
   pc_write = EnvironmentFunction.new('pc_write', [Attribute.new('kind', 'pc.write')], [32], [])
+  reg_names = TableStr.new('reg_names', [], (0...32).map { |i| "x#{i}" })
 
   # op_extend_sign_inner_32 snippet
   snip = SnippetBuilder.new('op_extend_sign_inner_32')
@@ -130,6 +131,7 @@ def build_test_arch
   arch_builder = ArchBuilder.new('test_arch', [Attribute.new('key1', 'value1'), Attribute.new('key2', 'value2')])
   arch_builder.add_register_file(rf)
   arch_builder.add_env_func(ld32).add_env_func(st32).add_env_func(pc_read).add_env_func(pc_write)
+  arch_builder.add_table_str(reg_names)
   arch_builder.add_operation(op_extend_sign).add_operation(op_extract_inner).add_operation(op_orr_shifted)
   arch_builder.add_snippet(extend_sign_inner).add_snippet(extract_inner_snip).add_snippet(orr_shifted_snip)
   arch_builder.add_snippet(decode_rs1).add_snippet(decode_rs2).add_snippet(decode_imm).add_snippet(encode_b_snip)

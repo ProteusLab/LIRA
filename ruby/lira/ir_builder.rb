@@ -602,14 +602,15 @@ module Lira
   end
 
   class InstructionBuilder < BaseBuilder
-    attr_reader :name, :operand_sizes, :operand_names, :encoding
+    attr_reader :name, :operand_sizes, :operand_names, :encoding, :syntaxes
 
-    def initialize(name, operand_sizes, operand_names, encoding)
+    def initialize(name, operand_sizes, operand_names, encoding, syntaxes = [])
       super()
       @name = name
       @operand_sizes = operand_sizes
       @operand_names = operand_names
       @encoding = encoding
+      @syntaxes = syntaxes
     end
 
     def add_input_operand(idx, width = nil)
@@ -617,11 +618,16 @@ module Lira
       input(idx, w)
     end
 
+    def add_syntax(mnemonic, condition, syntax)
+      @syntaxes << InstructionSyntax.new(mnemonic, condition, syntax)
+      self
+    end
+
     def build
       Instruction.new(
         @name, [],
         @operand_sizes, @operand_names,
-        @encoding,
+        @encoding, @syntaxes,
         @seq.build
       )
     end
@@ -629,7 +635,7 @@ module Lira
 
   class ArchBuilder
     attr_reader :name, :attributes, :register_files, :system_registers,
-                :environment_functions, :tables_int, :operations,
+                :environment_functions, :tables_int, :tables_str, :operations,
                 :snippets, :instructions
 
     def initialize(name, attributes = [])
@@ -639,6 +645,7 @@ module Lira
       @system_registers = []
       @environment_functions = []
       @tables_int = []
+      @tables_str = []
       @operations = []
       @snippets = []
       @instructions = []
@@ -664,6 +671,11 @@ module Lira
       self
     end
 
+    def add_table_str(table)
+      @tables_str << table
+      self
+    end
+
     def add_operation(op)
       @operations << op
       self
@@ -686,6 +698,7 @@ module Lira
         system_registers: @system_registers,
         environment_functions: @environment_functions,
         tables_int: @tables_int,
+        tables_str: @tables_str,
         operations: @operations,
         snippets: @snippets,
         instructions: @instructions

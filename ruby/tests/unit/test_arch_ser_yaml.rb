@@ -91,6 +91,32 @@ class TestArchSerYaml < Minitest::Test
     assert_equal [1, 2, 3], arch2.tables_int[0].values
   end
 
+  def test_table_str
+    table = TableStr.new('t', [], ['x0', 'x1', 'x2'])
+    ab = ArchBuilder.new('tbl_str', [])
+    ab.add_table_str(table)
+    arch = ab.build
+    ArchSerYaml.write_arch(arch, @tmp.path)
+    arch2 = ArchSerYaml.read_arch(@tmp.path)
+    assert_equal ['x0', 'x1', 'x2'], arch2.tables_str[0].values
+  end
+
+  def test_instruction_syntaxes
+    rf = RegisterFile.new('X', [], Shape.new(32, nil), [Register.new('x0')])
+    enc = InstructionEncoding.new(32, 0, 0, [], '', '', '')
+    ib = InstructionBuilder.new('test', [5, 5], ['rs1', 'rs2'], enc)
+    ib.add_input_operand(0, 5)
+    ib.add_input_operand(1, 5)
+    ib.add_syntax('mnemonic', 'cond', 'syntax')
+    ab = ArchBuilder.new('w_syntax', [])
+    ab.add_register_file(rf)
+    ab.add_instruction(ib.build)
+    arch = ab.build
+    ArchSerYaml.write_arch(arch, @tmp.path)
+    arch2 = ArchSerYaml.read_arch(@tmp.path)
+    assert_equal [InstructionSyntax.new('mnemonic', 'cond', 'syntax')], arch2.instructions[0].syntaxes
+  end
+
   def test_snippet_attributes
     sb = SnippetBuilder.new('s', [Attribute.new('kind', 'test')])
     a = sb.input(0, 32)

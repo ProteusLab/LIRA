@@ -11,9 +11,11 @@ from python.lira.arch import (
     RegisterFile,
     EnvironmentFunction,
     InstructionEncoding,
+    InstructionSyntax,
     SystemRegister,
     SystemRegisterField,
     TableInt,
+    TableStr,
 )
 from python.lira.ir_builder import ArchBuilder, SnippetBuilder, InstructionBuilder
 from python.lira.ir_ops import (
@@ -233,6 +235,33 @@ class TestArchSerYaml:
         arch_ser_yaml.write_arch(arch, tmp_yaml)
         arch2 = arch_ser_yaml.read_arch(tmp_yaml)
         assert arch2.tables_int[0].values == [1, 2, 3]
+
+    def test_table_str(self, tmp_yaml):
+        table = TableStr("t", [], ["x0", "x1", "x2"])
+        ab = ArchBuilder("tbl_str", [])
+        ab.add_table_str(table)
+        arch = ab.build()
+        arch_ser_yaml.write_arch(arch, tmp_yaml)
+        arch2 = arch_ser_yaml.read_arch(tmp_yaml)
+        assert arch2.tables_str[0].values == ["x0", "x1", "x2"]
+
+    def test_instruction_syntaxes(self, tmp_yaml):
+        rf = RegisterFile("X", [], Shape(32, None), [Register("x0")])
+        enc = InstructionEncoding(32, 0, 0, [], "", "", "")
+        ib = InstructionBuilder("test", [5, 5], ["rs1", "rs2"], enc)
+        ib.add_input_operand(0, 5)
+        ib.add_input_operand(1, 5)
+        ib.add_syntax("mnemonic", "cond", "syntax")
+        instr = ib.build()
+        ab = ArchBuilder("w_syntax", [])
+        ab.add_register_file(rf)
+        ab.add_instruction(instr)
+        arch = ab.build()
+        arch_ser_yaml.write_arch(arch, tmp_yaml)
+        arch2 = arch_ser_yaml.read_arch(tmp_yaml)
+        assert arch2.instructions[0].syntaxes == [
+            InstructionSyntax("mnemonic", "cond", "syntax")
+        ]
 
     def test_snippet_attributes(self, tmp_yaml):
         sb = SnippetBuilder("s", [Attribute("kind", "test")])
