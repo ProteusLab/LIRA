@@ -194,7 +194,7 @@ end
 class TestArchBuilder < Minitest::Test
   def test_build_arch
     rf = RegisterFile.new('XRegs', [], Shape.new(32, nil), [Register.new('x0')])
-    ab = ArchBuilder.new('test', ['attr'])
+    ab = ArchBuilder.new('test', [Attribute.new('key', 'value')])
     ab.add_register_file(rf)
     arch = ab.build
     assert_equal 'test', arch.name
@@ -203,7 +203,7 @@ class TestArchBuilder < Minitest::Test
 
   def test_add_env_operation_snippet
     ab = ArchBuilder.new('test', [])
-    env = EnvironmentFunction.new('ld', ['mem'], [32], [32])
+    env = EnvironmentFunction.new('ld', [Attribute.new('kind', 'mem')], [32], [32])
     op = Add.new(32)
     sb = SnippetBuilder.new('s1')
     a = sb.input(0, 32)

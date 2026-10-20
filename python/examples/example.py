@@ -6,7 +6,15 @@ import sys
 from pathlib import Path
 
 from python.lira.ir import Shape
-from python.lira.arch import Register, RegisterFile, EnvironmentFunction, InstructionEncoding, Operation
+from python.lira.arch import (
+    Attribute,
+    Register,
+    RegisterFile,
+    EnvironmentFunction,
+    InstructionEncoding,
+    Operation,
+    TableStr,
+)
 from python.lira.ir_builder import ArchBuilder, SnippetBuilder, InstructionBuilder
 
 from python.lira import arch_ser_yaml
@@ -15,10 +23,19 @@ def build_test_arch() -> ArchBuilder:
     registers = [Register(f"x{i}") for i in range(32)]
     rf = RegisterFile("X", [], Shape(32, None), registers)
 
-    ld32 = EnvironmentFunction("ld32", ["mem.read"], [32], [32])
-    st32 = EnvironmentFunction("st32", ["mem.write"], [32, 32], [])
-    pc_read = EnvironmentFunction("pc_read", ["pc.read"], [], [32])
-    pc_write = EnvironmentFunction("pc_write", ["pc.write"], [32], [])
+    ld32 = EnvironmentFunction(
+        "ld32", [Attribute("kind", "mem.read")], [32], [32]
+    )
+    st32 = EnvironmentFunction(
+        "st32", [Attribute("kind", "mem.write")], [32, 32], []
+    )
+    pc_read = EnvironmentFunction(
+        "pc_read", [Attribute("kind", "pc.read")], [], [32]
+    )
+    pc_write = EnvironmentFunction(
+        "pc_write", [Attribute("kind", "pc.write")], [32], []
+    )
+    reg_names = TableStr("reg_names", [], [f"x{i}" for i in range(32)])
 
     # ------------------------------------------------------------------
     # op_extend_sign_inner_32
@@ -175,12 +192,16 @@ def build_test_arch() -> ArchBuilder:
     blt_instr = instr_builder.build()
 
     arch_builder = (
-        ArchBuilder("test_arch", ["attr.1", "attr.2"])
+        ArchBuilder(
+            "test_arch",
+            [Attribute("key1", "value1"), Attribute("key2", "value2")],
+        )
         .add_register_file(rf)
         .add_env_func(ld32)
         .add_env_func(st32)
         .add_env_func(pc_read)
         .add_env_func(pc_write)
+        .add_table_str(reg_names)
         .add_operation(op_extend_sign)
         .add_operation(op_extract_inner)
         .add_operation(op_orr_shifted)

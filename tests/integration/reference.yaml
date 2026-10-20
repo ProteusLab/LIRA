@@ -9,7 +9,8 @@ register_files:
     regs:
       - name: x0
         attributes:
-          - zero
+          - name: zero
+            value: ''
       - name: x1
         attributes: []
       - name: x2
@@ -34,7 +35,8 @@ register_files:
     regs:
       - name: pc
         attributes:
-          - pc
+          - name: pc
+            value: ''
 system_registers: []
 environment_functions:
   - name: sysCall
@@ -64,6 +66,42 @@ environment_functions:
       - 32
     outputs: []
 tables_int: []
+tables_str:
+  - name: reg_names
+    attributes: []
+    values:
+      - x0
+      - x1
+      - x2
+      - x3
+      - x4
+      - x5
+      - x6
+      - x7
+      - x8
+      - x9
+      - x10
+      - x11
+      - x12
+      - x13
+      - x14
+      - x15
+      - x16
+      - x17
+      - x18
+      - x19
+      - x20
+      - x21
+      - x22
+      - x23
+      - x24
+      - x25
+      - x26
+      - x27
+      - x28
+      - x29
+      - x30
+      - x31
 operations:
   - name: add_32
     attributes: []
@@ -74,7 +112,6 @@ operations:
       - 32
     semantic_base: add
     semantic_func:
-    semantic_func_128:
     semantic_table:
   - name: lsr_32
     attributes: []
@@ -85,7 +122,6 @@ operations:
       - 32
     semantic_base: lsr
     semantic_func:
-    semantic_func_128:
     semantic_table:
   - name: extract_low_32_to_5
     attributes: []
@@ -95,7 +131,6 @@ operations:
       - 5
     semantic_base: extract_low
     semantic_func:
-    semantic_func_128:
     semantic_table:
   - name: extend_zero_5_to_32
     attributes: []
@@ -105,7 +140,6 @@ operations:
       - 32
     semantic_base: extend_zero
     semantic_func:
-    semantic_func_128:
     semantic_table:
   - name: extend_zero_1_to_32
     attributes: []
@@ -115,7 +149,6 @@ operations:
       - 32
     semantic_base: extend_zero
     semantic_func:
-    semantic_func_128:
     semantic_table:
   - name: lsl_32
     attributes: []
@@ -126,7 +159,6 @@ operations:
       - 32
     semantic_base: lsl
     semantic_func:
-    semantic_func_128:
     semantic_table:
   - name: orr_32
     attributes: []
@@ -137,7 +169,6 @@ operations:
       - 32
     semantic_base: orr
     semantic_func:
-    semantic_func_128:
     semantic_table:
   - name: and_32
     attributes: []
@@ -148,7 +179,6 @@ operations:
       - 32
     semantic_base: and
     semantic_func:
-    semantic_func_128:
     semantic_table:
   - name: eq_32
     attributes: []
@@ -159,7 +189,6 @@ operations:
       - 1
     semantic_base: eq
     semantic_func:
-    semantic_func_128:
     semantic_table:
   - name: select_32
     attributes: []
@@ -171,7 +200,6 @@ operations:
       - 32
     semantic_base: select
     semantic_func:
-    semantic_func_128:
     semantic_table:
   - name: extract_low_32_to_1
     attributes: []
@@ -181,7 +209,6 @@ operations:
       - 1
     semantic_base: extract_low
     semantic_func:
-    semantic_func_128:
     semantic_table:
   - name: extend_zero_1_to_13
     attributes: []
@@ -191,7 +218,6 @@ operations:
       - 13
     semantic_base: extend_zero
     semantic_func:
-    semantic_func_128:
     semantic_table:
   - name: extend_zero_13_to_32
     attributes: []
@@ -201,7 +227,6 @@ operations:
       - 32
     semantic_base: extend_zero
     semantic_func:
-    semantic_func_128:
     semantic_table:
   - name: extract_low_32_to_6
     attributes: []
@@ -211,7 +236,6 @@ operations:
       - 6
     semantic_base: extract_low
     semantic_func:
-    semantic_func_128:
     semantic_table:
   - name: extend_zero_6_to_13
     attributes: []
@@ -221,7 +245,6 @@ operations:
       - 13
     semantic_base: extend_zero
     semantic_func:
-    semantic_func_128:
     semantic_table:
   - name: extract_low_32_to_4
     attributes: []
@@ -231,7 +254,6 @@ operations:
       - 4
     semantic_base: extract_low
     semantic_func:
-    semantic_func_128:
     semantic_table:
   - name: extend_zero_4_to_13
     attributes: []
@@ -241,7 +263,6 @@ operations:
       - 13
     semantic_base: extend_zero
     semantic_func:
-    semantic_func_128:
     semantic_table:
   - name: extract_low_32_to_13
     attributes: []
@@ -251,7 +272,6 @@ operations:
       - 13
     semantic_base: extract_low
     semantic_func:
-    semantic_func_128:
     semantic_table:
   - name: extend_sign_13_to_32
     attributes: []
@@ -261,7 +281,6 @@ operations:
       - 32
     semantic_base: extend_sign
     semantic_func:
-    semantic_func_128:
     semantic_table:
   - name: extract_low_32_to_12
     attributes: []
@@ -271,7 +290,6 @@ operations:
       - 12
     semantic_base: extract_low
     semantic_func:
-    semantic_func_128:
     semantic_table:
   - name: extend_sign_12_to_32
     attributes: []
@@ -281,7 +299,6 @@ operations:
       - 32
     semantic_base: extend_sign
     semantic_func:
-    semantic_func_128:
     semantic_table:
   - name: extract_low_32_to_16
     attributes: []
@@ -291,7 +308,6 @@ operations:
       - 16
     semantic_base: extract_low
     semantic_func:
-    semantic_func_128:
     semantic_table:
   - name: extract_low_32_to_7
     attributes: []
@@ -301,7 +317,6 @@ operations:
       - 7
     semantic_base: extract_low
     semantic_func:
-    semantic_func_128:
     semantic_table:
   - name: extend_zero_7_to_12
     attributes: []
@@ -311,7 +326,6 @@ operations:
       - 12
     semantic_base: extend_zero
     semantic_func:
-    semantic_func_128:
     semantic_table:
   - name: extend_zero_12_to_32
     attributes: []
@@ -321,7 +335,6 @@ operations:
       - 32
     semantic_base: extend_zero
     semantic_func:
-    semantic_func_128:
     semantic_table:
   - name: extend_zero_5_to_12
     attributes: []
@@ -331,7 +344,6 @@ operations:
       - 12
     semantic_base: extend_zero
     semantic_func:
-    semantic_func_128:
     semantic_table:
   - name: extend_sign_16_to_32
     attributes: []
@@ -341,7 +353,6 @@ operations:
       - 32
     semantic_base: extend_sign
     semantic_func:
-    semantic_func_128:
     semantic_table:
   - name: extend_zero_16_to_32
     attributes: []
@@ -351,10 +362,10 @@ operations:
       - 32
     semantic_base: extend_zero
     semantic_func:
-    semantic_func_128:
     semantic_table:
 snippets:
   - name: decode_0
+    attributes: []
     seq: |
       1 32 _t1 = input 0;
       1 32 _t3 = const 20;
@@ -363,6 +374,7 @@ snippets:
       1 32 _t6 = op extend_zero_5_to_32 _t5;
       1 = output 0 _t6;
   - name: decode_1
+    attributes: []
     seq: |
       1 32 _t1 = input 0;
       1 32 _t3 = const 15;
@@ -371,6 +383,7 @@ snippets:
       1 32 _t6 = op extend_zero_5_to_32 _t5;
       1 = output 0 _t6;
   - name: decode_2
+    attributes: []
     seq: |
       1 32 _t1 = input 0;
       1 32 _t3 = const 7;
@@ -379,6 +392,7 @@ snippets:
       1 32 _t6 = op extend_zero_5_to_32 _t5;
       1 = output 0 _t6;
   - name: encode_0
+    attributes: []
     seq: |
       1 32 _t1 = input 0;
       1 32 _t2 = input 1;
@@ -410,6 +424,7 @@ snippets:
       1 32 _t28 = op orr_32 _t23 _t27;
       1 = output 0 _t28;
   - name: constraint_0
+    attributes: []
     seq: |
       1 32 _t1 = input 0;
       1 32 _t2 = const 4261441663;
@@ -418,6 +433,7 @@ snippets:
       1 1 _t5 = op eq_32 _t3 _t4;
       1 = output 0 _t5;
   - name: decode_3
+    attributes: []
     seq: |
       1 32 _t1 = input 0;
       1 32 _t3 = const 31;
@@ -455,6 +471,7 @@ snippets:
       1 32 _t46 = op extend_sign_13_to_32 _t45;
       1 = output 0 _t46;
   - name: encode_1
+    attributes: []
     seq: |
       1 32 _t1 = input 0;
       1 32 _t2 = input 1;
@@ -478,6 +495,7 @@ snippets:
       1 32 _t20 = op orr_32 _t17 _t19;
       1 = output 0 _t20;
   - name: constraint_1
+    attributes: []
     seq: |
       1 32 _t1 = input 0;
       1 32 _t2 = const 28799;
@@ -486,6 +504,7 @@ snippets:
       1 1 _t5 = op eq_32 _t3 _t4;
       1 = output 0 _t5;
   - name: decode_4
+    attributes: []
     seq: |
       1 32 _t1 = input 0;
       1 32 _t3 = const 20;
@@ -494,6 +513,7 @@ snippets:
       1 32 _t6 = op extend_sign_12_to_32 _t5;
       1 = output 0 _t6;
   - name: encode_2
+    attributes: []
     seq: |
       1 32 _t1 = input 0;
       1 32 _t2 = input 1;
@@ -520,6 +540,7 @@ snippets:
       1 32 _t23 = op orr_32 _t20 _t22;
       1 = output 0 _t23;
   - name: constraint_2
+    attributes: []
     seq: |
       1 32 _t1 = input 0;
       1 32 _t2 = const 28799;
@@ -528,6 +549,7 @@ snippets:
       1 1 _t5 = op eq_32 _t3 _t4;
       1 = output 0 _t5;
   - name: decode_5
+    attributes: []
     seq: |
       1 32 _t1 = input 0;
       1 32 _t3 = const 25;
@@ -547,6 +569,7 @@ snippets:
       1 32 _t21 = op extend_sign_12_to_32 _t20;
       1 = output 0 _t21;
   - name: encode_3
+    attributes: []
     seq: |
       1 32 _t1 = input 0;
       1 32 _t2 = input 1;
@@ -570,6 +593,7 @@ snippets:
       1 32 _t20 = op orr_32 _t17 _t19;
       1 = output 0 _t20;
   - name: constraint_3
+    attributes: []
     seq: |
       1 32 _t1 = input 0;
       1 32 _t2 = const 28799;
@@ -578,6 +602,7 @@ snippets:
       1 1 _t5 = op eq_32 _t3 _t4;
       1 = output 0 _t5;
   - name: encode_4
+    attributes: []
     seq: |
       1 32 _t1 = input 0;
       1 32 _t2 = input 1;
@@ -604,6 +629,7 @@ snippets:
       1 32 _t23 = op orr_32 _t20 _t22;
       1 = output 0 _t23;
   - name: constraint_4
+    attributes: []
     seq: |
       1 32 _t1 = input 0;
       1 32 _t2 = const 28799;
@@ -612,6 +638,7 @@ snippets:
       1 1 _t5 = op eq_32 _t3 _t4;
       1 = output 0 _t5;
   - name: encode_5
+    attributes: []
     seq: |
       1 32 _t1 = input 0;
       1 32 _t2 = input 1;
@@ -638,6 +665,7 @@ snippets:
       1 32 _t23 = op orr_32 _t20 _t22;
       1 = output 0 _t23;
   - name: constraint_5
+    attributes: []
     seq: |
       1 32 _t1 = input 0;
       1 32 _t2 = const 28799;
@@ -646,6 +674,7 @@ snippets:
       1 1 _t5 = op eq_32 _t3 _t4;
       1 = output 0 _t5;
   - name: constraint_6
+    attributes: []
     seq: |
       1 32 _t1 = input 0;
       1 32 _t2 = const 4294967295;
@@ -653,6 +682,70 @@ snippets:
       1 32 _t4 = const 115;
       1 1 _t5 = op eq_32 _t3 _t4;
       1 = output 0 _t5;
+  - name: syntax_cond_true
+    attributes:
+      - name: kind
+        value: syntax
+    seq: |
+      1 1 _t1 = const 1;
+      1 = output 0 _t1;
+  - name: syntax_rd_rs1_rs2
+    attributes:
+      - name: kind
+        value: syntax
+    seq: |
+      1 32 _rs2 = input 0;
+      1 32 _rs1 = input 1;
+      1 32 _rd = input 2;
+      1 = dyn_string mnemonic;
+      1 = whitespace _;
+      1 = table reg_names _rd;
+      1 = string ,;
+      1 = whitespace _;
+      1 = table reg_names _rs1;
+      1 = string ,;
+      1 = whitespace _;
+      1 = table reg_names _rs2;
+  - name: syntax_rs1_rs2_imm
+    attributes:
+      - name: kind
+        value: syntax
+    seq: |
+      1 32 _imm = input 0;
+      1 32 _rs1 = input 1;
+      1 32 _rs2 = input 2;
+      1 = dyn_string mnemonic;
+      1 = whitespace _;
+      1 = table reg_names _rs1;
+      1 = string ,;
+      1 = whitespace _;
+      1 = table reg_names _rs2;
+      1 = string ,;
+      1 = whitespace _;
+      1 = format dec _imm;
+  - name: syntax_reg_imm_mem
+    attributes:
+      - name: kind
+        value: syntax
+    seq: |
+      1 32 _imm = input 0;
+      1 32 _rs1 = input 1;
+      1 32 _reg = input 2;
+      1 = dyn_string mnemonic;
+      1 = whitespace _;
+      1 = table reg_names _reg;
+      1 = string ,;
+      1 = whitespace _;
+      1 = format dec _imm;
+      1 = string (;
+      1 = table reg_names _rs1;
+      1 = string );
+  - name: syntax_no_operands
+    attributes:
+      - name: kind
+        value: syntax
+    seq: |
+      1 = dyn_string mnemonic;
 instructions:
   - name: add
     attributes: []
@@ -675,6 +768,10 @@ instructions:
       encode: encode_0
       constraint_decode: constraint_0
       constraint_encode: ''
+    syntaxes:
+      - mnemonic: add
+        condition: syntax_cond_true
+        syntax: syntax_rd_rs1_rs2
     semantic: |
       1 32 _t3 = input 1;
       1 32 _t4 = read XRegs _t3;
@@ -704,6 +801,10 @@ instructions:
       encode: encode_1
       constraint_decode: constraint_1
       constraint_encode: ''
+    syntaxes:
+      - mnemonic: beq
+        condition: syntax_cond_true
+        syntax: syntax_rs1_rs2_imm
     semantic: |
       1 32 _t3 = input 1;
       1 32 _t4 = read XRegs _t3;
@@ -738,6 +839,10 @@ instructions:
       encode: encode_2
       constraint_decode: constraint_2
       constraint_encode: ''
+    syntaxes:
+      - mnemonic: jalr
+        condition: syntax_cond_true
+        syntax: syntax_reg_imm_mem
     semantic: |
       1 32 _t2 = env getPC;
       1 32 _t3 = const 4;
@@ -772,6 +877,10 @@ instructions:
       encode: encode_3
       constraint_decode: constraint_3
       constraint_encode: ''
+    syntaxes:
+      - mnemonic: sh
+        condition: syntax_cond_true
+        syntax: syntax_reg_imm_mem
     semantic: |
       1 32 _t3 = input 1;
       1 32 _t4 = read XRegs _t3;
@@ -804,6 +913,10 @@ instructions:
       encode: encode_4
       constraint_decode: constraint_4
       constraint_encode: ''
+    syntaxes:
+      - mnemonic: lh
+        condition: syntax_cond_true
+        syntax: syntax_reg_imm_mem
     semantic: |
       1 32 _t3 = input 1;
       1 32 _t4 = read XRegs _t3;
@@ -834,6 +947,10 @@ instructions:
       encode: encode_5
       constraint_decode: constraint_5
       constraint_encode: ''
+    syntaxes:
+      - mnemonic: lhu
+        condition: syntax_cond_true
+        syntax: syntax_reg_imm_mem
     semantic: |
       1 32 _t3 = input 1;
       1 32 _t4 = read XRegs _t3;
@@ -855,5 +972,9 @@ instructions:
       encode: ''
       constraint_decode: constraint_6
       constraint_encode: ''
+    syntaxes:
+      - mnemonic: ecall
+        condition: syntax_cond_true
+        syntax: syntax_no_operands
     semantic: |
       1 = env sysCall;

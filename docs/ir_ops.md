@@ -11,7 +11,6 @@ class Operation(Component):
     outputs: list[int]
     semantic_base: Optional[str] = None
     semantic_func: Optional[str] = None
-    semantic_func_128: Optional[str] = None
     semantic_table: Optional[str] = None
 ```
 
