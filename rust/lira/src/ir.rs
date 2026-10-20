@@ -27,8 +27,6 @@ pub struct StatementSeq(pub Vec<Statement>);
 pub struct StatementSeqBuilder {
     stmts: Vec<Statement>,
     stmts_index: AHashMap<String, usize>,
-    tmp_prefix: String,
-    tmp_counter: usize,
 }
 
 impl Shape {
@@ -69,45 +67,8 @@ impl<'de> Deserialize<'de> for StatementSeq {
 }
 
 impl StatementSeqBuilder {
-    /// Note: writing bad value can lead to error in [`Self::try_push`] and nothing more
-    pub fn set_tmp_prefix(&mut self, prefix: impl ToString) {
-        self.tmp_prefix = prefix.to_string();
-    }
-    pub fn update_tmp_prefix<'a, 's: 'a>(
-        &'s mut self,
-        base: &str,
-        names_to_avoid: impl Iterator<Item = &'a String> + Clone,
-    ) {
-        let names_to_avoid = || {
-            names_to_avoid
-                .clone()
-                .chain(self.stmts.iter().flat_map(|stmt| stmt.outputs.iter()))
-        };
-        for i in 0..names_to_avoid().count() + 1 {
-            let prefix = format!("{base}{i}");
-            if names_to_avoid().all(|name| !name.starts_with(&prefix)) {
-                self.tmp_counter = 0;
-                self.tmp_prefix = prefix;
-                return;
-            }
-        }
-        unreachable!("names_to_avoid len + 1 prefixes should've been enough")
-    }
-    pub fn gen_temp_name(&mut self) -> String {
-        self.tmp_counter += 1;
-        format!("{}{}", self.tmp_prefix, self.tmp_counter)
-    }
-
     pub fn try_push_str(&mut self, s: &str) -> anyhow::Result<()> {
         self.try_push(Statement::parse(s)?)
-    }
-    pub fn try_push_gen_temp_names(&mut self, mut stmt: Statement) -> anyhow::Result<()> {
-        assert!(stmt.outputs.is_empty());
-        assert!(!stmt.outputs_types.is_empty());
-        stmt.outputs = (0..stmt.outputs_types.len())
-            .map(|_| self.gen_temp_name())
-            .collect();
-        self.try_push(stmt)
     }
     pub fn try_push(&mut self, stmt: Statement) -> anyhow::Result<()> {
         anyhow::ensure!(stmt.outputs.len() == stmt.outputs_types.len());

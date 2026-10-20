@@ -1,16 +1,10 @@
 use ahash::AHashMap;
 use anyhow::Context;
-use lira::{Operation, Statement, StatementSeq, StatementSeqBuilder};
+use lira::{Operation, StatementSeqBuilder};
 
 use crate::Arch;
 
 impl Arch {
-    pub fn generalize_operations(&mut self) {
-        let index = lira::Arch::build_index(&self.0.operations);
-        lira::Arch::iter_stmt_seq_mut_part(&mut self.0.instructions, &mut self.0.snippets)
-            .for_each(|(_, stmts)| generalize_operations_stmt_seq(stmts, &index));
-    }
-
     pub fn specialize_operations(&mut self) -> anyhow::Result<()> {
         let mut ops: AHashMap<_, _> = Default::default();
         for op in self.0.operations.iter() {
@@ -77,35 +71,4 @@ impl Arch {
 
         Ok(())
     }
-}
-
-pub fn generalize_operations_stmt_seq(
-    stmts: &mut StatementSeq,
-    index: &AHashMap<&str, &Operation>,
-) {
-    let mut r = StatementSeqBuilder::default();
-    for stmt in stmts.iter() {
-        r.try_push(generalize_operations_stmt(stmt, index)).unwrap();
-    }
-    *stmts = r.finish();
-}
-pub fn generalize_operations_stmt(
-    stmt: &Statement,
-    index: &AHashMap<&str, &Operation>,
-) -> Statement {
-    let mut stmt = stmt.clone();
-
-    if stmt.kind != "op" {
-        return stmt;
-    }
-
-    let op = &index[&stmt.specifier.as_str()];
-    let Some(base) = op.semantic_base.as_ref() else {
-        return stmt;
-    };
-
-    stmt.kind = "op.g".to_string();
-    stmt.specifier = base.to_string();
-
-    stmt
 }

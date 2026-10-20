@@ -38,10 +38,5 @@ fn operations() -> anyhow::Result<()> {
     assert_eq!(arch.0.snippets.len(), 1);
     assert_eq!(arch.0.snippets[0].seq, specialized);
 
-    arch.generalize_operations();
-
-    assert_eq!(arch.0.snippets.len(), 1);
-    assert_eq!(arch.0.snippets[0].seq, generic);
-
     Ok(())
 }

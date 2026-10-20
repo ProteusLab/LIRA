@@ -3,7 +3,7 @@ use std::sync::LazyLock;
 use ahash::AHashMap;
 use anyhow::{Result, bail, ensure};
 
-pub fn parse_signature_unary(outputs: &[usize], inputs: &[usize]) -> Result<[usize; 1]> {
+fn parse_signature_unary(outputs: &[usize], inputs: &[usize]) -> Result<[usize; 1]> {
     let &[n] = outputs else {
         bail!("unary: expected 1 output, got {}", outputs.len())
     };
@@ -14,7 +14,7 @@ pub fn parse_signature_unary(outputs: &[usize], inputs: &[usize]) -> Result<[usi
     Ok([n])
 }
 
-pub fn parse_signature_binary(outputs: &[usize], inputs: &[usize]) -> Result<[usize; 1]> {
+fn parse_signature_binary(outputs: &[usize], inputs: &[usize]) -> Result<[usize; 1]> {
     let &[n] = outputs else {
         bail!("binary: expected 1 output, got {}", outputs.len())
     };
@@ -25,7 +25,7 @@ pub fn parse_signature_binary(outputs: &[usize], inputs: &[usize]) -> Result<[us
     Ok([n])
 }
 
-pub fn parse_signature_ternary(outputs: &[usize], inputs: &[usize]) -> Result<[usize; 1]> {
+fn parse_signature_ternary(outputs: &[usize], inputs: &[usize]) -> Result<[usize; 1]> {
     let &[n] = outputs else {
         bail!("ternary: expected 1 output, got {}", outputs.len())
     };
@@ -39,7 +39,7 @@ pub fn parse_signature_ternary(outputs: &[usize], inputs: &[usize]) -> Result<[u
     Ok([n])
 }
 
-pub fn parse_signature_cmp(outputs: &[usize], inputs: &[usize]) -> Result<[usize; 1]> {
+fn parse_signature_cmp(outputs: &[usize], inputs: &[usize]) -> Result<[usize; 1]> {
     let &[o] = outputs else {
         bail!("cmp: expected 1 output, got {}", outputs.len())
     };
@@ -51,7 +51,7 @@ pub fn parse_signature_cmp(outputs: &[usize], inputs: &[usize]) -> Result<[usize
     Ok([a])
 }
 
-pub fn parse_signature_select(outputs: &[usize], inputs: &[usize]) -> Result<[usize; 1]> {
+fn parse_signature_select(outputs: &[usize], inputs: &[usize]) -> Result<[usize; 1]> {
     let &[n] = outputs else {
         bail!("select: expected 1 output, got {}", outputs.len())
     };
@@ -63,7 +63,7 @@ pub fn parse_signature_select(outputs: &[usize], inputs: &[usize]) -> Result<[us
     Ok([n])
 }
 
-pub fn parse_signature_extract_low(outputs: &[usize], inputs: &[usize]) -> Result<[usize; 2]> {
+fn parse_signature_extract_low(outputs: &[usize], inputs: &[usize]) -> Result<[usize; 2]> {
     let &[a] = outputs else {
         bail!("extract_low: expected 1 output, got {}", outputs.len())
     };
@@ -74,7 +74,7 @@ pub fn parse_signature_extract_low(outputs: &[usize], inputs: &[usize]) -> Resul
     Ok([a, b])
 }
 
-pub fn parse_signature_extend(outputs: &[usize], inputs: &[usize]) -> Result<[usize; 2]> {
+fn parse_signature_extend(outputs: &[usize], inputs: &[usize]) -> Result<[usize; 2]> {
     let &[a] = outputs else {
         bail!("extend: expected 1 output, got {}", outputs.len())
     };
@@ -85,7 +85,7 @@ pub fn parse_signature_extend(outputs: &[usize], inputs: &[usize]) -> Result<[us
     Ok([a, b])
 }
 
-pub fn parse_signature_insert(outputs: &[usize], inputs: &[usize]) -> Result<[usize; 2]> {
+fn parse_signature_insert(outputs: &[usize], inputs: &[usize]) -> Result<[usize; 2]> {
     let &[a] = outputs else {
         bail!("insert: expected 1 output, got {}", outputs.len())
     };
@@ -100,7 +100,7 @@ pub fn parse_signature_insert(outputs: &[usize], inputs: &[usize]) -> Result<[us
     Ok([a, b])
 }
 
-pub fn parse_signature_extract(outputs: &[usize], inputs: &[usize]) -> Result<[usize; 2]> {
+fn parse_signature_extract(outputs: &[usize], inputs: &[usize]) -> Result<[usize; 2]> {
     let &[a] = outputs else {
         bail!("extract: expected 1 output, got {}", outputs.len())
     };
@@ -112,7 +112,7 @@ pub fn parse_signature_extract(outputs: &[usize], inputs: &[usize]) -> Result<[u
     Ok([a, b1])
 }
 
-pub fn parse_signature_concat(outputs: &[usize], inputs: &[usize]) -> Result<[usize; 3]> {
+fn parse_signature_concat(outputs: &[usize], inputs: &[usize]) -> Result<[usize; 3]> {
     let &[a] = outputs else {
         bail!("concat: expected 1 output, got {}", outputs.len())
     };
