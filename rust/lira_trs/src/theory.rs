@@ -1,5 +1,8 @@
+use std::collections::BTreeMap;
+
 use dateg::{BaseValue, ContainerVec, TokenOpaque, TokenOpaqueMarker, theory};
-use dateg_extractors::dag::index_dag;
+use dateg_extractors::dag::{Extractor, index_dag};
+use lira::Shape;
 
 theory!(Lira(
     (sort Stmt)
@@ -36,8 +39,11 @@ theory!(Lira(
     (constructor in_many (InputsMany) Inputs)
 
     // Aliases
+
+    // Usually there's a single output
     (constructor sel0 (Stmt) Value)
 
+    // It's really inconvenient to work with a vector currently
     (constructor out0 () Outputs)
     (constructor out1 (usize) Outputs)
     (constructor out2 (usize usize) Outputs)
@@ -48,7 +54,17 @@ theory!(Lira(
     (constructor in3 (Value Value Value) Inputs)
     (constructor in4 (Value Value Value Value) Inputs)
 
+    // Commonly used
+    (constructor constant (Shape usize String) Stmt)
+    (constructor op_g_0 (Shape usize String Inputs) Stmt)
+
+    // Properties
+
+    (function shape_of (Value) Shape)
+    (function type_of (Value) usize)
+
     // Helper functions to work with vectors
+
     (evaluation out_many_len    (OutputsMany) usize { |(v,)| v.0.len() })
     (evaluation in_many_len     (InputsMany) usize  { |(v,)| v.0.len() })
     (evaluation_partial out_many_get (OutputsMany usize) usize { |(v, idx)| v.0.get(idx).copied() })
@@ -63,81 +79,87 @@ theory!(Lira(
     (evaluation vec2o (usize usize)         OutputsMany { |(a, b)| om(vec![a, b]) })
     (evaluation vec3o (usize usize usize)   OutputsMany { |(a, b, c)| om(vec![a, b, c]) })
 
-    (val c0 (usize) {0})
-    (val c1 (usize) {1})
-    (val c2 (usize) {2})
-    (val c3 (usize) {3})
-    (val c4 (usize) {4})
+    // Constants
 
-    (val scalar (Shape) { Shape(lira::Shape::new_scalar()) })
+    (val scalar (Shape) { Shape::new_scalar() })
 
-    (val s_op           (String) {"op".to_string()})
-    (val s_env          (String) {"env".to_string()})
-    (val s_read         (String) {"read".to_string()})
-    (val s_write        (String) {"write".to_string()})
-    (val s_cond_env     (String) {"cond_env".to_string()})
-    (val s_cond_read    (String) {"cond_read".to_string()})
-    (val s_cond_write   (String) {"cond_write".to_string()})
-    (val s_input        (String) {"input".to_string()})
-    (val s_output       (String) {"output".to_string()})
-    (val s_const        (String) {"const".to_string()})
-    (val s_index        (String) {"index".to_string()})
-    (val s_gather       (String) {"gather".to_string()})
-    (val s_replicate    (String) {"replicate".to_string()})
-    (val s_dyn_const    (String) {"dyn_const".to_string()})
+    (val s_                     (String) {"_".into()})
+    (val s_input                (String) {"input".into()})
+    (val s_output               (String) {"output".into()})
+    (val s_const                (String) {"const".into()})
+    (val s_dyn_const            (String) {"dyn_const".into()})
+    (val s_snippet              (String) {"snippet".into()})
+    (val s_cond_pc_read         (String) {"cond.pc.read".into()})
+    (val s_cond_pc_write        (String) {"cond.pc.write".into()})
+    (val s_cond_sys_reg_read    (String) {"cond.sys_reg.read".into()})
+    (val s_cond_sys_reg_write   (String) {"cond.sys_reg.write".into()})
+    (val s_op                   (String) {"op".into()})
+    (val s_fop                  (String) {"fop".into()})
+    (val s_env                  (String) {"env".into()})
+    (val s_cond_env             (String) {"cond.env".into()})
+    (val s_read                 (String) {"read".into()})
+    (val s_cond_read            (String) {"cond.read".into()})
+    (val s_write                (String) {"write".into()})
+    (val s_cond_write           (String) {"cond.write".into()})
+    (val s_broadcast            (String) {"broadcast".into()})
+    (val s_index                (String) {"index".into()})
+    (val s_gather               (String) {"gather".into()})
+    (val s_extract_first        (String) {"extract_first".into()})
+    (val s_extend_zero          (String) {"extend_zero".into()})
+    (val s_extend_ones          (String) {"extend_ones".into()})
+    (val s_cvi                  (String) {"cvi".into()})
 )(
-    (add _state_initial (initial))
-    (add _out0 (out0))
-    (add _in0 (in0))
+    // Add value to table to query it later
+    (add __state_initial (initial))
 
-    // Standard representation keeps inputs and outputs in an arbitrarily sized vector.
-    // Actual rewrites will use only fixed sizes, which are way simpler to work with.
-    // These rulesets convert between these two representations.
-    (set_ruleset_active "factorize vector arguments")
-    (rule (query o (out_many v)) (query {c0} (out_many_len v))
+    (set_ruleset_active "enrich")
+
+    (birewrite (sel 0 s) (sel0 s))
+
+    (rule (query o (out_many v)) (query 0 (out_many_len v))
         (set o (out0))
     )
-    (rule (query o (out_many v)) (query {c1} (out_many_len v))
-        (query o0 (out_many_get v {c0}))
+    (rule (query o (out_many v)) (query 1 (out_many_len v))
+        (query o0 (out_many_get v 0))
         (set o (out1 o0))
     )
-    (rule (query o (out_many v)) (query {c2} (out_many_len v))
-        (query o0 (out_many_get v {c0}))
-        (query o1 (out_many_get v {c1}))
+    (rule (query o (out_many v)) (query 2 (out_many_len v))
+        (query o0 (out_many_get v 0))
+        (query o1 (out_many_get v 1))
         (set o (out2 o0 o1))
     )
-    (rule (query o (out_many v)) (query {c3} (out_many_len v))
-        (query o0 (out_many_get v {c0}))
-        (query o1 (out_many_get v {c1}))
-        (query o2 (out_many_get v {c2}))
+    (rule (query o (out_many v)) (query 3 (out_many_len v))
+        (query o0 (out_many_get v 0))
+        (query o1 (out_many_get v 1))
+        (query o2 (out_many_get v 2))
         (set o (out3 o0 o1 o2))
     )
-    (rule (query i (in_many v)) (query {c0} (in_many_len v))
+    (rule (query i (in_many v)) (query 0 (in_many_len v))
         (set i (in0))
     )
-    (rule (query i (in_many v)) (query {c1} (in_many_len v))
-        (query i0 (in_many_get v {c0}))
+    (rule (query i (in_many v)) (query 1 (in_many_len v))
+        (query i0 (in_many_get v 0))
         (set i (in1 i0))
     )
-    (rule (query i (in_many v)) (query {c2} (in_many_len v))
-        (query i0 (in_many_get v {c0}))
-        (query i1 (in_many_get v {c1}))
+    (rule (query i (in_many v)) (query 2 (in_many_len v))
+        (query i0 (in_many_get v 0))
+        (query i1 (in_many_get v 1))
         (set i (in2 i0 i1))
     )
-    (rule (query i (in_many v)) (query {c3} (in_many_len v))
-        (query i0 (in_many_get v {c0}))
-        (query i1 (in_many_get v {c1}))
-        (query i2 (in_many_get v {c2}))
+    (rule (query i (in_many v)) (query 3 (in_many_len v))
+        (query i0 (in_many_get v 0))
+        (query i1 (in_many_get v 1))
+        (query i2 (in_many_get v 2))
         (set i (in3 i0 i1 i2))
     )
-    (rule (query i (in_many v)) (query {c4} (in_many_len v))
-        (query i0 (in_many_get v {c0}))
-        (query i1 (in_many_get v {c1}))
-        (query i2 (in_many_get v {c2}))
-        (query i3 (in_many_get v {c3}))
+    (rule (query i (in_many v)) (query 4 (in_many_len v))
+        (query i0 (in_many_get v 0))
+        (query i1 (in_many_get v 1))
+        (query i2 (in_many_get v 2))
+        (query i3 (in_many_get v 3))
         (set i (in4 i0 i1 i2 i3))
     )
-    (set_ruleset_active "de factorize vector arguments")
+
     (rule (query i (in0))               (set i (in_many (vec0i))))
     (rule (query i (in1 i0))            (set i (in_many (vec1i i0))))
     (rule (query i (in2 i0 i1))         (set i (in_many (vec2i i0 i1))))
@@ -148,9 +170,18 @@ theory!(Lira(
     (rule (query o (out2 o0 o1))    (set o (out_many (vec2o o0 o1))))
     (rule (query o (out3 o0 o1 o2)) (set o (out_many (vec3o o0 o1 o2))))
 
-    // Usually there's a single output
-    (set_ruleset_active "aliases convert")
-    (birewrite (sel {c0} s) (sel0 s))
+    (rule (query val (sel _ (stmt_p h _ _ _ _))) (set h (shape_of val)))
+    (rule (query val (sel _ (stmt_r h _ _ _ _ _))) (set h (shape_of val)))
+    (rule (query val (sel _ (stmt_w h _ _ _ _ _))) (set h (shape_of val)))
+    (rule (query val (sel n (stmt_p _ (out_many os) _ _ _)))
+        (query ty (out_many_get os n)) (set ty (type_of val)))
+    (rule (query val (sel n (stmt_r _ (out_many os) _ _ _ _)))
+        (query ty (out_many_get os n)) (set ty (type_of val)))
+    (rule (query val (sel n (stmt_w _ (out_many os) _ _ _ _)))
+        (query ty (out_many_get os n)) (set ty (type_of val)))
+
+    (birewrite (stmt_p h (out1 o) "const" v (in0)) (constant h o v))
+    (birewrite (stmt_p h (out1 o) "op.g" op i) (op_g_0 h o op i))
 ));
 
 index_dag!(Index
@@ -181,16 +212,25 @@ impl Lira {
         self.row_get(self.initial, ()).unwrap()
     }
 
-    pub fn extract(&self, t: impl TokenOpaqueMarker) -> Index {
-        Index::extract(
+    pub fn extractor(&self, root: impl TokenOpaqueMarker) -> Extractor<Index> {
+        Index::extractor(
             self,
-            t,
+            root,
             (self.stmt_p, self.stmt_r, self.stmt_w),
             self.out_many,
             self.in_many,
             (self.initial, self.state_after),
             self.sel,
         )
+    }
+
+    pub fn extract(&self, t: impl TokenOpaqueMarker) -> Index {
+        self.extractor(t).extract(self, t)
+    }
+
+    /// Run bunch of simple rulesets: aliases, properties, etc
+    pub fn enrich(&mut self) {
+        while self.run_ruleset("enrich") {}
     }
 
     pub fn _dbg_tables(&self) {
@@ -218,12 +258,47 @@ impl Lira {
             .for_each::<InputsMany>(|inputs, output| {
                 eprintln!("  _{output:?} <- {:?}", inputs.0);
             });
+
+        let mut strings = BTreeMap::new();
+        macro_rules! collect_strings {
+            ($table:ident) => {
+                self.for_each_row(self.$table, |inputs, _| {
+                    strings.insert(format!("{:?}", inputs.2), inputs.2);
+                    strings.insert(format!("{:?}", inputs.3), inputs.3);
+                });
+            };
+        }
+        collect_strings!(stmt_p);
+        collect_strings!(stmt_r);
+        collect_strings!(stmt_w);
+        eprintln!("Strings");
+        for (k, v) in strings.iter() {
+            eprintln!("  {k} {}", v.get(self))
+        }
+
+        macro_rules! print_ext {
+            ($table:ident $($do_5:literal)?) => {
+                eprintln!("{}", stringify!($table));
+                self.for_each_row(self.$table, |inputs, output| {
+                    eprint!("  {output:?} <- {} {:?} {} {} {:?}",
+                        inputs.0.get(self),
+                        inputs.1,
+                        inputs.2.get(self),
+                        inputs.3.get(self),
+                        inputs.4,
+                    );
+                    $(if $do_5 {
+                        eprint!(" {:?}", inputs.5);
+                    })?
+                    eprintln!();
+                });
+            };
+        }
+        print_ext!(stmt_p);
+        print_ext!(stmt_r true);
+        print_ext!(stmt_w true);
     }
 }
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Shape(pub lira::Shape);
-impl BaseValue for Shape {}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct OutputsMany(pub Vec<usize>);

@@ -5,6 +5,8 @@ mod ir;
 mod ir_ser_txt;
 mod ir_std;
 
+pub mod ir_ops;
+
 pub use arch::*;
 pub use arch_utils::ArchIndex;
 pub use ir::*;

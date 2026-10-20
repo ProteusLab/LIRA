@@ -12,11 +12,11 @@ pub struct Statement {
     pub implicit: Implicit,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum ImplicitKind {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Implicitness {
     Pure,
-    Implicit,
-    ImplicitRead,
+    Read,
+    Write,
 }
 #[derive(Default)]
 pub enum Implicit {

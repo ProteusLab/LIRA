@@ -8,6 +8,8 @@ pub struct Shape {
     pub lanes_base: usize,
     pub lanes_mult: Option<String>,
 }
+#[cfg(feature = "lira_dateg")]
+impl dateg::BaseValue for Shape {}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Statement {
@@ -20,7 +22,9 @@ pub struct Statement {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct StatementSeq {
+pub struct StatementSeq(pub Vec<Statement>);
+#[derive(Debug, Clone, Default)]
+pub struct StatementSeqBuilder {
     stmts: Vec<Statement>,
     stmts_index: AHashMap<String, usize>,
 }
@@ -43,46 +47,6 @@ impl Shape {
     }
 }
 
-impl Statement {
-    pub fn input<'a>(&self, id: usize, ss: &'a StatementSeq) -> anyhow::Result<&'a Statement> {
-        let err = || anyhow::anyhow!("id {id} out of range");
-        let name = self.inputs.get(id).ok_or_else(err)?;
-        let err = || anyhow::anyhow!("name {name} wasn't defined");
-        ss.stmts_index
-            .get(name)
-            .map(|&n| &ss.stmts[n])
-            .ok_or_else(err)
-    }
-}
-
-impl StatementSeq {
-    pub fn try_push(&mut self, stmt: Statement) -> anyhow::Result<()> {
-        assert_eq!(stmt.outputs.len(), stmt.outputs_types.len());
-        for name in &stmt.outputs {
-            anyhow::ensure!(!self.stmts_index.contains_key(name));
-            anyhow::ensure!(stmt.outputs.iter().filter(|&out| out == name).count() == 1);
-        }
-        for name in &stmt.inputs {
-            anyhow::ensure!(self.stmts_index.contains_key(name));
-        }
-
-        let idx = self.stmts.len();
-        self.stmts.push(stmt);
-        for name in &self.stmts[idx].outputs {
-            self.stmts_index.insert(name.clone(), idx);
-        }
-        Ok(())
-    }
-}
-
-impl Deref for StatementSeq {
-    type Target = [Statement];
-
-    fn deref(&self) -> &Self::Target {
-        &self.stmts
-    }
-}
-
 impl Serialize for StatementSeq {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -99,5 +63,79 @@ impl<'de> Deserialize<'de> for StatementSeq {
     {
         let s = String::deserialize(deserializer)?;
         StatementSeq::parse(&s).map_err(serde::de::Error::custom)
+    }
+}
+
+impl StatementSeqBuilder {
+    pub fn try_push_str(&mut self, s: &str) -> anyhow::Result<()> {
+        self.try_push(Statement::parse(s)?)
+    }
+    pub fn try_push(&mut self, stmt: Statement) -> anyhow::Result<()> {
+        anyhow::ensure!(stmt.outputs.len() == stmt.outputs_types.len());
+        for name in &stmt.outputs {
+            anyhow::ensure!(
+                !self.stmts_index.contains_key(name),
+                "output name {name:?} already defined",
+            );
+            anyhow::ensure!(
+                stmt.outputs.iter().filter(|&out| out == name).count() == 1,
+                "duplicate output name {name:?} within statement",
+            );
+        }
+        for name in &stmt.inputs {
+            anyhow::ensure!(
+                self.stmts_index.contains_key(name),
+                "input name {name:?} wasn't defined",
+            );
+        }
+
+        let idx = self.stmts.len();
+        for name in &stmt.outputs {
+            self.stmts_index.insert(name.clone(), idx);
+        }
+        self.stmts.push(stmt);
+        Ok(())
+    }
+
+    pub fn finish(self) -> StatementSeq {
+        StatementSeq(self.stmts)
+    }
+}
+
+impl StatementSeq {
+    pub fn iter_with_ext_inputs(&self) -> impl Iterator<Item = (&Statement, Vec<(&Shape, usize)>)> {
+        struct Iter<'a> {
+            s: &'a [Statement],
+            index: AHashMap<&'a String, (&'a Shape, usize)>,
+        }
+        impl<'a> Iterator for Iter<'a> {
+            type Item = (&'a Statement, Vec<(&'a Shape, usize)>);
+            fn next(&mut self) -> Option<Self::Item> {
+                let stmt = self.s.get(0)?;
+                self.s = &self.s[1..];
+                let inputs = stmt.inputs.iter().map(|i| self.index[i]).collect();
+                for (name, ty) in stmt.outputs.iter().zip(stmt.outputs_types.iter().copied()) {
+                    self.index.insert(name, (&stmt.shape, ty));
+                }
+                Some((stmt, inputs))
+            }
+        }
+        Iter {
+            s: self,
+            index: Default::default(),
+        }
+    }
+}
+
+impl Deref for StatementSeqBuilder {
+    type Target = [Statement];
+    fn deref(&self) -> &Self::Target {
+        &self.stmts
+    }
+}
+impl Deref for StatementSeq {
+    type Target = [Statement];
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }

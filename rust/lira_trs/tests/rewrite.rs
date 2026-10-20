@@ -20,38 +20,34 @@ fn rewrite() {
 
     let ir = lira::StatementSeq::parse(text).unwrap();
     let dfg = dfg::State::from_lira(&ir, |kind| match kind {
-        "input" | "op" | "const" => dfg::ImplicitKind::Pure,
-        _ => dfg::ImplicitKind::Implicit,
+        "input" | "op" | "const" => dfg::Implicitness::Pure,
+        _ => dfg::Implicitness::Write,
     });
 
     let mut lira = Lira::default();
     let state = dfg.to_egraph(&mut lira);
 
     let stmt_p = lira.stmt_p;
-    let sel = lira.sel;
+    let sel0 = lira.sel0;
     let in2 = lira.in2;
     let s_op = lira.s_op;
-    let c0 = lira.c0;
     execute! {lira;
-        (val add (String) {"add.64".to_string()})
-        (val sub (String) {"sub.64".to_string()})
-
         (set_ruleset_active "opt")
         (rewrite
-            (stmt_p h o {s_op} {add} (in2 a b))
-            (stmt_p h o {s_op} {add} (in2 b a))
+            (stmt_p h o {s_op} "add.64" (in2 a b))
+            (stmt_p h o {s_op} "add.64" (in2 b a))
         )
         (rewrite
-            (sel {c0} (stmt_p h o {s_op} {add} (in2
-                (sel {c0} (stmt_p h o {s_op} {sub} (in2 a b))) b
+            (sel0 (stmt_p h o {s_op} "add.64" (in2
+                (sel0 (stmt_p h o {s_op} "sub.64" (in2 a b))) b
             )))
             a
         )
     }
 
-    while lira.run_ruleset("factorize vector arguments") {}
+    lira.enrich();
     while lira.run_ruleset("opt") {}
-    while lira.run_ruleset("de factorize vector arguments") {}
+    lira.enrich();
 
     let dfg = dfg::State::from_egraph(&lira, state);
 

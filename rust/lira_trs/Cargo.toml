@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-lira = { path = "../lira" }
-dateg = { git = "https://github.com/belovdv/dateg.git", rev = "7abed4601dc5987263f3517bd829f6f1afd833e6" }
-dateg_extractors = { git = "https://github.com/belovdv/dateg.git", rev = "7abed4601dc5987263f3517bd829f6f1afd833e6" }
+lira = { path = "../lira", features = ["lira_dateg"] }
+dateg.workspace = true
+dateg_extractors.workspace = true
 log = { workspace = true }
 anyhow = { workspace = true }
 ahash = { workspace = true }
