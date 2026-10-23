@@ -49,7 +49,7 @@ function execute(seq, ctx)
 
 Kind: `input`
 
-Specifier: id of context-defined input to bind to value
+Specifier: id of context-defined input to bind value to
 
 Semantic: binds "input value" from context
 
@@ -91,7 +91,7 @@ Kind: `op`
 
 Specifier: name of `Operation`
 
-Semantic: per lane evaluate operation on given inputs
+Semantic: per-lane evaluate operation on given inputs
 
 Pseudocode: `values[output[.]] = [op(values[inputs[.]][i]) for i in shape]`
 
@@ -232,8 +232,8 @@ Kind: `dyn_const`
 Specifier: name of value to bind
 
 Semantic: get value from context
-- intendent usage: architecture-defined kinda dynamic part of architecture e.g. length of vector registers
-- literal usage: can get arbitrary context-defined value e.g. base for instraction encoding
+- intendent usage: architecture-defined kind of dynamic part of architecture e.g. length of vector registers
+- literal usage: can get arbitrary context-defined value e.g. base for instruction encoding
 
 Pseudocode: `values[output] = ctx.get_dyn_const(name)`
 
