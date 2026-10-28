@@ -328,6 +328,73 @@ The other SIMD statements are used as follows:
     CONSTRAINED UNPREDICTABLE choice for the data after it (zero).
   * What the ASL leaves ARBITRARY is not compared: FFR after WRFFR of a
     predicate that is not monotonic, ZA while it is disabled.
+* `test_semantics_isla.py` compares the integer instructions with the Sail
+  Arm model (sail-arm v9.4, translated from the 2023-03 ASL) symbolically,
+  for all inputs at once. [Isla](https://github.com/rems-project/isla) runs
+  the model on an opcode whose fields are free variables, except the register
+  numbers, from a free state. It prints one trace per path of the model.
+  `isla_oracle.py` then asks z3, per path, whether some field values,
+  registers, PC and memory make LIRA differ. LIRA's side comes from
+  `lira_smt.py`, the semantics as z3 terms. The comparison covers X0–X30,
+  SP, NZCV, next PC, memory, and the exception (SVC/BRK immediate,
+  UNDEFINED, alignment fault).
+  * **Results.** No path that differs is a proof that LIRA and the model agree.
+    A path that differs comes with a counterexample, which is replayed in the
+    interpreter.
+  * **Scope.** The instructions are those `lira_smt.py` models: 512 integer
+    A64 instructions without SIMD&FP, SVE/SME, system registers, exclusives,
+    PAuth and MOPS (`test_lira_smt.py` checks the z3 terms against the
+    interpreter).
+  * **Register numbers.** Each instruction runs with all different, each one
+    31 (SP or ZR), and all the same.
+  * **CONSTRAINED UNPREDICTABLE.** The model leaves each choice free: Isla
+    takes one path per allowed choice. LIRA must behave as the model does
+    with one fixed choice (e.g. `Constraint_UNKNOWN` for a load with
+    writeback into its base register). A value the ASL calls UNKNOWN may be
+    anything. A case the solver cannot decide within 10 minutes is reported
+    as `unknown`.
+  * **What Isla cannot execute symbolically.**
+    * A slice bounded by a field (EXTR) runs once per field value. That is
+      still a proof.
+    * Where the solver times out, the comparison runs on 24 concrete samples
+      instead and is reported as `sampled`. This is division with different
+      operands.
+    * Where Isla grows past `$LIRA_ISLA_MEMORY_GB` (default 6), the run is
+      stopped and the case is sampled too. Symbolic CRC32H, CRC32W and
+      CRC32X grow by about 0.7 GB/s, enough to hang the machine.
+    * A case that runs out of memory even on samples is reported as
+      `isla-memory`.
+  * **The machine** is `tests/isla/lira.toml`, a Linux EL0 process: unaligned
+    accesses allowed, LSE2, no SP alignment check, and a free PC.
+  * **Model patches.** `IR_PATCHES` change the model in five ways:
+    * Memory is Normal Write-Back. The MMU-off translation takes its
+      `HCR_EL2.DC` branch; setting DC for real would also enable stage 2.
+      Under the MMU-off default, Device memory, every unaligned access
+      faults and unaligned ordered and atomic accesses are UNPREDICTABLE.
+    * The model has no devices.
+    * UNDEFINED is taken as the Undefined Instruction exception.
+    * An encoding that says SEE another one is decoded again, as the
+      model's `__DecodeExecute` does. Isla's entry point only decodes once.
+    * UDIV/SDIV compute `RoundTowardsZero(Real(a) / Real(b))` as the
+      truncating integer division it equals (Isla has no reals).
+  * **Not compared.** State LIRA does not describe: BTI (`BTYPE`,
+    `BTypeCompatible`), the sleep of WFE/WFI, and the model's bookkeeping
+    registers.
+  * **Data aborts.** Address bits 63:52 set are an address size fault. Such
+    aborts belong to the environment and are not compared. For memory
+    instructions, the base register is below 2^48. With a register offset,
+    the base is in [2^46, 2^47) and the offset within ±2^40.
+  * **Setup.** Build `isla-footprint` and `isla-preprocess` (Rust, against
+    z3). Get `armv9p4.ir` from
+    [isla-snapshots](https://github.com/rems-project/isla-snapshots) and run
+    `python -m archs.aarch64.tests.isla_oracle prepare <dir>/armv9p4.ir`.
+  * **Environment.** `$ISLA_FOOTPRINT` and `$LIRA_ISLA_ARCH` (the prepared
+    `.irx`) locate them. Traces are cached in `$LIRA_ISLA_CACHE`.
+  * **Command line.** `python -m archs.aarch64.tests.isla_oracle compare
+    [--only RE] [-j N] [--report FILE]` runs the comparison outside pytest.
+  * **Cost.** Each case runs in a worker process with its Isla process, about
+    2 GB each. `$LIRA_ISLA_JOBS` sets how many run at once (default 4). A
+    first run of all 2,177 cases takes hours; later runs reuse the traces.
 * `test_semantics_sve.py` and `test_semantics_sme.py` compare SVE and SME with
   `qemu-system-aarch64 -cpu max` running a bare-metal image, a further check
   against an implementation. The states avoid documented QEMU 10.0.2
