@@ -250,10 +250,24 @@ version = "0.1.0"
 source = "git+https://github.com/belovdv/dateg.git?rev=7abed4601dc5987263f3517bd829f6f1afd833e6#7abed4601dc5987263f3517bd829f6f1afd833e6"
 dependencies = [
  "ahash",
- "dateg_macro",
- "egglog-bridge",
- "egglog-core-relations",
- "egglog-numeric-id",
+ "dateg_macro 0.1.0 (git+https://github.com/belovdv/dateg.git?rev=7abed4601dc5987263f3517bd829f6f1afd833e6)",
+ "egglog-bridge 2.0.0",
+ "egglog-core-relations 2.0.0",
+ "egglog-numeric-id 2.0.0",
+ "indexmap 2.14.0",
+ "paste",
+]
+
+[[package]]
+name = "dateg"
+version = "0.1.0"
+source = "git+https://github.com/belovdv/dateg.git?rev=abad7b4ce1e677515781306575a11930b6bfd9c4#abad7b4ce1e677515781306575a11930b6bfd9c4"
+dependencies = [
+ "ahash",
+ "dateg_macro 0.1.0 (git+https://github.com/belovdv/dateg.git?rev=abad7b4ce1e677515781306575a11930b6bfd9c4)",
+ "egglog-bridge 3.0.0",
+ "egglog-core-relations 3.0.0",
+ "egglog-numeric-id 3.0.0",
  "indexmap 2.14.0",
  "paste",
 ]
@@ -265,7 +279,7 @@ source = "git+https://github.com/belovdv/dateg.git?rev=7abed4601dc5987263f3517bd
 dependencies = [
  "ahash",
  "anyhow",
- "dateg",
+ "dateg 0.1.0 (git+https://github.com/belovdv/dateg.git?rev=7abed4601dc5987263f3517bd829f6f1afd833e6)",
  "dateg_extractors_macro",
  "du_utils_timed",
  "easy-smt",
@@ -288,6 +302,16 @@ dependencies = [
 name = "dateg_macro"
 version = "0.1.0"
 source = "git+https://github.com/belovdv/dateg.git?rev=7abed4601dc5987263f3517bd829f6f1afd833e6#7abed4601dc5987263f3517bd829f6f1afd833e6"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "dateg_macro"
+version = "0.1.0"
+source = "git+https://github.com/belovdv/dateg.git?rev=abad7b4ce1e677515781306575a11930b6bfd9c4#abad7b4ce1e677515781306575a11930b6bfd9c4"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -325,11 +349,34 @@ source = "git+https://github.com/egraphs-good/egglog.git?rev=60eed0d81849a56d503
 dependencies = [
  "anyhow",
  "dyn-clone",
- "egglog-concurrency",
- "egglog-core-relations",
- "egglog-numeric-id",
- "egglog-reports",
- "egglog-union-find",
+ "egglog-concurrency 2.0.0",
+ "egglog-core-relations 2.0.0",
+ "egglog-numeric-id 2.0.0",
+ "egglog-reports 2.0.0",
+ "egglog-union-find 2.0.0",
+ "hashbrown 0.16.1",
+ "indexmap 2.14.0",
+ "log",
+ "num-rational",
+ "once_cell",
+ "ordered-float",
+ "smallvec",
+ "thiserror",
+ "web-time",
+]
+
+[[package]]
+name = "egglog-bridge"
+version = "3.0.0"
+source = "git+https://github.com/egraphs-good/egglog.git?rev=8879605cafad303db25787406163a7e5bc845f5d#8879605cafad303db25787406163a7e5bc845f5d"
+dependencies = [
+ "anyhow",
+ "dyn-clone",
+ "egglog-concurrency 3.0.0",
+ "egglog-core-relations 3.0.0",
+ "egglog-numeric-id 3.0.0",
+ "egglog-reports 3.0.0",
+ "egglog-union-find 3.0.0",
  "hashbrown 0.16.1",
  "indexmap 2.14.0",
  "log",
@@ -349,7 +396,19 @@ dependencies = [
  "arc-swap",
  "bumpalo",
  "crossbeam",
- "egglog-numeric-id",
+ "egglog-numeric-id 2.0.0",
+ "smallvec",
+]
+
+[[package]]
+name = "egglog-concurrency"
+version = "3.0.0"
+source = "git+https://github.com/egraphs-good/egglog.git?rev=8879605cafad303db25787406163a7e5bc845f5d#8879605cafad303db25787406163a7e5bc845f5d"
+dependencies = [
+ "arc-swap",
+ "bumpalo",
+ "crossbeam",
+ "egglog-numeric-id 3.0.0",
  "smallvec",
 ]
 
@@ -364,10 +423,38 @@ dependencies = [
  "crossbeam-queue",
  "dashmap",
  "dyn-clone",
- "egglog-concurrency",
- "egglog-numeric-id",
- "egglog-reports",
- "egglog-union-find",
+ "egglog-concurrency 2.0.0",
+ "egglog-numeric-id 2.0.0",
+ "egglog-reports 2.0.0",
+ "egglog-union-find 2.0.0",
+ "fixedbitset",
+ "hashbrown 0.16.1",
+ "indexmap 2.14.0",
+ "log",
+ "num",
+ "once_cell",
+ "rand",
+ "rustc-hash",
+ "smallvec",
+ "thiserror",
+ "web-time",
+]
+
+[[package]]
+name = "egglog-core-relations"
+version = "3.0.0"
+source = "git+https://github.com/egraphs-good/egglog.git?rev=8879605cafad303db25787406163a7e5bc845f5d#8879605cafad303db25787406163a7e5bc845f5d"
+dependencies = [
+ "anyhow",
+ "bumpalo",
+ "crossbeam",
+ "crossbeam-queue",
+ "dashmap",
+ "dyn-clone",
+ "egglog-concurrency 3.0.0",
+ "egglog-numeric-id 3.0.0",
+ "egglog-reports 3.0.0",
+ "egglog-union-find 3.0.0",
  "fixedbitset",
  "hashbrown 0.16.1",
  "indexmap 2.14.0",
@@ -387,9 +474,28 @@ version = "2.0.0"
 source = "git+https://github.com/egraphs-good/egglog.git?rev=60eed0d81849a56d5032b473cb9cb374d4082458#60eed0d81849a56d5032b473cb9cb374d4082458"
 
 [[package]]
+name = "egglog-numeric-id"
+version = "3.0.0"
+source = "git+https://github.com/egraphs-good/egglog.git?rev=8879605cafad303db25787406163a7e5bc845f5d#8879605cafad303db25787406163a7e5bc845f5d"
+
+[[package]]
 name = "egglog-reports"
 version = "2.0.0"
 source = "git+https://github.com/egraphs-good/egglog.git?rev=60eed0d81849a56d5032b473cb9cb374d4082458#60eed0d81849a56d5032b473cb9cb374d4082458"
+dependencies = [
+ "clap",
+ "hashbrown 0.16.1",
+ "indexmap 2.14.0",
+ "rustc-hash",
+ "serde",
+ "serde_json",
+ "web-time",
+]
+
+[[package]]
+name = "egglog-reports"
+version = "3.0.0"
+source = "git+https://github.com/egraphs-good/egglog.git?rev=8879605cafad303db25787406163a7e5bc845f5d#8879605cafad303db25787406163a7e5bc845f5d"
 dependencies = [
  "clap",
  "hashbrown 0.16.1",
@@ -406,8 +512,18 @@ version = "2.0.0"
 source = "git+https://github.com/egraphs-good/egglog.git?rev=60eed0d81849a56d5032b473cb9cb374d4082458#60eed0d81849a56d5032b473cb9cb374d4082458"
 dependencies = [
  "crossbeam",
- "egglog-concurrency",
- "egglog-numeric-id",
+ "egglog-concurrency 2.0.0",
+ "egglog-numeric-id 2.0.0",
+]
+
+[[package]]
+name = "egglog-union-find"
+version = "3.0.0"
+source = "git+https://github.com/egraphs-good/egglog.git?rev=8879605cafad303db25787406163a7e5bc845f5d#8879605cafad303db25787406163a7e5bc845f5d"
+dependencies = [
+ "crossbeam",
+ "egglog-concurrency 3.0.0",
+ "egglog-numeric-id 3.0.0",
 ]
 
 [[package]]
@@ -577,6 +693,7 @@ version = "0.1.0"
 dependencies = [
  "ahash",
  "anyhow",
+ "dateg 0.1.0 (git+https://github.com/belovdv/dateg.git?rev=abad7b4ce1e677515781306575a11930b6bfd9c4)",
  "log",
  "regex",
  "serde",
@@ -598,7 +715,7 @@ version = "0.1.0"
 dependencies = [
  "ahash",
  "anyhow",
- "dateg",
+ "dateg 0.1.0 (git+https://github.com/belovdv/dateg.git?rev=7abed4601dc5987263f3517bd829f6f1afd833e6)",
  "dateg_extractors",
  "lira",
  "log",
