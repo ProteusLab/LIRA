@@ -12,6 +12,7 @@ ahash = "0.8.12"
 regex = "1.12.3"
 serde = "1.0.228"
 serde_yaml = "0.8"
+dateg = { git = "https://github.com/belovdv/dateg.git", rev = "abad7b4ce1e677515781306575a11930b6bfd9c4" }
 
 [profile.work]
 inherits = "dev"

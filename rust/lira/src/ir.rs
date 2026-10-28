@@ -8,6 +8,8 @@ pub struct Shape {
     pub lanes_base: usize,
     pub lanes_mult: Option<String>,
 }
+#[cfg(feature = "lira_dateg")]
+impl dateg::BaseValue for Shape {}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Statement {
