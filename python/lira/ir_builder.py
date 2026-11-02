@@ -524,12 +524,13 @@ class BaseBuilder:
 
 
 class SnippetBuilder(BaseBuilder):
-    def __init__(self, name: str):
+    def __init__(self, name: str, attributes: Optional[List[Attribute]] = None):
         super().__init__()
         self.name = name
+        self.attributes = attributes or []
 
     def build(self) -> Snippet:
-        return Snippet(self.name, self.seq.build())
+        return Snippet(self.name, self.attributes, self.seq.build())
 
 
 class InstructionBuilder(BaseBuilder):
@@ -539,17 +540,23 @@ class InstructionBuilder(BaseBuilder):
         operand_sizes: List[int],
         operand_names: List[str],
         encoding: InstructionEncoding,
+        syntaxes: Optional[List[InstructionSyntax]] = None,
     ):
         super().__init__()
         self.name = name
         self.operand_sizes = operand_sizes
         self.operand_names = operand_names
         self.encoding = encoding
+        self.syntaxes = syntaxes or []
 
     def add_input_operand(self, idx: int, width: Optional[int] = None) -> Value:
         if width is None:
             width = self.operand_sizes[idx] if idx < len(self.operand_sizes) else 32
         return self.input(idx, width)
+
+    def add_syntax(self, mnemonic: str, condition: str, syntax: str):
+        self.syntaxes.append(InstructionSyntax(mnemonic, condition, syntax))
+        return self
 
     def build(self) -> Instruction:
         return Instruction(
@@ -558,18 +565,20 @@ class InstructionBuilder(BaseBuilder):
             operand_sizes=self.operand_sizes,
             operand_names=self.operand_names,
             encoding=self.encoding,
+            syntaxes=self.syntaxes,
             semantic=self.seq.build(),
         )
 
 
 class ArchBuilder:
-    def __init__(self, name: str, attributes: List[str] = None):
+    def __init__(self, name: str, attributes: Optional[List[Attribute]] = None):
         self.name = name
         self.attributes = attributes or []
         self.register_files: List[RegisterFile] = []
         self.system_registers: List[SystemRegister] = []
         self.environment_functions: List[EnvironmentFunction] = []
         self.tables_int: List[TableInt] = []
+        self.tables_str: List[TableStr] = []
         self.operations: List[Operation] = []
         self.snippets: List[Snippet] = []
         self.instructions: List[Instruction] = []
@@ -588,6 +597,10 @@ class ArchBuilder:
 
     def add_table_int(self, table: TableInt):
         self.tables_int.append(table)
+        return self
+
+    def add_table_str(self, table: TableStr):
+        self.tables_str.append(table)
         return self
 
     def add_operation(self, op: Operation):
@@ -610,6 +623,7 @@ class ArchBuilder:
             system_registers=self.system_registers,
             environment_functions=self.environment_functions,
             tables_int=self.tables_int,
+            tables_str=self.tables_str,
             operations=self.operations,
             snippets=self.snippets,
             instructions=self.instructions,
