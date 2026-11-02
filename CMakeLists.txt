@@ -10,11 +10,9 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
 endif()
 
 option(LIRA_PYTHON "Include Python LIRA library" ON)
-option(LIRA_RUBY   "Include Ruby LIRA library"   ON)
 option(LIRA_RUST   "Include Rust LIRA library"   ON)
 
 set(LIRA_PYTHON_DIR "${CMAKE_CURRENT_LIST_DIR}/python/lira" CACHE PATH "LIRA Python library path")
-set(LIRA_RUBY_DIR   "${CMAKE_CURRENT_LIST_DIR}/ruby/lira"   CACHE PATH "LIRA Ruby library path")
 set(LIRA_RUST_DIR   "${CMAKE_CURRENT_LIST_DIR}/rust/lira"   CACHE PATH "LIRA Rust library path")
 
 if(LIRA_PYTHON)
@@ -22,14 +20,6 @@ if(LIRA_PYTHON)
     add_library(lira-python INTERFACE)
     target_compile_definitions(lira-python INTERFACE
       LIRA_PYTHON_DIR="${LIRA_PYTHON_DIR}")
-  endif()
-endif()
-
-if(LIRA_RUBY)
-  if(NOT TARGET lira-ruby)
-    add_library(lira-ruby INTERFACE)
-    target_compile_definitions(lira-ruby INTERFACE
-      LIRA_RUBY_DIR="${LIRA_RUBY_DIR}")
   endif()
 endif()
 

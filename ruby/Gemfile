@@ -1,8 +1,0 @@
-# Gemfile
-
-source "https://rubygems.org"
-
-ruby "4.0.1"
-
-gem 'minitest', '~> 5.14'
-gem 'simplecov', require: false
