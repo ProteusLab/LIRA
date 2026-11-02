@@ -46,17 +46,3 @@ fn test_rust_reads_python() {
     assert_eq!(arch, arch2);
     std::fs::remove_file(&tmp).ok();
 }
-
-#[test]
-fn test_rust_reads_ruby() {
-    let rb_out = tmp_dir().join("rb_native.yaml");
-    if !rb_out.exists() {
-        return;
-    }
-    let arch = Arch::read_yaml(&rb_out).unwrap();
-    let tmp = tmp_dir().join("rs_from_rb.yaml");
-    copy::copy_arch(&rb_out, &tmp).unwrap();
-    let arch2 = Arch::read_yaml(&tmp).unwrap();
-    assert_eq!(arch, arch2);
-    std::fs::remove_file(&tmp).ok();
-}

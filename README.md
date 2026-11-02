@@ -4,7 +4,6 @@ LIRA is a framework that provides a data-flow Intermediate Representation.
 
 **Libraries:**
 - [python/lira](python/lira) — Python 3 library
-- [ruby/lira](ruby/lira) — Ruby library
 - [rust/lira](rust/lira) — Rust library
 
 ## Install
@@ -12,13 +11,6 @@ LIRA is a framework that provides a data-flow Intermediate Representation.
 - Python (pip):
 ```bash
 pip install -e python/
-```
-
-- Ruby (gem)
-```bash
-gem build ruby/lira.gemspec && gem install lira-*.gem
-# or via Gemfile:
-#   gem "lira", path: "ruby"
 ```
 - Rust (Cargo)
 ```bash
@@ -43,7 +35,7 @@ CPMAddPackage(
   EXCLUDE_FROM_ALL YES
   SYSTEM YES
 )
-# Source paths: ${LIRA_PYTHON_DIR}  ${LIRA_RUBY_DIR}  ${LIRA_RUST_DIR}
+# Source paths: ${LIRA_PYTHON_DIR}  ${LIRA_RUST_DIR}
 ```
 
 Sub-library selection via `OPTIONS`:
@@ -53,16 +45,14 @@ CPMAddPackage(
   GITHUB_REPOSITORY ProteusLab/LIRA
   GIT_TAG v0.1.0
   EXCLUDE_FROM_ALL YES
-  OPTIONS "LIRA_RUBY OFF"
   OPTIONS "LIRA_RUST OFF"
 )
 # Only ${LIRA_PYTHON_DIR} and lira-python target are created
 ```
 
-CMake interface targets (source-only, no compilation): `lira-python` `lira-ruby` `lira-rust`
+CMake interface targets (source-only, no compilation): `lira-python` `lira-rust`
 
 ## Examples
 
 - [Python 3 examples](python/examples)
-- [Ruby examples](ruby/examples)
 - [Rust examples](rust/examples)

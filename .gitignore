@@ -16,10 +16,6 @@ venv/
 # Rust
 target/
 
-# Ruby
-*.gem
-.bundle/
-
 # Testing & Coverage
 htmlcov/
 .coverage
