@@ -16,7 +16,9 @@ fn expand(yaml: &str) -> String {
     let mut result = String::new();
     for line in yaml.lines() {
         let l = line.trim_start();
-        if let Some(start) = ["seq:", "semantic:"].iter().find(|s| l.starts_with(*s)) {
+        if let Some(start) = ["seq:", "semantic:"].iter().find(|s| l.starts_with(*s))
+            && !line.ends_with("\"\"")
+        {
             let prefix = &line[..line.len() - l.len()];
             writeln!(result, "{prefix}{start} |").unwrap();
             for part in l[start.len() + 2..l.len() - 3].split("\\n") {
