@@ -9,13 +9,6 @@ class TypeCheckError(Exception):
 
 
 class BaseFop(str, Enum):
-    """Standard float operation bases, synchronized with IEEE 754 binary
-    interchange formats (binary16/32/64). Every base names a fixed operation
-    family; the operand and result widths select a concrete member.
-
-    Architecture specific operations (FRECPS, FJCVTZS, ...) are intentionally
-    NOT bases: converters express them through snippets over the bases below.
-    """
     FADD = "fadd"
     FSUB = "fsub"
     FMUL = "fmul"
@@ -42,15 +35,8 @@ FLOAT_WIDTHS = (16, 32, 64)
 
 
 class FopModifier(str, Enum):
-    """Modifiers of a base, part of the float operation contract. They appear
-    in the name (`<base>_<N>[_to_<M>]_<modifier>...`, in the order below) and
-    as an attribute (`fpu.<modifier>`).
-
-    `default_nan` computes as if the default-NaN control were set,
-    `no_flags` leaves the exception flags unchanged.
-    """
-    DEFAULT_NAN = "default_nan"
-    NO_FLAGS = "no_flags"
+    DEFAULT_NAN = "default_nan" # computes as if the default-NaN control were set
+    NO_FLAGS = "no_flags"       # leaves the exception flags unchanged
 
 
 def _check_width(value: int, name: str):
@@ -69,8 +55,6 @@ def _check_fbits(value: int, name: str):
 
 
 def _resolve_modifiers(modifiers) -> Tuple[str, List[Attribute]]:
-    """Validate `modifiers` (FopModifier values); returns the name suffix and
-    the `fpu.<modifier>` attributes in the canonical FopModifier order."""
     if any(not isinstance(x, FopModifier) for x in modifiers):
         raise TypeCheckError(f"modifiers must be FopModifier, got {tuple(modifiers)}")
     if len(set(modifiers)) != len(modifiers):
