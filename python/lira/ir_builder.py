@@ -353,6 +353,14 @@ class SeqBuilder:
         stmt = Statement(shape, outputs, out_types, "op", op.name, inputs)
         self.stmts.append(stmt)
 
+    def fop(self, fop: FloatOperation, inputs: List[Value]) -> List[Value]:
+        shape = self._shape_of([v.name for v in inputs])
+        outputs = [self._new_temp(w, shape) for w in fop.outputs]
+        stmt = Statement(shape, [o.name for o in outputs], fop.outputs,
+                         "fop", fop.name, [v.name for v in inputs])
+        self.stmts.append(stmt)
+        return outputs
+
     def op(self, operation: Operation, inputs: List[Value]) -> Value:
         if len(operation.outputs) != 1:
             raise ValueError(
@@ -379,6 +387,7 @@ class BaseBuilder:
     def __init__(self):
         self.seq = SeqBuilder()
         self._op_cache: Dict[str, Operation] = {}
+        self._fop_cache: Dict[str, FloatOperation] = {}
 
     def _cache_op(self, op_class, *args, **kwargs) -> Operation:
         op = op_class(*args, **kwargs)
@@ -607,6 +616,14 @@ class BaseBuilder:
     def op_multi(self, operation: Operation, inputs: List[Value]) -> List[Value]:
         return self.seq.op_multi(operation, inputs)
 
+    def fop(self, fop: FloatOperation, inputs: List[Value]) -> List[Value]:
+        self._fop_cache[fop.name] = fop
+        return self.seq.fop(fop, inputs)
+
+    @property
+    def float_operations_map(self) -> Dict[str, FloatOperation]:
+        return dict(self._fop_cache)
+
 
 class SnippetBuilder(BaseBuilder):
     def __init__(self, name: str, attributes: Optional[List[Attribute]] = None):
@@ -667,6 +684,7 @@ class ArchBuilder:
         self.operations: List[Operation] = []
         self.snippets: List[Snippet] = []
         self.instructions: List[Instruction] = []
+        self.float_operations: List[FloatOperation] = []
 
     def add_register_file(self, rf: RegisterFile):
         self.register_files.append(rf)
@@ -696,6 +714,10 @@ class ArchBuilder:
         self.snippets.append(snippet)
         return self
 
+    def add_float_operation(self, fop: FloatOperation):
+        self.float_operations.append(fop)
+        return self
+
     def add_instruction(self, instr: Instruction):
         self.instructions.append(instr)
         return self
@@ -712,4 +734,5 @@ class ArchBuilder:
             operations=self.operations,
             snippets=self.snippets,
             instructions=self.instructions,
+            float_operations=self.float_operations,
         )

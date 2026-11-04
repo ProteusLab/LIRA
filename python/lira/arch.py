@@ -1,5 +1,5 @@
 from typing import ClassVar, Dict, Optional, TypeVar
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from .ir import *
 
@@ -51,6 +51,22 @@ class Operation(Component):
                (other.name, other.attributes, other.inputs, other.outputs,
                 other.semantic_base, other.semantic_func,
                 other.semantic_table)
+
+
+@dataclass
+class FloatOperation(Operation):
+    """Floating-point operation used by `fop` statements.
+    Unlike `Operation` it is not a pure function: 
+        * it reads the FPU controls and 
+        * accumulates exception flags in the FPU state
+    """
+    typed_fops: ClassVar[Dict[str, type]] = {}
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        sb = getattr(cls, "fop_base", None)
+        if sb is not None:
+            FloatOperation.typed_fops[sb] = cls
 
 
 @dataclass
@@ -137,3 +153,5 @@ class Arch(Component):
     operations: list[Operation]
     snippets: list[Snippet]
     instructions: list[Instruction]
+    # Optional: omitted from serialization when empty
+    float_operations: list[FloatOperation] = field(default_factory=list)
