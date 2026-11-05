@@ -41,6 +41,7 @@ fn test_roundtrip_from_reference() {
     assert_eq!(ref_arch.tables_int, arch2.tables_int);
     assert_eq!(ref_arch.tables_str, arch2.tables_str);
     assert_eq!(ref_arch.operations, arch2.operations);
+    assert_eq!(ref_arch.float_operations, arch2.float_operations);
     assert_eq!(ref_arch.snippets, arch2.snippets);
     assert_eq!(ref_arch.instructions, arch2.instructions);
     assert_eq!(ref_arch, arch2);

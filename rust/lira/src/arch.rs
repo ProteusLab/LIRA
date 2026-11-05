@@ -27,6 +27,17 @@ pub struct Operation {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct FloatOperation {
+    pub name: String,
+    pub attributes: Vec<Attribute>,
+    pub inputs: Vec<usize>,
+    pub outputs: Vec<usize>,
+    pub semantic_base: Option<String>,
+    pub semantic_func: Option<String>,
+    pub semantic_table: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct Register {
     pub name: String,
     pub attributes: Vec<Attribute>,
@@ -141,4 +152,7 @@ pub struct Arch {
     pub operations: Vec<Operation>,
     pub snippets: Vec<Snippet>,
     pub instructions: Vec<Instruction>,
+    /// Optional: omitted from serialization when empty
+    #[serde(default)]
+    pub float_operations: Vec<FloatOperation>,
 }

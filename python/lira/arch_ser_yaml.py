@@ -7,6 +7,7 @@ from ruamel.yaml.scalarstring import LiteralScalarString
 
 from .arch import *
 from .ir import StatementSeq
+from .ir_fops import from_float_operation
 from .ir_ops import from_operation
 from .ir_ser_txt import serialize_statement_seq, deserialize_statement_seq
 
@@ -37,6 +38,8 @@ def from_serializable(cls: Type, data: Any) -> Any:
         obj = cls(**kwargs)
         if cls is Operation:
             return from_operation(obj)
+        if cls is FloatOperation:
+            return from_float_operation(obj)
         return obj
     if origin is list:
         item_cls = get_args(cls)[0]

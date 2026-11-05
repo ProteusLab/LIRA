@@ -2,6 +2,15 @@ use anyhow::Context;
 
 use crate::*;
 
+/// Reference to an operation or a float operation resolved by name from a
+/// statement specifier. Used by the `scan` and `fold` statements, which may
+/// name either kind of operation (see `docs/float_ops.md`).
+#[derive(Debug, Clone, Copy)]
+pub enum StdOp<'a> {
+    Op(&'a Operation),
+    Fop(&'a FloatOperation),
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum StmtSpecificStd<'a> {
     Input {
@@ -22,6 +31,10 @@ pub enum StmtSpecificStd<'a> {
     },
     Op {
         op: &'a Operation,
+        args: &'a [String],
+    },
+    Fop {
+        fop: &'a FloatOperation,
         args: &'a [String],
     },
     Env {
@@ -56,11 +69,11 @@ pub enum StmtSpecificStd<'a> {
         value: &'a str,
     },
     Fold {
-        op: &'a Operation,
+        op: StdOp<'a>,
         args: &'a [String],
     },
     Scan {
-        op: &'a Operation,
+        op: StdOp<'a>,
         args: &'a [String],
     },
     Alias {
@@ -79,6 +92,17 @@ impl Statement {
                 idx.$field.get(self.specifier.as_str()).ok_or_else(|| {
                     anyhow::anyhow!("no {} {}", stringify!($field), self.specifier)
                 })?
+            };
+        }
+        macro_rules! get_std_op {
+            () => {
+                if let Some(op) = idx.op.get(self.specifier.as_str()) {
+                    StdOp::Op(op)
+                } else if let Some(fop) = idx.fop.get(self.specifier.as_str()) {
+                    StdOp::Fop(fop)
+                } else {
+                    anyhow::bail!("no op or fop {}", self.specifier)
+                }
             };
         }
         Ok(match self.kind.as_str() {
@@ -129,6 +153,11 @@ impl Statement {
                 let args = &self.inputs[..];
                 StmtSpecificStd::Op { op, args }
             }
+            "fop" => {
+                let fop = get!(fop);
+                let args = &self.inputs[..];
+                StmtSpecificStd::Fop { fop, args }
+            }
             "env" => {
                 let env = get!(env);
                 let args = &self.inputs[..];
@@ -175,13 +204,13 @@ impl Statement {
                 StmtSpecificStd::ExtendZero { value }
             }
             "fold" => {
-                let op = get!(op);
                 let args = &self.inputs[..];
+                let op = get_std_op!();
                 StmtSpecificStd::Fold { op, args }
             }
             "scan" => {
-                let op = get!(op);
                 let args = &self.inputs[..];
+                let op = get_std_op!();
                 StmtSpecificStd::Scan { op, args }
             }
             "alias" => {
