@@ -9,6 +9,7 @@ pub struct ArchIndex<'a> {
     pub tables: AHashMap<&'a str, &'a TableInt>,
     pub tables_str: AHashMap<&'a str, &'a TableStr>,
     pub op: AHashMap<&'a str, &'a Operation>,
+    pub fop: AHashMap<&'a str, &'a FloatOperation>,
     pub snippet: AHashMap<&'a str, &'a Snippet>,
     pub instr: AHashMap<&'a str, &'a Instruction>,
 }
@@ -27,6 +28,7 @@ impl Arch {
             tables: collect!(tables_int),
             tables_str: collect!(tables_str),
             op: collect!(operations),
+            fop: collect!(float_operations),
             snippet: collect!(snippets),
             instr: collect!(instructions),
         }
