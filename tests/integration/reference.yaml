@@ -978,3 +978,4 @@ instructions:
         syntax: syntax_no_operands
     semantic: |
       1 = env sysCall;
+float_operations: []
