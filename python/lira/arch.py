@@ -120,7 +120,7 @@ class Instruction(Component):
     encoding: InstructionEncoding
     syntaxes: list[InstructionSyntax]
 
-    semantic: StatementSeq
+    semantic: str # Snippet
 
 
 @dataclass
