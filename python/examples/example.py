@@ -177,19 +177,20 @@ def build_test_arch() -> ArchBuilder:
         "",
     )
 
-    instr_builder = InstructionBuilder(
-        "blt", [5, 5, 32], ["x1", "x2", "offset"], enc_blt
-    )
-    x1 = instr_builder.add_input_operand(0, 5)
-    x2 = instr_builder.add_input_operand(1, 5)
-    offset = instr_builder.add_input_operand(2, 32)
-    v1 = instr_builder.read(rf, x1)
-    v2 = instr_builder.read(rf, x2)
-    cond = instr_builder.slt(v1, v2)
-    base = instr_builder.env(pc_read, [])[0]
-    dest = instr_builder.add(base, offset)
-    instr_builder.cond_env(pc_write, cond, [dest], [])
-    blt_instr = instr_builder.build()
+    snip = SnippetBuilder("semantic_blt", [Attribute("kind", "semantic")])
+    x1 = snip.input(0, 5)
+    x2 = snip.input(1, 5)
+    offset = snip.input(2, 32)
+    v1 = snip.read(rf, x1)
+    v2 = snip.read(rf, x2)
+    cond = snip.slt(v1, v2)
+    base = snip.env(pc_read, [])[0]
+    dest = snip.add(base, offset)
+    snip.cond_env(pc_write, cond, [dest], [])
+    blt_semantic = snip.build()
+    blt_instr = InstructionBuilder(
+        "blt", [5, 5, 32], ["x1", "x2", "offset"], enc_blt, semantic=blt_semantic.name
+    ).build()
 
     arch_builder = (
         ArchBuilder(
@@ -212,6 +213,7 @@ def build_test_arch() -> ArchBuilder:
         .add_snippet(decode_rs2)
         .add_snippet(decode_imm)
         .add_snippet(encode_b_snip)
+        .add_snippet(blt_semantic)
         .add_instruction(blt_instr)
     )
     return arch_builder
