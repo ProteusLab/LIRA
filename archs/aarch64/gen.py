@@ -3,7 +3,7 @@
 
 Usage (from the repository root):
     python -m archs.aarch64.gen [--xml <ISA_A64_xml dir>] [--output aarch64.yaml]
-                                [--simgen <subset.yaml>]
+                                [--simgen <subset.yaml>] [--asm <subset.yaml>]
 
 `--simgen` also writes the subset that lira-simgen-lib can simulate (see
 `simgen_subset`).
@@ -200,6 +200,11 @@ def load_encodings(xml_dir: Path, files, in_place: bool = True) -> Dict[str, xml
 
 
 def build_arch(xml_dir: Path) -> Arch:
+    arch, _ = build_arch_with_encodings(xml_dir)
+    return arch
+
+
+def build_arch_with_encodings(xml_dir: Path):
     ctx = Ctx()
     encs: Dict[str, xmlspec.Encoding] = {}
     for i, files in enumerate(GROUPS):       # a later group appends its instructions
@@ -218,7 +223,7 @@ def build_arch(xml_dir: Path) -> Arch:
         snippets=list(ctx.snippets.values()),
         instructions=instructions,
         float_operations=list(ctx.fops.values()),
-    )
+    ), encs
 
 
 # What lira-simgen-lib supports: these statements (fixed shapes and the
@@ -321,12 +326,17 @@ def main():
     parser.add_argument('--xml', type=Path, default=DEFAULT_XML)
     parser.add_argument('--output', type=Path, default=HERE / 'aarch64.yaml')
     parser.add_argument('--simgen', type=Path, help='also write the lira-simgen-lib subset here')
+    parser.add_argument('--asm', type=Path, help='also write the syntax subset for LIRA 9462267')
     args = parser.parse_args()
 
-    arch = build_arch(args.xml)
+    arch, encodings = build_arch_with_encodings(args.xml)
     write_yaml(arch, args.output)
     if args.simgen:
         write_yaml(simgen_subset(arch), args.simgen)
+    if args.asm:
+        from .syntax import write_asm
+
+        write_asm(arch, encodings, args.xml, args.asm)
 
 
 if __name__ == '__main__':

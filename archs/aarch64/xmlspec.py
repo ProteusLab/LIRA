@@ -1,9 +1,8 @@
 """Extract A64 instruction encodings from the Arm machine-readable XML.
 
-Only the encoding part (bit layout, fixed bits, operand fields, encoding
-conditions) is taken from XML; semantics are written by hand in `insns.py`.
+Encoding fields and assembly templates come from XML. Instruction semantics
+are written by hand in `insns.py` and the related instruction modules.
 """
-import html
 import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
@@ -28,7 +27,8 @@ class Encoding:
     file: str             # e.g. add_addsub_imm
     mnemonic: str
     iclass: str
-    asm: str
+    asm_template: Optional[ET.Element]
+    base_name: str
     const_value: int      # fixed bits of the 32-bit word
     const_mask: int
     operands: List[Field]                     # fields that are (partially) free
@@ -48,10 +48,6 @@ class Encoding:
         """(mask, value) of the fixed bits inside a field, relative to its lsb."""
         f = self.fields[name]
         return (self.const_mask & f.mask) >> f.lo, (self.const_value & f.mask) >> f.lo
-
-
-def _text(e) -> str:
-    return html.unescape(''.join(e.itertext())) if e is not None else ''
 
 
 def _apply(bits: List[str], hibit: int, pattern: str):
@@ -129,7 +125,8 @@ def parse_file(path: Path) -> List[Encoding]:
             result.append(Encoding(
                 # SVE encoding names end with `_` (e.g. add_z_zz_)
                 name=enc.get('name').rstrip('_'), file=path.stem, mnemonic=dv.get('mnemonic', ''),
-                iclass=ic.get('name'), asm=_text(enc.find('asmtemplate')).strip(),
+                iclass=ic.get('name'), asm_template=enc.find('asmtemplate'),
+                base_name=enc.get('name').rstrip('_'),
                 const_value=value, const_mask=mask, operands=operands,
                 fields=fields, ne=ne, docvars=dv, feature=feature))
     return result
@@ -159,6 +156,7 @@ def specialize(e: Encoding, suffix: str, assignments: Dict[str, int]) -> Encodin
         mask |= vm << f.lo
     operands = [f for f in e.operands if (mask & f.mask) != f.mask]
     return Encoding(name=f'{e.name}_{suffix}', file=e.file, mnemonic=e.mnemonic,
-                    iclass=e.iclass, asm=e.asm, const_value=value, const_mask=mask,
+                    iclass=e.iclass, asm_template=e.asm_template, base_name=e.base_name,
+                    const_value=value, const_mask=mask,
                     operands=operands, fields=e.fields, ne=list(e.ne), docvars=dict(e.docvars),
                     feature=e.feature)
