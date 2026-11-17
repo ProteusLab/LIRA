@@ -12,6 +12,7 @@ from python.lira.arch import (
     RegisterFile,
     EnvironmentFunction,
     InstructionEncoding,
+    SnippetKind,
     Operation,
     TableStr,
 )
@@ -177,7 +178,7 @@ def build_test_arch() -> ArchBuilder:
         "",
     )
 
-    snip = SnippetBuilder("semantic_blt", [Attribute("kind", "semantic")])
+    snip = SnippetBuilder("semantic_blt", [SnippetKind.SEMANTIC.into_attribute()])
     x1 = snip.input(0, 5)
     x2 = snip.input(1, 5)
     offset = snip.input(2, 32)
@@ -189,7 +190,7 @@ def build_test_arch() -> ArchBuilder:
     snip.cond_env(pc_write, cond, [dest], [])
     blt_semantic = snip.build()
     blt_instr = InstructionBuilder(
-        "blt", [5, 5, 32], ["x1", "x2", "offset"], enc_blt, semantic=blt_semantic.name
+        "blt", [5, 5, 32], ["x1", "x2", "offset"], enc_blt, semantic=blt_semantic
     ).build()
 
     arch_builder = (

@@ -12,6 +12,7 @@ from python.lira.arch import (
     EnvironmentFunction,
     InstructionEncoding,
     InstructionSyntax,
+    SnippetKind,
     SystemRegister,
     SystemRegisterField,
     TableInt,
@@ -116,7 +117,6 @@ def rv32i_arch_lite():
     # add instruction
     enc = InstructionEncoding(32, 51, 4261441663, ["decode_0"], "", "", "")
     sb = SnippetBuilder("semantic_add")
-    ib = InstructionBuilder("add", [32, 32, 32], ["rs2", "rs1", "rd"], enc, semantic=sb.name)
     rs2 = sb.input(0, 32)
     rs1 = sb.input(1, 32)
     rd = sb.input(2, 32)
@@ -124,12 +124,14 @@ def rv32i_arch_lite():
     v2 = sb.read(rf, rs2)
     r = sb.add(v1, v2)
     sb.write(rf, rd, r)
-    ab.add_snippet(sb.build()).add_instruction(ib.build())
+    semantic = sb.build()
+    ab.add_snippet(semantic)
+    ib = InstructionBuilder("add", [32, 32, 32], ["rs2", "rs1", "rd"], enc, semantic=semantic)
+    ab.add_instruction(ib.build())
 
     # lhu instruction
     enc = InstructionEncoding(32, 20483, 28799, ["decode_4"], "", "", "")
     sb = SnippetBuilder("semantic_lhu")
-    ib = InstructionBuilder("lhu", [32, 32, 32], ["imm", "rs1", "rd"], enc, semantic=sb.name)
     imm = sb.input(0, 32)
     rs1 = sb.input(1, 32)
     rd = sb.input(2, 32)
@@ -138,12 +140,14 @@ def rv32i_arch_lite():
     val16 = sb.env(read_mem, [addr])
     r = sb.extend_zero(val16[0], 32)
     sb.write(rf, rd, r)
-    ab.add_snippet(sb.build()).add_instruction(ib.build())
+    semantic = sb.build()
+    ab.add_snippet(semantic)
+    ib = InstructionBuilder("lhu", [32, 32, 32], ["imm", "rs1", "rd"], enc, semantic=semantic)
+    ab.add_instruction(ib.build())
 
     # beq instruction
     enc = InstructionEncoding(32, 99, 28799, ["decode_0"], "", "", "")
     sb = SnippetBuilder("semantic_beq")
-    ib = InstructionBuilder("beq", [32, 32, 32], ["imm", "rs1", "rs2"], enc, semantic=sb.name)
     imm = sb.input(0, 32)
     rs1 = sb.input(1, 32)
     rs2 = sb.input(2, 32)
@@ -155,14 +159,19 @@ def rv32i_arch_lite():
     c4 = sb.const(4, 32)
     fallback = sb.add(base[0], c4)
     sb.cond_env(set_pc, eq, [dest], [fallback])
-    ab.add_snippet(sb.build()).add_instruction(ib.build())
+    semantic = sb.build()
+    ab.add_snippet(semantic)
+    ib = InstructionBuilder("beq", [32, 32, 32], ["imm", "rs1", "rs2"], enc, semantic=semantic)
+    ab.add_instruction(ib.build())
 
     # ecall instruction
     enc = InstructionEncoding(32, 115, 0xFFFFFFFF, [], "", "", "")
     sb = SnippetBuilder("semantic_ecall")
-    ib = InstructionBuilder("ecall", [], [], enc, semantic=sb.name)
     sb.env(syscall, [])
-    ab.add_snippet(sb.build()).add_instruction(ib.build())
+    semantic = sb.build()
+    ab.add_snippet(semantic)
+    ib = InstructionBuilder("ecall", [], [], enc, semantic=semantic)
+    ab.add_instruction(ib.build())
 
     return ab.build()
 
@@ -185,17 +194,19 @@ class TestArchSerYaml:
         rf = RegisterFile("X", [], Shape(32, None), [Register("x0")])
         enc = InstructionEncoding(32, 0, 0, [], "", "", "")
         sb = SnippetBuilder("semantic_test")
-        ib = InstructionBuilder("test", [5, 5], ["rs1", "rs2"], enc, semantic=sb.name)
         rs1 = sb.input(0, 5)
         rs2 = sb.input(1, 5)
         v = sb.read(rf, rs1)
         sb.write(rf, rs2, v)
+        semantic = sb.build()
+        ib = InstructionBuilder("test", [5, 5], ["rs1", "rs2"], enc, semantic=semantic)
         instr = ib.build()
         ab = ArchBuilder("w_instr", [])
         ab.add_register_file(rf)
-        ab.add_snippet(sb.build()).add_instruction(instr)
+        ab.add_snippet(semantic)
+        ab.add_instruction(instr)
         other_enc = InstructionEncoding(32, 1, 1, [], "", "", "")
-        other = InstructionBuilder("other", [5, 5], ["rs1", "rs2"], other_enc, semantic=sb.name)
+        other = InstructionBuilder("other", [5, 5], ["rs1", "rs2"], other_enc, semantic=semantic)
         ab.add_instruction(other.build())
         arch = ab.build()
         arch_ser_yaml.write_arch(arch, tmp_yaml)
@@ -258,14 +269,16 @@ class TestArchSerYaml:
         rf = RegisterFile("X", [], Shape(32, None), [Register("x0")])
         enc = InstructionEncoding(32, 0, 0, [], "", "", "")
         sb = SnippetBuilder("semantic_test")
-        ib = InstructionBuilder("test", [5, 5], ["rs1", "rs2"], enc, semantic=sb.name)
         sb.input(0, 5)
         sb.input(1, 5)
+        semantic = sb.build()
+        ib = InstructionBuilder("test", [5, 5], ["rs1", "rs2"], enc, semantic=semantic)
         ib.add_syntax("mnemonic", "cond", "syntax")
         instr = ib.build()
         ab = ArchBuilder("w_syntax", [])
         ab.add_register_file(rf)
-        ab.add_snippet(sb.build()).add_instruction(instr)
+        ab.add_snippet(semantic)
+        ab.add_instruction(instr)
         arch = ab.build()
         arch_ser_yaml.write_arch(arch, tmp_yaml)
         arch2 = arch_ser_yaml.read_arch(tmp_yaml)
@@ -274,7 +287,7 @@ class TestArchSerYaml:
         ]
 
     def test_snippet_attributes(self, tmp_yaml):
-        sb = SnippetBuilder("s", [Attribute("kind", "test")])
+        sb = SnippetBuilder("s", [SnippetKind.SYNTAX.into_attribute()])
         a = sb.input(0, 32)
         sb.output(a, 0)
         ab = ArchBuilder("snip_attrs", [])
@@ -282,7 +295,7 @@ class TestArchSerYaml:
         arch = ab.build()
         arch_ser_yaml.write_arch(arch, tmp_yaml)
         arch2 = arch_ser_yaml.read_arch(tmp_yaml)
-        assert arch2.snippets[0].attributes == [Attribute("kind", "test")]
+        assert arch2.snippets[0].attributes == [Attribute("kind", SnippetKind.SYNTAX.value)]
 
     def test_rv32i_lite_roundtrip(self, rv32i_arch_lite, tmp_yaml):
         arch_ser_yaml.write_arch(rv32i_arch_lite, tmp_yaml)

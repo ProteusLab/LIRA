@@ -309,9 +309,10 @@ class SeqBuilder:
         return self
 
 
-# TODO: Fold BaseBuilder into SnippetBuilder, its only subclass in LIRA.
-class BaseBuilder:
-    def __init__(self):
+class SnippetBuilder:
+    def __init__(self, name: str, attributes: Optional[List[Attribute]] = None):
+        self.name = name
+        self.attributes = attributes or []
         self.seq = SeqBuilder()
         self._op_cache: Dict[str, Operation] = {}
 
@@ -523,13 +524,6 @@ class BaseBuilder:
     def op_multi(self, operation: Operation, inputs: List[Value]) -> List[Value]:
         return self.seq.op_multi(operation, inputs)
 
-
-class SnippetBuilder(BaseBuilder):
-    def __init__(self, name: str, attributes: Optional[List[Attribute]] = None):
-        super().__init__()
-        self.name = name
-        self.attributes = attributes or []
-
     def build(self) -> Snippet:
         return Snippet(self.name, self.attributes, self.seq.build())
 
@@ -541,7 +535,7 @@ class InstructionBuilder:
         operand_sizes: List[int],
         operand_names: List[str],
         encoding: InstructionEncoding,
-        semantic: str,
+        semantic: Snippet,
         syntaxes: Optional[List[InstructionSyntax]] = None,
     ):
         self.name = name
@@ -563,7 +557,7 @@ class InstructionBuilder:
             operand_names=self.operand_names,
             encoding=self.encoding,
             syntaxes=self.syntaxes,
-            semantic=self.semantic,
+            semantic=self.semantic.name,
         )
 
 

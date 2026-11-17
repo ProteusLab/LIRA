@@ -176,7 +176,6 @@ class TestInstructionBuilder:
     def test_build_add(self, rv32i_rf):
         enc = InstructionEncoding(32, 51, 4261441663, [], "", "", "")
         sb = SnippetBuilder("semantic_add")
-        ib = InstructionBuilder("add", [5, 5, 5], ["rd", "rs1", "rs2"], enc, semantic=sb.name)
         rd = sb.input(0, 5)
         rs1 = sb.input(1, 5)
         rs2 = sb.input(2, 5)
@@ -184,15 +183,16 @@ class TestInstructionBuilder:
         v2 = sb.read(rv32i_rf, rs2)
         r = sb.add(v1, v2)
         sb.write(rv32i_rf, rd, r)
+        semantic = sb.build()
+        ib = InstructionBuilder("add", [5, 5, 5], ["rd", "rs1", "rs2"], enc, semantic=semantic)
         instr = ib.build()
         assert instr.name == "add"
-        assert instr.semantic == sb.name
-        assert len(sb.build().seq.stmts) == 7
+        assert instr.semantic == semantic.name
+        assert len(semantic.seq.stmts) == 7
 
     def test_build_lhu(self, rv32i_rf, rv32i_envs):
         enc = InstructionEncoding(32, 20483, 28799, [], "", "", "")
         sb = SnippetBuilder("semantic_lhu")
-        ib = InstructionBuilder("lhu", [32, 32, 32], ["imm", "rs1", "rd"], enc, semantic=sb.name)
         imm = sb.input(0, 32)
         rs1 = sb.input(1, 32)
         rd = sb.input(2, 32)
@@ -201,13 +201,14 @@ class TestInstructionBuilder:
         val16 = sb.env(rv32i_envs["readMem16"], [addr])
         r = sb.extend_zero(val16[0], 32)
         sb.write(rv32i_rf, rd, r)
+        semantic = sb.build()
+        ib = InstructionBuilder("lhu", [32, 32, 32], ["imm", "rs1", "rd"], enc, semantic=semantic)
         instr = ib.build()
         assert instr.name == "lhu"
 
     def test_build_beq(self, rv32i_rf, rv32i_envs):
         enc = InstructionEncoding(32, 99, 28799, [], "", "", "")
         sb = SnippetBuilder("semantic_beq")
-        ib = InstructionBuilder("beq", [32, 32, 32], ["imm", "rs1", "rs2"], enc, semantic=sb.name)
         imm = sb.input(0, 32)
         rs1 = sb.input(1, 32)
         rs2 = sb.input(2, 32)
@@ -219,18 +220,21 @@ class TestInstructionBuilder:
         c4 = sb.const(4, 32)
         fallback = sb.add(base[0], c4)
         sb.cond_env(rv32i_envs["setPC"], eq, [dest], [fallback])
+        semantic = sb.build()
+        ib = InstructionBuilder("beq", [32, 32, 32], ["imm", "rs1", "rs2"], enc, semantic=semantic)
         instr = ib.build()
         assert instr.name == "beq"
 
     def test_build_ecall(self, rv32i_envs):
         enc = InstructionEncoding(32, 115, 0xFFFFFFFF, [], "", "", "")
         sb = SnippetBuilder("semantic_ecall")
-        ib = InstructionBuilder("ecall", [], [], enc, semantic=sb.name)
         sb.env(rv32i_envs["sysCall"], [])
+        semantic = sb.build()
+        ib = InstructionBuilder("ecall", [], [], enc, semantic=semantic)
         instr = ib.build()
         assert instr.name == "ecall"
-        assert instr.semantic == sb.name
-        assert sb.build().seq.stmts[0].kind == "env"
+        assert instr.semantic == semantic.name
+        assert semantic.seq.stmts[0].kind == "env"
 
 
 class TestArchBuilder:
