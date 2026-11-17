@@ -178,7 +178,7 @@ def build_test_arch() -> ArchBuilder:
         "",
     )
 
-    snip = SnippetBuilder("semantic_blt", [SnippetKind.SEMANTIC.into_attribute()])
+    snip = SnippetBuilder("semantic_blt", [SnippetKind.SEMANTIC.attribute])
     x1 = snip.input(0, 5)
     x2 = snip.input(1, 5)
     offset = snip.input(2, 32)

@@ -287,7 +287,7 @@ class TestArchSerYaml:
         ]
 
     def test_snippet_attributes(self, tmp_yaml):
-        sb = SnippetBuilder("s", [SnippetKind.SYNTAX.into_attribute()])
+        sb = SnippetBuilder("s", [SnippetKind.SYNTAX.attribute])
         a = sb.input(0, 32)
         sb.output(a, 0)
         ab = ArchBuilder("snip_attrs", [])
@@ -295,7 +295,7 @@ class TestArchSerYaml:
         arch = ab.build()
         arch_ser_yaml.write_arch(arch, tmp_yaml)
         arch2 = arch_ser_yaml.read_arch(tmp_yaml)
-        assert arch2.snippets[0].attributes == [Attribute("kind", SnippetKind.SYNTAX.value)]
+        assert arch2.snippets[0].attributes == [SnippetKind.SYNTAX.attribute]
 
     def test_rv32i_lite_roundtrip(self, rv32i_arch_lite, tmp_yaml):
         arch_ser_yaml.write_arch(rv32i_arch_lite, tmp_yaml)

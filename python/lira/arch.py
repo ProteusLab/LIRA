@@ -27,7 +27,8 @@ class SnippetKind(Enum):
     CONSTRAINT = "constraint"
     SEMANTIC = "semantic"
 
-    def into_attribute(self) -> Attribute:
+    @property
+    def attribute(self) -> Attribute:
         return Attribute('kind', self.value)
 
 @dataclass
