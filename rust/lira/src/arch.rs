@@ -126,7 +126,7 @@ pub struct Instruction {
     pub operand_names: Vec<String>,
     pub encoding: InstructionEncoding,
     pub syntaxes: Vec<InstructionSyntax>,
-    pub semantic: StatementSeq,
+    pub semantic: String,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]

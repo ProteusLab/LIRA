@@ -309,8 +309,10 @@ class SeqBuilder:
         return self
 
 
-class BaseBuilder:
-    def __init__(self):
+class SnippetBuilder:
+    def __init__(self, name: str, attributes: Optional[List[Attribute]] = None):
+        self.name = name
+        self.attributes = attributes or []
         self.seq = SeqBuilder()
         self._op_cache: Dict[str, Operation] = {}
 
@@ -522,37 +524,26 @@ class BaseBuilder:
     def op_multi(self, operation: Operation, inputs: List[Value]) -> List[Value]:
         return self.seq.op_multi(operation, inputs)
 
-
-class SnippetBuilder(BaseBuilder):
-    def __init__(self, name: str, attributes: Optional[List[Attribute]] = None):
-        super().__init__()
-        self.name = name
-        self.attributes = attributes or []
-
     def build(self) -> Snippet:
         return Snippet(self.name, self.attributes, self.seq.build())
 
 
-class InstructionBuilder(BaseBuilder):
+class InstructionBuilder:
     def __init__(
         self,
         name: str,
         operand_sizes: List[int],
         operand_names: List[str],
         encoding: InstructionEncoding,
+        semantic: Snippet,
         syntaxes: Optional[List[InstructionSyntax]] = None,
     ):
-        super().__init__()
         self.name = name
         self.operand_sizes = operand_sizes
         self.operand_names = operand_names
         self.encoding = encoding
         self.syntaxes = syntaxes or []
-
-    def add_input_operand(self, idx: int, width: Optional[int] = None) -> Value:
-        if width is None:
-            width = self.operand_sizes[idx] if idx < len(self.operand_sizes) else 32
-        return self.input(idx, width)
+        self.semantic = semantic
 
     def add_syntax(self, mnemonic: str, condition: str, syntax: str):
         self.syntaxes.append(InstructionSyntax(mnemonic, condition, syntax))
@@ -566,7 +557,7 @@ class InstructionBuilder(BaseBuilder):
             operand_names=self.operand_names,
             encoding=self.encoding,
             syntaxes=self.syntaxes,
-            semantic=self.seq.build(),
+            semantic=self.semantic.name,
         )
 
 

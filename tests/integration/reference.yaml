@@ -746,6 +746,99 @@ snippets:
         value: syntax
     seq: |
       1 = dyn_string mnemonic;
+  - name: semantic_add
+    attributes:
+      - name: kind
+        value: semantic
+    seq: |
+      1 32 _t3 = input 1;
+      1 32 _t4 = read XRegs _t3;
+      1 32 _t7 = input 0;
+      1 32 _t8 = read XRegs _t7;
+      1 32 _t10 = op add_32 _t4 _t8;
+      1 32 _t11 = input 2;
+      1 = write XRegs _t11 _t10;
+  - name: semantic_beq
+    attributes:
+      - name: kind
+        value: semantic
+    seq: |
+      1 32 _t3 = input 1;
+      1 32 _t4 = read XRegs _t3;
+      1 32 _t6 = input 2;
+      1 32 _t7 = read XRegs _t6;
+      1 1 _t8 = op eq_32 _t4 _t7;
+      1 32 _t10 = env getPC;
+      1 32 _t11 = input 0;
+      1 32 _t12 = op add_32 _t10 _t11;
+      1 32 _t14 = const 4;
+      1 32 _t15 = op add_32 _t10 _t14;
+      1 32 _t17 = op select_32 _t8 _t12 _t15;
+      1 = env setPC _t17;
+  - name: semantic_jalr
+    attributes:
+      - name: kind
+        value: semantic
+    seq: |
+      1 32 _t2 = env getPC;
+      1 32 _t3 = const 4;
+      1 32 _t4 = op add_32 _t2 _t3;
+      1 32 _t8 = input 1;
+      1 32 _t9 = read XRegs _t8;
+      1 32 _t10 = input 0;
+      1 32 _t11 = op add_32 _t9 _t10;
+      1 32 _t13 = const -2;
+      1 32 _t14 = op and_32 _t11 _t13;
+      1 = env setPC _t14;
+      1 32 _t15 = input 2;
+      1 = write XRegs _t15 _t4;
+  - name: semantic_sh
+    attributes:
+      - name: kind
+        value: semantic
+    seq: |
+      1 32 _t3 = input 1;
+      1 32 _t4 = read XRegs _t3;
+      1 32 _t5 = input 0;
+      1 32 _t6 = op add_32 _t4 _t5;
+      1 32 _t9 = input 2;
+      1 32 _t10 = read XRegs _t9;
+      1 32 _t11 = const 0;
+      1 32 _t12 = op lsr_32 _t10 _t11;
+      1 16 _t13 = op extract_low_32_to_16 _t12;
+      1 = env writeMem16 _t6 _t13;
+  - name: semantic_lh
+    attributes:
+      - name: kind
+        value: semantic
+    seq: |
+      1 32 _t3 = input 1;
+      1 32 _t4 = read XRegs _t3;
+      1 32 _t5 = input 0;
+      1 32 _t6 = op add_32 _t4 _t5;
+      1 16 _t8 = env readMem16 _t6;
+      1 32 _t10 = op extend_sign_16_to_32 _t8;
+      1 32 _t11 = input 2;
+      1 = write XRegs _t11 _t10;
+  - name: semantic_lhu
+    attributes:
+      - name: kind
+        value: semantic
+    seq: |
+      1 32 _t3 = input 1;
+      1 32 _t4 = read XRegs _t3;
+      1 32 _t5 = input 0;
+      1 32 _t6 = op add_32 _t4 _t5;
+      1 16 _t8 = env readMem16 _t6;
+      1 32 _t10 = op extend_zero_16_to_32 _t8;
+      1 32 _t11 = input 2;
+      1 = write XRegs _t11 _t10;
+  - name: semantic_ecall
+    attributes:
+      - name: kind
+        value: semantic
+    seq: |
+      1 = env sysCall;
 instructions:
   - name: add
     attributes: []
@@ -772,14 +865,7 @@ instructions:
       - mnemonic: add
         condition: syntax_cond_true
         syntax: syntax_rd_rs1_rs2
-    semantic: |
-      1 32 _t3 = input 1;
-      1 32 _t4 = read XRegs _t3;
-      1 32 _t7 = input 0;
-      1 32 _t8 = read XRegs _t7;
-      1 32 _t10 = op add_32 _t4 _t8;
-      1 32 _t11 = input 2;
-      1 = write XRegs _t11 _t10;
+    semantic: semantic_add
   - name: beq
     attributes: []
     operand_sizes:
@@ -805,19 +891,7 @@ instructions:
       - mnemonic: beq
         condition: syntax_cond_true
         syntax: syntax_rs1_rs2_imm
-    semantic: |
-      1 32 _t3 = input 1;
-      1 32 _t4 = read XRegs _t3;
-      1 32 _t6 = input 2;
-      1 32 _t7 = read XRegs _t6;
-      1 1 _t8 = op eq_32 _t4 _t7;
-      1 32 _t10 = env getPC;
-      1 32 _t11 = input 0;
-      1 32 _t12 = op add_32 _t10 _t11;
-      1 32 _t14 = const 4;
-      1 32 _t15 = op add_32 _t10 _t14;
-      1 32 _t17 = op select_32 _t8 _t12 _t15;
-      1 = env setPC _t17;
+    semantic: semantic_beq
   - name: jalr
     attributes: []
     operand_sizes:
@@ -843,19 +917,7 @@ instructions:
       - mnemonic: jalr
         condition: syntax_cond_true
         syntax: syntax_reg_imm_mem
-    semantic: |
-      1 32 _t2 = env getPC;
-      1 32 _t3 = const 4;
-      1 32 _t4 = op add_32 _t2 _t3;
-      1 32 _t8 = input 1;
-      1 32 _t9 = read XRegs _t8;
-      1 32 _t10 = input 0;
-      1 32 _t11 = op add_32 _t9 _t10;
-      1 32 _t13 = const -2;
-      1 32 _t14 = op and_32 _t11 _t13;
-      1 = env setPC _t14;
-      1 32 _t15 = input 2;
-      1 = write XRegs _t15 _t4;
+    semantic: semantic_jalr
   - name: sh
     attributes: []
     operand_sizes:
@@ -881,17 +943,7 @@ instructions:
       - mnemonic: sh
         condition: syntax_cond_true
         syntax: syntax_reg_imm_mem
-    semantic: |
-      1 32 _t3 = input 1;
-      1 32 _t4 = read XRegs _t3;
-      1 32 _t5 = input 0;
-      1 32 _t6 = op add_32 _t4 _t5;
-      1 32 _t9 = input 2;
-      1 32 _t10 = read XRegs _t9;
-      1 32 _t11 = const 0;
-      1 32 _t12 = op lsr_32 _t10 _t11;
-      1 16 _t13 = op extract_low_32_to_16 _t12;
-      1 = env writeMem16 _t6 _t13;
+    semantic: semantic_sh
   - name: lh
     attributes: []
     operand_sizes:
@@ -917,15 +969,7 @@ instructions:
       - mnemonic: lh
         condition: syntax_cond_true
         syntax: syntax_reg_imm_mem
-    semantic: |
-      1 32 _t3 = input 1;
-      1 32 _t4 = read XRegs _t3;
-      1 32 _t5 = input 0;
-      1 32 _t6 = op add_32 _t4 _t5;
-      1 16 _t8 = env readMem16 _t6;
-      1 32 _t10 = op extend_sign_16_to_32 _t8;
-      1 32 _t11 = input 2;
-      1 = write XRegs _t11 _t10;
+    semantic: semantic_lh
   - name: lhu
     attributes: []
     operand_sizes:
@@ -951,15 +995,7 @@ instructions:
       - mnemonic: lhu
         condition: syntax_cond_true
         syntax: syntax_reg_imm_mem
-    semantic: |
-      1 32 _t3 = input 1;
-      1 32 _t4 = read XRegs _t3;
-      1 32 _t5 = input 0;
-      1 32 _t6 = op add_32 _t4 _t5;
-      1 16 _t8 = env readMem16 _t6;
-      1 32 _t10 = op extend_zero_16_to_32 _t8;
-      1 32 _t11 = input 2;
-      1 = write XRegs _t11 _t10;
+    semantic: semantic_lhu
   - name: ecall
     attributes: []
     operand_sizes: []
@@ -976,5 +1012,4 @@ instructions:
       - mnemonic: ecall
         condition: syntax_cond_true
         syntax: syntax_no_operands
-    semantic: |
-      1 = env sysCall;
+    semantic: semantic_ecall

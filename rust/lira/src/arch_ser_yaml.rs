@@ -16,12 +16,13 @@ fn expand(yaml: &str) -> String {
     let mut result = String::new();
     for line in yaml.lines() {
         let l = line.trim_start();
-        if let Some(start) = ["seq:", "semantic:"].iter().find(|s| l.starts_with(*s))
-            && !line.ends_with("\"\"")
-        {
+        let body = l
+            .strip_prefix("seq: \"")
+            .and_then(|seq| seq.strip_suffix("\\n\""));
+        if let Some(body) = body {
             let prefix = &line[..line.len() - l.len()];
-            writeln!(result, "{prefix}{start} |").unwrap();
-            for part in l[start.len() + 2..l.len() - 3].split("\\n") {
+            writeln!(result, "{prefix}seq: |").unwrap();
+            for part in body.split("\\n") {
                 writeln!(result, "{prefix}  {part}").unwrap();
             }
         } else {

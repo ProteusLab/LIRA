@@ -3,7 +3,7 @@ from .ir_ser_txt import serialize_statement_seq, deserialize_statement_seq
 from .ir_builder import SeqBuilder, SnippetBuilder, InstructionBuilder, ArchBuilder, Value
 from .arch import (
     Arch, Attribute, Register, RegisterFile, EnvironmentFunction, Operation,
-    Instruction, InstructionEncoding, InstructionSyntax, Snippet,
+    Instruction, InstructionEncoding, InstructionSyntax, Snippet, SnippetKind,
     SystemRegister, SystemRegisterField, TableInt, TableStr,
 )
 from .arch_ser_yaml import write_arch, read_arch, copy_arch

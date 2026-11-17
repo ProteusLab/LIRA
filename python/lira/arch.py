@@ -1,5 +1,6 @@
 from typing import ClassVar, Dict, Optional, TypeVar
 from dataclasses import dataclass
+from enum import Enum
 
 from .ir import *
 
@@ -18,6 +19,17 @@ class Component:
 @dataclass
 class Snippet(Component):
     seq: StatementSeq
+
+class SnippetKind(Enum):
+    DECODE = "decode"
+    ENCODE = "encode"
+    SYNTAX = "syntax"
+    CONSTRAINT = "constraint"
+    SEMANTIC = "semantic"
+
+    @property
+    def attribute(self) -> Attribute:
+        return Attribute('kind', self.value)
 
 @dataclass
 class Operation(Component):
@@ -120,7 +132,7 @@ class Instruction(Component):
     encoding: InstructionEncoding
     syntaxes: list[InstructionSyntax]
 
-    semantic: StatementSeq
+    semantic: str # Snippet
 
 
 @dataclass
