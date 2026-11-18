@@ -1,10 +1,17 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 @dataclass
-class Shape:
+class Dimension:
     lanes_base: int
-    lanes_mult: Optional[str]
+    lanes_mult: Optional[str] = None
+
+@dataclass
+class Shape:
+    dimensions: list[Dimension] = field(default_factory=list)
+
+    def is_scalar(self) -> bool:
+        return not self.dimensions
 
 @dataclass
 class Statement:

@@ -72,7 +72,7 @@ class Register(Component):
 
 @dataclass
 class RegisterFile(Component):
-    reg_size: Shape
+    reg_size: Dimension
     regs: list[Register]
 
     def reg_names(self) -> list[str]:

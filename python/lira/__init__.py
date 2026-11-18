@@ -1,4 +1,4 @@
-from .ir import Shape, Statement, StatementSeq
+from .ir import Dimension, Shape, Statement, StatementSeq
 from .ir_ser_txt import serialize_statement_seq, deserialize_statement_seq
 from .ir_builder import SeqBuilder, SnippetBuilder, InstructionBuilder, ArchBuilder, Value
 from .arch import (

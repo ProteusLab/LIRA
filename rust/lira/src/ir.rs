@@ -3,10 +3,16 @@ use std::ops::Deref;
 use ahash::AHashMap;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Hash)]
-pub struct Shape {
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub struct Dimension {
     pub lanes_base: usize,
     pub lanes_mult: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(transparent)]
+pub struct Shape {
+    pub dimensions: Vec<Dimension>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -25,21 +31,29 @@ pub struct StatementSeq {
     stmts_index: AHashMap<String, usize>,
 }
 
-impl Shape {
+impl Dimension {
     pub fn new(lanes_base: usize, lanes_mult: Option<String>) -> Self {
         Self {
             lanes_base,
             lanes_mult,
         }
     }
-    pub fn new_scalar() -> Self {
-        Self::new(1, None)
-    }
     pub fn new_dyn(base: usize, mult: impl ToString) -> Self {
         Self::new(base, Some(mult.to_string()))
     }
+}
+
+impl Shape {
+    pub fn new(dimensions: impl IntoIterator<Item = Dimension>) -> Self {
+        Self {
+            dimensions: dimensions.into_iter().collect(),
+        }
+    }
+    pub fn new_scalar() -> Self {
+        Self::default()
+    }
     pub fn is_scalar(&self) -> bool {
-        self.lanes_base == 1 && self.lanes_mult.is_none()
+        self.dimensions.is_empty()
     }
 }
 

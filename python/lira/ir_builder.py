@@ -9,7 +9,7 @@ class Value:
     def __init__(self, name: str, width: int = 32):
         self.name = name
         self.width = width
-        self.shape = Shape(1, None)
+        self.shape = Shape()
 
     def __str__(self) -> str:
         return self.name
@@ -205,36 +205,38 @@ class SeqBuilder:
     # NOTE: Building python/lira/ir_std.py objects
     # ------------------------------------------------------------------
     def read(
-        self, rf: RegisterFile, rsi: Value, shape: Shape = Shape(1, None)
+        self, rf: RegisterFile, rsi: Value, shape: Optional[Shape] = None
     ) -> Value:
         width = rf.reg_size.lanes_base
         out = self._new_temp(width)
+        shape = shape if shape is not None else Shape()
         stmt = Statement(shape, [out.name], [width], "read", rf.name, [rsi.name])
         self.stmts.append(stmt)
         return out
 
     def write(
-        self, rf: RegisterFile, rsi: Value, value: Value, shape: Shape = Shape(1, None)
+        self, rf: RegisterFile, rsi: Value, value: Value, shape: Optional[Shape] = None
     ):
+        shape = shape if shape is not None else Shape()
         stmt = Statement(shape, [], [], "write", rf.name, [rsi.name, value.name])
         self.stmts.append(stmt)
 
     def const(self, value: int, width: int = 32) -> Value:
         out = self._new_temp(width)
-        stmt = Statement(Shape(1, None), [out.name], [width], "const", str(value), [])
+        stmt = Statement(Shape(), [out.name], [width], "const", str(value), [])
         self.stmts.append(stmt)
         return out
 
     def dyn_const(self, name: str, width: int = 32) -> Value:
         out = self._new_temp(width)
-        stmt = Statement(Shape(1, None), [out.name], [width], "dyn_const", name, [])
+        stmt = Statement(Shape(), [out.name], [width], "dyn_const", name, [])
         self.stmts.append(stmt)
         return out
 
     def env(self, env_func: EnvironmentFunction, inputs: List[Value]) -> List[Value]:
         outputs = [self._new_temp(w) for w in env_func.outputs]
         stmt = Statement(
-            Shape(1, None),
+            Shape(),
             [o.name for o in outputs],
             env_func.outputs,
             "env",
@@ -254,7 +256,7 @@ class SeqBuilder:
         outputs = [self._new_temp(w) for w in env_func.outputs]
         all_inputs = [cond.name] + [v.name for v in inputs] + [v.name for v in on_false]
         stmt = Statement(
-            Shape(1, None),
+            Shape(),
             [o.name for o in outputs],
             env_func.outputs,
             "cond_env",
@@ -266,12 +268,12 @@ class SeqBuilder:
 
     def input(self, idx: int, width: int = 32) -> Value:
         out = self._new_temp(width)
-        stmt = Statement(Shape(1, None), [out.name], [width], "input", str(idx), [])
+        stmt = Statement(Shape(), [out.name], [width], "input", str(idx), [])
         self.stmts.append(stmt)
         return out
 
     def output(self, value: Value, idx: int):
-        stmt = Statement(Shape(1, None), [], [], "output", str(idx), [value.name])
+        stmt = Statement(Shape(), [], [], "output", str(idx), [value.name])
         self.stmts.append(stmt)
 
     # ------------------------------------------------------------------
@@ -282,9 +284,10 @@ class SeqBuilder:
         op: Operation,
         inputs: List[str],
         outputs: List[str],
-        shape: Shape = Shape(1, None),
+        shape: Optional[Shape] = None,
     ):
         out_types = op.outputs
+        shape = shape if shape is not None else Shape()
         stmt = Statement(shape, outputs, out_types, "op", op.name, inputs)
         self.stmts.append(stmt)
 
@@ -481,12 +484,12 @@ class SnippetBuilder:
     # NOTE: Building python/lira/ir_std.py objects
     # ------------------------------------------------------------------
     def read(
-        self, rf: RegisterFile, rsi: Value, shape: Shape = Shape(1, None)
+        self, rf: RegisterFile, rsi: Value, shape: Optional[Shape] = None
     ) -> Value:
         return self.seq.read(rf, rsi, shape)
 
     def write(
-        self, rf: RegisterFile, rsi: Value, value: Value, shape: Shape = Shape(1, None)
+        self, rf: RegisterFile, rsi: Value, value: Value, shape: Optional[Shape] = None
     ):
         self.seq.write(rf, rsi, value, shape)
 

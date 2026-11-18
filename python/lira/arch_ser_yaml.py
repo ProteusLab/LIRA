@@ -6,13 +6,15 @@ from ruamel.yaml import YAML
 from ruamel.yaml.scalarstring import LiteralScalarString
 
 from .arch import *
-from .ir import StatementSeq
+from .ir import Shape, StatementSeq
 from .ir_ops import from_operation
 from .ir_ser_txt import serialize_statement_seq, deserialize_statement_seq
 
 def to_serializable(obj: Any) -> Any:
     if isinstance(obj, StatementSeq):
         return LiteralScalarString(serialize_statement_seq(obj))
+    if isinstance(obj, Shape):
+        return to_serializable(obj.dimensions)
     if is_dataclass(obj):
         d = {}
         for f in fields(obj):
@@ -26,6 +28,8 @@ def to_serializable(obj: Any) -> Any:
 
 def from_serializable(cls: Type, data: Any) -> Any:
     origin = get_origin(cls)
+    if cls is Shape:
+        return Shape(from_serializable(list[Dimension], data))
     if is_dataclass(cls):
         types = {f.name: f.type for f in fields(cls)}
         kwargs = {}
