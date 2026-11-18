@@ -10,3 +10,8 @@ ahash = { workspace = true, features = ["serde"] }
 regex = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_yaml = { workspace = true }
+egglog-core-relations = { workspace = true, optional = true }
+
+[features]
+default = []
+lira_egglog = ["dep:egglog-core-relations"]

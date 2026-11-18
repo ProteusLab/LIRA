@@ -12,6 +12,7 @@ ahash = "0.8.12"
 regex = "1.12.3"
 serde = "1.0.228"
 serde_yaml = "0.8"
+egglog-core-relations = { git = "https://github.com/egraphs-good/egglog.git", rev = "8879605cafad303db25787406163a7e5bc845f5d" }
 
 [profile.work]
 inherits = "dev"

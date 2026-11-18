@@ -8,6 +8,8 @@ pub struct Shape {
     pub lanes_base: usize,
     pub lanes_mult: Option<String>,
 }
+#[cfg(feature = "lira_egglog")]
+impl egglog_core_relations::BaseValue for Shape {}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Statement {
