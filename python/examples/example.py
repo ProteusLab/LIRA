@@ -5,7 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from python.lira.ir import Shape
+from python.lira.ir import Dimension
 from python.lira.arch import (
     Attribute,
     Register,
@@ -22,7 +22,7 @@ from python.lira import arch_ser_yaml
 
 def build_test_arch() -> ArchBuilder:
     registers = [Register(f"x{i}") for i in range(32)]
-    rf = RegisterFile("X", [], Shape(32, None), registers)
+    rf = RegisterFile("X", [], Dimension(32), registers)
 
     ld32 = EnvironmentFunction(
         "ld32", [Attribute("kind", "mem.read")], [32], [32]

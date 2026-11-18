@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from python.lira.ir import Shape
+from python.lira.ir import Dimension
 from python.lira.arch import (
     Attribute,
     Operation,
@@ -79,7 +79,7 @@ def rv32i_arch_lite():
     rf = RegisterFile(
         "XRegs",
         [],
-        Shape(32, None),
+        Dimension(32),
         [Register("x0", [Attribute("zero", "")])] +
         [Register(f"x{i}") for i in range(1, 32)],
     )
@@ -178,7 +178,7 @@ def rv32i_arch_lite():
 
 class TestArchSerYaml:
     def test_minimal_arch_with_builder(self, tmp_yaml):
-        rf = RegisterFile("X", [], Shape(32, None), [Register("x0"), Register("x1")])
+        rf = RegisterFile("X", [], Dimension(32), [Register("x0"), Register("x1")])
         ab = ArchBuilder("minimal", [])
         ab.add_register_file(rf)
         sb = SnippetBuilder("s")
@@ -191,7 +191,7 @@ class TestArchSerYaml:
         assert arch == arch2
 
     def test_instruction_via_builder(self, tmp_yaml):
-        rf = RegisterFile("X", [], Shape(32, None), [Register("x0")])
+        rf = RegisterFile("X", [], Dimension(32), [Register("x0")])
         enc = InstructionEncoding(32, 0, 0, [], "", "", "")
         sb = SnippetBuilder("semantic_test")
         rs1 = sb.input(0, 5)
@@ -227,7 +227,7 @@ class TestArchSerYaml:
 
     def test_register_attributes(self, tmp_yaml):
         rf = RegisterFile(
-            "R", [], Shape(32, None),
+            "R", [], Dimension(32),
             [Register("x0", [Attribute("zero", "")]), Register("x1", [])],
         )
         ab = ArchBuilder("attrs", [])
@@ -266,7 +266,7 @@ class TestArchSerYaml:
         assert arch2.tables_str[0].values == ["x0", "x1", "x2"]
 
     def test_instruction_syntaxes(self, tmp_yaml):
-        rf = RegisterFile("X", [], Shape(32, None), [Register("x0")])
+        rf = RegisterFile("X", [], Dimension(32), [Register("x0")])
         enc = InstructionEncoding(32, 0, 0, [], "", "", "")
         sb = SnippetBuilder("semantic_test")
         sb.input(0, 5)

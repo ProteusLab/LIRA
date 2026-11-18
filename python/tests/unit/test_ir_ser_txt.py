@@ -1,4 +1,4 @@
-from python.lira.ir import Shape
+from python.lira.ir import Dimension, Shape
 from python.lira.arch import Register, RegisterFile, EnvironmentFunction
 from python.lira.ir_ser_txt import serialize_statement_seq, deserialize_statement_seq
 from python.lira.ir_builder import SeqBuilder, SnippetBuilder
@@ -27,14 +27,14 @@ class TestIrSerTxt:
         r = seq.add(a, a)
         seq.output(r, 0)
         stmts = seq.build()
-        stmts.stmts[0].shape = Shape(4, "c")
+        stmts.stmts[0].shape = Shape([Dimension(4, "c")])
         text = serialize_statement_seq(stmts)
         assert "4c" in text
         seq2 = deserialize_statement_seq(text)
-        assert seq2.stmts[0].shape.lanes_mult == "c"
+        assert seq2.stmts[0].shape.dimensions[0].lanes_mult == "c"
 
     def test_read_write(self):
-        rf = RegisterFile("XRegs", [], Shape(32, None), [Register("x0")])
+        rf = RegisterFile("XRegs", [], Dimension(32), [Register("x0")])
         seq = SeqBuilder()
         reg = seq.input(0, 5)
         v = seq.read(rf, reg)

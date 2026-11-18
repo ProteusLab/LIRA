@@ -4,7 +4,7 @@ use regex::Regex;
 
 use crate::*;
 
-impl std::fmt::Display for Shape {
+impl std::fmt::Display for Dimension {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.lanes_mult {
             Some(mult) => write!(f, "{}{}", self.lanes_base, mult),
@@ -13,7 +13,7 @@ impl std::fmt::Display for Shape {
     }
 }
 
-impl Shape {
+impl Dimension {
     pub fn parse(s: &str) -> anyhow::Result<Self> {
         static RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^(\d+)(.*)$").unwrap());
         let err = || anyhow::anyhow!("failed to parse {s}");
@@ -25,13 +25,44 @@ impl Shape {
     }
 }
 
+impl std::fmt::Display for Shape {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.is_scalar() {
+            return write!(f, ".");
+        }
+        for (i, dimension) in self.dimensions.iter().enumerate() {
+            if i > 0 {
+                write!(f, ".")?;
+            }
+            write!(f, "{dimension}")?;
+        }
+        Ok(())
+    }
+}
+
+impl Shape {
+    pub fn parse(s: &str) -> anyhow::Result<Self> {
+        if s == "." {
+            return Ok(Self::default());
+        }
+        Ok(Self {
+            dimensions: s
+                .split('.')
+                .map(Dimension::parse)
+                .collect::<anyhow::Result<_>>()?,
+        })
+    }
+}
+
 impl std::fmt::Display for Statement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.shape)?;
-        for (typ, name) in self.outputs_types.iter().zip(&self.outputs) {
-            write!(f, " {} {}", typ, name)?;
+        if !self.shape.is_scalar() {
+            write!(f, "{} ", self.shape)?;
         }
-        write!(f, " = {} {}", self.kind, self.specifier)?;
+        for (typ, name) in self.outputs_types.iter().zip(&self.outputs) {
+            write!(f, "{typ} {name} ")?;
+        }
+        write!(f, "= {} {}", self.kind, self.specifier)?;
         for input in &self.inputs {
             write!(f, " {}", input)?;
         }
@@ -41,18 +72,20 @@ impl std::fmt::Display for Statement {
 
 impl Statement {
     pub fn parse(s: &str) -> anyhow::Result<Self> {
-        static RE: LazyLock<Regex> =
-            LazyLock::new(|| Regex::new(r"^(\S+)\s+(.*?)\s*=\s*(\S+)\s+(\S+)\s*(.*)$").unwrap());
         let err = || anyhow::anyhow!("failed to parse {s}");
-        let caps = RE.captures(s).ok_or_else(err)?;
-
-        let shape = Shape::parse(&caps[1])?;
-        let kind = caps[3].to_string();
-        let specifier = caps[4].to_string();
-        let inputs = caps[5].split_whitespace().map(|s| s.to_string()).collect();
-
-        let output_tokens: Vec<_> = caps[2].split_whitespace().collect();
-        anyhow::ensure!(output_tokens.len() % 2 == 0);
+        let (left, right) = s.split_once('=').ok_or_else(err)?;
+        let mut output_tokens: Vec<_> = left.split_whitespace().collect();
+        let shape = if output_tokens.len() % 2 == 0 {
+            Shape::default()
+        } else {
+            let shape = Shape::parse(output_tokens[0])?;
+            output_tokens.remove(0);
+            shape
+        };
+        let mut rhs = right.split_whitespace();
+        let kind = rhs.next().ok_or_else(err)?.to_string();
+        let specifier = rhs.next().ok_or_else(err)?.to_string();
+        let inputs = rhs.map(str::to_string).collect();
         let mut outputs_types = Vec::new();
         let mut outputs = Vec::new();
         for chunk in output_tokens.chunks_exact(2) {

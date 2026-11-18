@@ -32,11 +32,11 @@ pub struct Register {
     pub attributes: Vec<Attribute>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct RegisterFile {
     pub name: String,
     pub attributes: Vec<Attribute>,
-    pub reg_size: Shape,
+    pub reg_size: Dimension,
     pub regs: Vec<Register>,
 }
 

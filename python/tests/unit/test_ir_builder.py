@@ -1,6 +1,6 @@
 import pytest
 
-from python.lira.ir import Shape
+from python.lira.ir import Dimension
 from python.lira.arch import (
     Attribute,
     Register,
@@ -22,7 +22,7 @@ def rv32i_rf():
     return RegisterFile(
         "XRegs",
         [],
-        Shape(32, None),
+        Dimension(32),
         [Register("x0", [Attribute("zero", "")])] +
         [Register(f"x{i}") for i in range(1, 32)],
     )

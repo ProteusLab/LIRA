@@ -8,10 +8,11 @@ Minimal set of concepts:
 - may take some time to grasp ideas, but then learning full specification should be fast
 - simple to convert to domain-specific representation
 
-Single (parametric) type for values - vector of bitvectors
-- scalar is a vector of shape 1
-- length of vector is `base * (ctx.get(multiplier) or 1)`
-- shape might become more-dimensional in future
+Single (parametric) type for values - tensor of bitvectors
+- shape is an ordered sequence of dimensions, each with extent
+  `base * ctx.get(multiplier)`, or `base` when the multiplier is absent
+- scalar has no dimensions, distinct from a vector of length one
+- element bit width is separate from shape
 
 No control flow - vector data types:
 - better suited for formal analysis
