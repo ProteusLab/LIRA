@@ -46,6 +46,15 @@ pub enum StmtSpecificStd<'a> {
         index: &'a str,
         default: &'a str,
     },
+    Replicate {
+        value: &'a str,
+    },
+    ExtractFirst {
+        value: &'a str,
+    },
+    ExtendZero {
+        value: &'a str,
+    },
     Fold {
         op: &'a Operation,
         args: &'a [String],
@@ -149,6 +158,21 @@ impl Statement {
                     index,
                     default,
                 }
+            }
+            "replicate" => {
+                anyhow::ensure!(self.inputs.len() == 1);
+                let value = self.inputs[0].as_str();
+                StmtSpecificStd::Replicate { value }
+            }
+            "extract_first" => {
+                anyhow::ensure!(self.inputs.len() == 1);
+                let value = self.inputs[0].as_str();
+                StmtSpecificStd::ExtractFirst { value }
+            }
+            "extend_zero" => {
+                anyhow::ensure!(self.inputs.len() == 1);
+                let value = self.inputs[0].as_str();
+                StmtSpecificStd::ExtendZero { value }
             }
             "fold" => {
                 let op = get!(op);

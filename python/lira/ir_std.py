@@ -16,6 +16,12 @@ class StmtKind(str, Enum):
     COND_ENV = "cond_env"
     CONST = "const"
     DYN_CONST = "dyn_const"
+    INDEX = "index"
+    GATHER = "gather"
+    REPLICATE = "replicate"
+    EXTRACT_FIRST = "extract_first"
+    EXTEND_ZERO = "extend_zero"
+    FOLD = "fold"
 
 
 @dataclass
